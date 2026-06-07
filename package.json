@@ -9,12 +9,14 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:boot": "vitest run --config vitest.boot.config.ts",
     "verify": "tsc --noEmit && vitest run && vite build"
   },
   "dependencies": {
     "phaser": "^3.87.0"
   },
   "devDependencies": {
+    "jsdom": "^25.0.1",
     "typescript": "^5.4.5",
     "vite": "^5.4.19",
     "vitest": "^2.1.9"
