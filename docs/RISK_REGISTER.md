@@ -112,3 +112,12 @@ Each is an explicit Owner Decision per CRIT-1 mitigation; none ship without owne
 **A2 (business accuracy) — hardened this wave.** RT6-1 fixed a "simplified but never wrong" violation (discounts were creating phantom balance-sheet equity); inventory is now valued at actual cost and discounts flow to COGS at sale. The cash-flow `cashSpentOnProduction` line intentionally stays at standard cost (documented in BOOKKEEPING.md §4 as a P2 dual-ledger reconciliation item, not an error). **SME walk of the 93-claim pack remains owner-gated — no claim is marked verified here.**
 
 **Verdict:** Tier A retained; no governance re-tier. Dark-pattern gate passed for all waves-5/6 mechanics. CRIT-1 re-trigger conditions remain the tripwire for any future data-collection feature.
+
+---
+
+## Polish & Pedagogy wave note 2026-06-07 — in-game A1/A2 mitigations shipped
+
+- **A2 mitigation #4 (in-game disclaimer):** now LIVE — the Glossary opens with the "simplified; varies by jurisdiction; check your local SBA" disclaimer (`GLOSSARY_DISCLAIMER`), and the APR/permit entries carry the qualifier inline. Does **not** discharge A2's SME review — the 93-claim accountant walk is still owner-gated; no claim marked verified.
+- **A1 mitigation #4 (allergy tooltip):** now LIVE — the Glossary's "Peanut allergy" entry gives a serious, respectful explanation (severity, cross-contact, honest-labeling + warm-referral canon; test-guarded against trivializing language). Does **not** discharge A1's blocking gate — the owner-sourced allergy-aware reviewer of the *mechanic design* is still required before first public content.
+- **A4 (dark-pattern):** the accessibility toggles + glossary add no retention/FOMO surface; learning is opt-in (C1 "broccoli" rule). No re-tier.
+- Accessibility prefs are localStorage-only, no PII, no egress — **CRIT-1 Tier A retained.**

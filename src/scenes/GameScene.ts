@@ -51,6 +51,15 @@ import { tryLoad, trySave, resetSave, safeStorage, serialize, importEnvelopeText
 import { LORE_BY_ID } from "../data/lore.js";
 import { COMEBACK_BY_ID } from "../data/comebacks.js";
 import { AFTERMATH_BEATS, type AftermathPath } from "../data/rescue_aftermath.js";
+import { GLOSSARY, GLOSSARY_DISCLAIMER } from "../data/glossary.js";
+import {
+  prefsInit,
+  isReducedMotion,
+  isColorblindCues,
+  toggleReducedMotion,
+  toggleColorblindCues,
+  marginCue,
+} from "./prefs.js";
 import { drawLegsy } from "./legsy.js";
 import {
   audioInit,
@@ -60,7 +69,6 @@ import {
   playBatchReady,
   playDayEnd,
   playButtonTick,
-  MUTE_KEY,
 } from "./audio.js";
 
 // LORE_LOADED_COUNT removed — denominator is now computed dynamically in updateHUD()
@@ -267,6 +275,12 @@ export class GameScene extends Phaser.Scene {
   private goalsModalGroup?: Phaser.GameObjects.Group;
   private goalsModalOpen = false;
 
+  // Settings + Glossary panels (Polish & Pedagogy wave)
+  private settingsModalGroup?: Phaser.GameObjects.Group;
+  private settingsModalOpen = false;
+  private glossaryModalGroup?: Phaser.GameObjects.Group;
+  private glossaryModalOpen = false;
+
   // Rescue aftermath beats: queued durably in state.pendingAftermath at
   // endOfDay, shown one at a time after the day report closes (and before any
   // new rescue offer). The scene reads/drains state.pendingAftermath directly.
@@ -307,10 +321,6 @@ export class GameScene extends Phaser.Scene {
 
   /** localStorage key for tutorial-seen flag (separate from save envelope). */
   private readonly TUTORIAL_KEY = "dmn_tutorial_seen";
-
-  // ---- Mute button (Wave 3) -----------------------------------------------
-  private muteBtn?: Phaser.GameObjects.Rectangle;
-  private muteBtnLabel?: Phaser.GameObjects.Text;
 
   // ---- Supply button reference (for tutorial pointer) ---------------------
   private buyBtnRef?: Phaser.GameObjects.Rectangle;
@@ -652,39 +662,31 @@ export class GameScene extends Phaser.Scene {
       this.showResetConfirm();
     });
 
+    // Load accessibility/display prefs BEFORE the first HUD render (colorblind
+    // cue is read in updateHUD; reduced-motion in the animation helpers).
+    prefsInit(this.storage);
+
     // Initial HUD render
     this.updateHUD();
 
-    // ---- Mute button (Wave 3 — persisted preference) ----------------------
-    // Placed in the bottom-right corner of the HUD bar (next to END DAY).
-    // Mute preference is read from localStorage via audio module.
+    // ---- Settings / menu button (Polish & Pedagogy) -----------------------
+    // Consolidates mute + accessibility toggles + the Glossary. Sits where the
+    // lone mute button used to be (bottom-right of the HUD bar).
     const dpY2 = H - 18;
-    const muteX = W - 96; // between END DAY and the right edge
-    this.muteBtn = this.add.rectangle(muteX, dpY2 + 5, 30, 14, 0x445566)
+    const setX = W - 96;
+    const settingsBtn = this.add.rectangle(setX, dpY2 + 5, 36, 14, 0x445566)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
-    this.muteBtnLabel = this.add.text(muteX, dpY2 + 5,
-      isMuted() ? "UN-MUTE" : "MUTE",
+    this.add.text(setX, dpY2 + 5, "⚙ MENU",
       { fontSize: "6px", color: "#F5DEB3", fontFamily: "monospace" }
     ).setOrigin(0.5);
-    this.muteBtn.on("pointerdown", () => {
-      audioInit(this.storage);
-      const nowMuted = toggleMute(this.storage);
-      if (this.muteBtnLabel) {
-        this.muteBtnLabel.setText(nowMuted ? "UN-MUTE" : "MUTE");
+    settingsBtn.on("pointerdown", () => {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) {
+        this.openSettingsModal();
       }
     });
-    this.muteBtn.on("pointerover", () => this.muteBtn?.setAlpha(0.85));
-    this.muteBtn.on("pointerout",  () => this.muteBtn?.setAlpha(1.0));
-
-    // Initialise audio prefs from storage (won't play anything — just reads mute flag)
-    // Actual AudioContext creation is deferred to first pointer-down (browser policy).
-    const savedMute = this.storage.getItem(MUTE_KEY);
-    if (savedMute !== null && this.muteBtnLabel) {
-      // Reflect persisted state (audioInit not yet called, but we can read the key)
-      const persisted = savedMute === "1";
-      this.muteBtnLabel.setText(persisted ? "UN-MUTE" : "MUTE");
-    }
+    settingsBtn.on("pointerover", () => settingsBtn.setAlpha(0.85));
+    settingsBtn.on("pointerout",  () => settingsBtn.setAlpha(1.0));
 
     // ---- First-run tutorial init (Wave 3) ---------------------------------
     // Only show tutorial if no save existed at load time (fresh player).
@@ -711,7 +713,7 @@ export class GameScene extends Phaser.Scene {
     // Track wall-clock playtime (excludes offline time; used by trySave meta)
     this.playtimeSeconds += delta / 1_000;
 
-    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen || this.booksModalOpen || this.goalsModalOpen || this.aftermathModalOpen || this.inPostReportChain) return;
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen || this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen || this.glossaryModalOpen || this.aftermathModalOpen || this.inPostReportChain) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -798,8 +800,11 @@ export class GameScene extends Phaser.Scene {
       ? ((this.state.sellPrice - cogsPerLbClassic) / this.state.sellPrice) * 100
       : 0;
     const marginColor = marginPct >= 60 ? "#4A7C4E" : marginPct >= 45 ? "#C08A00" : "#C0392B";
+    // WCAG 1.4.1: when colorblind cues are on, the color-coded margin also
+    // carries a word so color isn't the only signal.
+    const cue = isColorblindCues() ? ` (${marginCue(marginPct)})` : "";
     this.txtDemandHint.setText(
-      `~${demandLbsHr.toFixed(0)} lbs/hr  margin ${marginPct.toFixed(0)}%`
+      `~${demandLbsHr.toFixed(0)} lbs/hr  margin ${marginPct.toFixed(0)}%${cue}`
     ).setStyle({ ...TEXT_STYLE_LABEL, color: marginColor });
 
     // Day progress
@@ -1791,6 +1796,187 @@ export class GameScene extends Phaser.Scene {
     this.updateHUD();
   }
 
+  // ---------------------------------------------------------------------------
+  // Settings panel (Polish & Pedagogy) — sound + accessibility + glossary entry.
+  // Prefs persist to localStorage (own keys, not the save schema).
+  // ---------------------------------------------------------------------------
+
+  private openSettingsModal(): void {
+    if (this.settingsModalOpen || this.glossaryModalOpen) return;
+    this.settingsModalOpen = true;
+
+    const W = this.scale.width, H = this.scale.height;
+    const mW = 300, mH = 200;
+    const mX = (W - mW) / 2, mY = (H - mH) / 2;
+
+    this.settingsModalGroup = this.add.group();
+    this.settingsModalGroup.add(
+      this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.6).setInteractive()
+    );
+    this.settingsModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG).setStrokeStyle(2, P.PANEL_BORDER)
+    );
+    this.settingsModalGroup.add(this.add.text(mX + 8, mY + 6, "SETTINGS", TEXT_STYLE_HEADER));
+    this.settingsModalGroup.add(this.add.rectangle(mX + mW / 2, mY + 20, mW - 8, 1, P.PANEL_BORDER));
+
+    // A toggle row: label on the left, an ON/OFF pill on the right.
+    const addToggle = (y: number, label: string, isOn: () => boolean, onToggle: () => void): void => {
+      this.settingsModalGroup!.add(this.add.text(mX + 10, y, label, TEXT_STYLE_LABEL));
+      const pill = this.add.rectangle(mX + mW - 40, y + 4, 56, 14, isOn() ? P.CASH_GREEN : 0x999977)
+        .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
+      const lbl = this.add.text(mX + mW - 40, y + 4, isOn() ? "ON" : "OFF",
+        { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+      this.settingsModalGroup!.add(pill);
+      this.settingsModalGroup!.add(lbl);
+      pill.on("pointerdown", () => {
+        playButtonTick();
+        onToggle();
+        const on = isOn();
+        lbl.setText(on ? "ON" : "OFF");
+        pill.setFillStyle(on ? P.CASH_GREEN : 0x999977);
+      });
+    };
+
+    let y = mY + 28;
+    // Sound: the pill reads "ON" when sound is ENABLED (i.e. not muted).
+    addToggle(y, "Sound", () => !isMuted(), () => { audioInit(this.storage); toggleMute(this.storage); });
+    y += 22;
+    addToggle(y, "Reduced motion", isReducedMotion, () => { toggleReducedMotion(this.storage); });
+    y += 22;
+    addToggle(y, "Colour-blind cues", isColorblindCues, () => { toggleColorblindCues(this.storage); this.updateHUD(); });
+    y += 26;
+
+    this.settingsModalGroup.add(this.add.rectangle(mX + mW / 2, y - 4, mW - 8, 1, P.PANEL_BORDER));
+
+    // Glossary entry point.
+    const glossBtn = this.add.rectangle(mX + mW / 2, y + 8, mW - 24, 16, P.AWNING)
+      .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
+    this.settingsModalGroup.add(glossBtn);
+    this.settingsModalGroup.add(this.add.text(mX + mW / 2, y + 8, "GLOSSARY — what do these words mean?",
+      { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5));
+    glossBtn.on("pointerdown", () => { playButtonTick(); this.openGlossaryModal(); });
+    glossBtn.on("pointerover", () => glossBtn.setAlpha(0.85));
+    glossBtn.on("pointerout",  () => glossBtn.setAlpha(1.0));
+    y += 22;
+
+    // A2 accuracy disclaimer (brief; full text lives atop the glossary).
+    this.settingsModalGroup.add(this.add.text(mX + 10, y,
+      "This game simplifies real business — see the Glossary for details.",
+      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace", wordWrap: { width: mW - 20 } }));
+
+    // Close
+    const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
+      .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
+    this.settingsModalGroup.add(doneBtn);
+    this.settingsModalGroup.add(this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE",
+      { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    doneBtn.on("pointerdown", () => this.closeSettingsModal());
+    doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
+    doneBtn.on("pointerout",  () => doneBtn.setAlpha(1.0));
+  }
+
+  private closeSettingsModal(): void {
+    if (this.settingsModalGroup) {
+      this.settingsModalGroup.destroy(true);
+      this.settingsModalGroup = undefined;
+    }
+    this.settingsModalOpen = false;
+    this.updateHUD();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Glossary panel (Polish & Pedagogy) — opt-in plain-language definitions.
+  // Left: term list. Right: selected definition. Top: A2 disclaimer.
+  // Learning is never mandatory (C1 "broccoli" rule).
+  // ---------------------------------------------------------------------------
+
+  private openGlossaryModal(): void {
+    if (this.glossaryModalOpen) return;
+    this.glossaryModalOpen = true;
+
+    const W = this.scale.width, H = this.scale.height;
+    const mW = 460, mH = 250;
+    const mX = (W - mW) / 2, mY = (H - mH) / 2;
+
+    this.glossaryModalGroup = this.add.group();
+    this.glossaryModalGroup.add(
+      this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.65).setInteractive()
+    );
+    this.glossaryModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG).setStrokeStyle(2, P.PANEL_BORDER)
+    );
+    this.glossaryModalGroup.add(this.add.text(mX + 8, mY + 5, "GLOSSARY", TEXT_STYLE_HEADER));
+
+    // Close [×]
+    const closeBtn = this.add.rectangle(mX + mW - 12, mY + 11, 16, 14, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.glossaryModalGroup.add(closeBtn);
+    this.glossaryModalGroup.add(this.add.text(mX + mW - 12, mY + 11, "×",
+      { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    closeBtn.on("pointerdown", () => this.closeGlossaryModal());
+
+    // A2 disclaimer banner (always visible).
+    this.glossaryModalGroup.add(this.add.text(mX + 8, mY + 20, GLOSSARY_DISCLAIMER,
+      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace", wordWrap: { width: mW - 16 } }));
+
+    const listX = mX + 8, listTop = mY + 44;
+    const detailX = mX + 156, detailW = mW - 156 - 10;
+
+    // Detail pane (updated on term tap). Start on the first entry.
+    const detailTitle = this.add.text(detailX, listTop, "", TEXT_STYLE_HEADER);
+    const detailBody = this.add.text(detailX, listTop + 14, "",
+      { ...TEXT_STYLE_LABEL, wordWrap: { width: detailW } });
+    const detailInGame = this.add.text(detailX, listTop + 14, "",
+      { fontSize: "7px", color: "#4A7C4E", fontFamily: "monospace", wordWrap: { width: detailW } });
+    this.glossaryModalGroup.add(detailTitle);
+    this.glossaryModalGroup.add(detailBody);
+    this.glossaryModalGroup.add(detailInGame);
+
+    const showEntry = (idx: number): void => {
+      const e = GLOSSARY[idx];
+      detailTitle.setText(e.term);
+      detailBody.setText(e.definition);
+      // Place the "in this game" note below the (variable-height) definition.
+      detailInGame.setY(detailBody.y + detailBody.height + 6);
+      detailInGame.setText(e.inGame ? `In this game: ${e.inGame}` : "");
+    };
+
+    // Term list (left column). Tap to show on the right.
+    let ly = listTop;
+    for (let i = 0; i < GLOSSARY.length; i++) {
+      const e = GLOSSARY[i];
+      const t = this.add.text(listX, ly, `• ${e.term}`,
+        { fontSize: "7px", color: "#2C2416", fontFamily: "monospace", wordWrap: { width: 140 } });
+      t.setInteractive({ cursor: "pointer" });
+      t.on("pointerdown", () => { playButtonTick(); showEntry(i); });
+      t.on("pointerover", () => t.setColor("#C0392B"));
+      t.on("pointerout",  () => t.setColor("#2C2416"));
+      this.glossaryModalGroup.add(t);
+      ly += t.height + 1;
+    }
+
+    showEntry(0);
+
+    // Back to settings
+    const backBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 110, 16, 0x556677)
+      .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
+    this.glossaryModalGroup.add(backBtn);
+    this.glossaryModalGroup.add(this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE",
+      { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    backBtn.on("pointerdown", () => this.closeGlossaryModal());
+    backBtn.on("pointerover", () => backBtn.setAlpha(0.85));
+    backBtn.on("pointerout",  () => backBtn.setAlpha(1.0));
+  }
+
+  private closeGlossaryModal(): void {
+    if (this.glossaryModalGroup) {
+      this.glossaryModalGroup.destroy(true);
+      this.glossaryModalGroup = undefined;
+    }
+    this.glossaryModalOpen = false;
+    this.updateHUD();
+  }
+
   /**
    * Rebuild slot UI objects after a queue slot purchase.
    * Adds the new slot's rect/label/bar to the existing slot arrays.
@@ -2412,9 +2598,11 @@ export class GameScene extends Phaser.Scene {
       const alpha = Math.max(0, pop.life);
       pop.circle.setAlpha(alpha);
       pop.label.setAlpha(alpha);
-      // Float upward
-      pop.circle.y -= 20 * dt;
-      pop.label.y  -= 20 * dt;
+      // Float upward (skipped under reduced motion — the +$ still fades in place).
+      if (!isReducedMotion()) {
+        pop.circle.y -= 20 * dt;
+        pop.label.y  -= 20 * dt;
+      }
       if (pop.life <= 0) toRemove.push(i);
     }
     for (let i = toRemove.length - 1; i >= 0; i--) {
@@ -2430,6 +2618,17 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private animateSmoke(dt: number): void {
+    // Reduced motion: show a steady, non-pulsing wisp over active roasters
+    // (still communicates "roasting" without movement).
+    if (isReducedMotion()) {
+      const active = this.state.roastSlots.filter(s => s.status === "roasting").length;
+      for (let i = 0; i < this.smokeCircles.length; i++) {
+        const c = this.smokeCircles[i];
+        c.setAlpha(i < active ? 0.35 : 0);
+        c.y = 195 - 50 - i * 8;
+      }
+      return;
+    }
     this.smokeTimer += dt;
     const activeRoasts = this.state.roastSlots.filter(s => s.status === "roasting").length;
 
@@ -2451,6 +2650,8 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private animateNpcs(dt: number): void {
+    // Reduced motion: NPCs stand still (no ambient pacing).
+    if (isReducedMotion()) return;
     const W = this.scale.width;
     for (const npc of this.npcs) {
       npc.x += npc.dir * npc.speed * dt;

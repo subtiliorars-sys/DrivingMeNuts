@@ -6,6 +6,12 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added — Polish & Pedagogy (accessibility + in-game learning layer)
+- **Settings panel** (⚙ MENU button) consolidating Sound + accessibility toggles + Glossary, replacing the lone mute button.
+- **Accessibility:** **Reduced-motion** toggle (gates ambient smoke pulsing, NPC pacing, and the coin-pop float — steady visuals instead) and **colour-blind cues** (the colour-coded margin signal also carries a word — "healthy/tight/low" — per WCAG 1.4.1, never colour alone). Prefs persist to localStorage under their own keys (not the save schema; no schema bump, outside CRIT-1).
+- **In-game Glossary** (`src/data/glossary.ts`): plain-language, 13+-pitched definitions of COGS, gross margin, profit-vs-cash, fixed costs, break-even, price/demand, bulk discount, supplier relationship, APR, deferred revenue, debt/credit, permit, and **peanut allergy**. Opt-in (C1 "broccoli" rule — learning is never mandatory). Satisfies the **A2** accuracy disclaimer (jurisdiction/"simplified" qualifier shown atop the glossary) and the **A1** allergy tooltip (serious, respectful, honest-labeling + warm-referral canon — the owner-sourced allergy reviewer remains the separate gate).
+- New `src/scenes/prefs.ts` (Phaser-free prefs module, mirrors the audio mute pattern). 8 new tests (prefs persistence + glossary content integrity incl. allergy-seriousness + APR-honesty checks). 347 unit + 5 boot green.
+
 ### Added — rescue re-entry escalation (owner-approved 2026-06-07; the RT-1 deferral)
 - The rescue arc now **escalates on repeat**. The one-concurrent-crisis gate from RT-1 still holds (a new offer only appears once the prior crisis is fully resolved — no debt-stacking pump), but a *repeat* crisis gets harsher terms: Old Joe's loan fee **5% → 7%**, Derek's pre-order scales **100 lbs/$110 → 200 lbs/$220** (bigger infusion + delivery challenge, ≤ $250 P2 cap). Marta's credit and QuickNut are unchanged (Marta gets a relationship note in dialogue; QuickNut is already the cautionary option). Old Joe's dialogue varies ("I see you're in it again…") — never shaming.
 - New `SimState.rescueEntryCount` (additive-optional, no schema bump) tracks paths taken; escalation makes repeat borrowing **costlier, never a pump**.
