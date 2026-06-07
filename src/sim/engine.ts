@@ -316,12 +316,8 @@ export function endOfDay(state: SimState): DayReport {
   const net = grossProfit - fixedCosts;
 
   const cashBefore = state.cash;
-  state.cash = Math.max(0, state.cash + net - fixedCosts);
-  // Re-derive cashAfter: revenue was already credited in tick(); COGS ingredient
-  // cost was already debited in startRoast(). We only need to deduct fixed costs.
-  // Revert the double-apply: reset to cashBefore-adjusted correctly.
-  // Actually: cash already includes all revenue credits and ingredient debits.
-  // endOfDay only needs to deduct the fixed overhead.
+  // cash already includes all revenue credits (from tick) and ingredient debits
+  // (from startRoast). endOfDay only needs to deduct the fixed overhead.
   state.cash = Math.max(0, cashBefore - fixedCosts);
   if (state.cash < RESCUE_ARC_CASH_THRESHOLD) {
     state.rescueArcPending = true;
@@ -410,6 +406,23 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
       message: `Truck rested for ${cappedHours.toFixed(1)}h. Earned $${actualEarned.toFixed(2)}.`,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// projectedDemand(price) → lbs/hour (deterministic, no jitter)
+// Pure utility for the price-stepper UI demand hint.
+// Uses the same base formula as demandLbsPerHour() but without PRNG jitter.
+// ---------------------------------------------------------------------------
+
+/**
+ * Deterministic demand estimate (no jitter) at a given price.
+ * Safe to call repeatedly from UI without mutating PRNG state.
+ */
+export function projectedDemand(price: number): number {
+  const base =
+    DEMAND_BASE_LBS_PER_HOUR *
+    (1 - DEMAND_ELASTICITY * ((price - DEMAND_BASE_PRICE) / DEMAND_BASE_LBS_PER_HOUR));
+  return clamp(base, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 // ---------------------------------------------------------------------------
