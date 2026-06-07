@@ -6,6 +6,10 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added — auto-sell off-peak upgrade (GDD C4; owner-approved, $1,500)
+- One-time **$1,500** upgrade: at end of day, leftover roasted stock is liquidated at **10% off** — AFTER the day's sales and AFTER fulfilling any Derek pre-order (never pre-empts the order). Recognized as same-day revenue, COGS at the roasted cost basis (RT6-1-consistent). Teaches clearance pricing / reducing waste / freeing working capital. **Default-off** — saves without it are unchanged (leftover stock still carries over).
+- `endOfDay` P&L computation reordered to run *after* the rescue + auto-sell steps so auto-sold stock is in the day's figures (all 348 prior tests still green — default-off behaviour identical). Upgrades-modal buy row + a day-report "↳ auto-sold leftover" clarifier. Additive-optional persistence (`autoSellEnabled`, no schema bump). 7 new tests; 355 unit + 5 boot green.
+
 ### Consolidation — multi-day invariant soak test (no new scope)
 - `src/sim/invariant_soak.test.ts`: a deterministic 30-day playthrough (buy/roast/sell/price-sweep/upgrade + a forced rescue crunch) asserting the core invariants hold after **every** day — cash ≥ 0 & finite, no NaN/Infinity anywhere, ledger P&L identity (`net = revenue − cogs − fixed + offline`), `lifetimeEarned` monotonic, balance-sheet identity (`equity = assets − liabilities`, inventories ≥ 0), and rescue-line consistency (debts finite, `rescueMode` matches outstanding lines). Plus a mid-soak save/load round-trip and a pathological all-mispriced run. Safety net for the now-intricate merged economy (ledger + supplier + brand + rescue escalation + preorder-default). Test-only; 350 unit + 5 boot green.
 
