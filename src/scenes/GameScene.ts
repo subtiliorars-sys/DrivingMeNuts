@@ -1357,9 +1357,14 @@ export class GameScene extends Phaser.Scene {
             this.showToast(result.errorMessage ?? "Import failed: unknown error.");
           } else {
             this.state = result.state;
+            // RT-2: imported save may have a different queue-slot count than the
+            // scene was built with — reconcile UI rows BEFORE updateHUD touches them.
+            this.syncSlotUI();
             this.closeUpgradesModal();
             this.updateHUD();
-            this.showToast("Save imported — game state restored.");
+            this.showToast(result.previousSaveBackedUp
+              ? "Save imported. (Your previous save was backed up automatically.)"
+              : "Save imported — game state restored.");
           }
         };
         reader.readAsText(file);
@@ -1398,10 +1403,33 @@ export class GameScene extends Phaser.Scene {
    * Called immediately after buyQueueSlot mutates state.roastSlots.
    */
   private rebuildSlotUI(): void {
-    const qX = 5, qY = 20;
+    // Add the newest slot (last index) — existing slots are already rendered.
+    this.addSlotUIRow(this.state.roastSlots.length - 1);
+  }
 
-    // We only need to add the newest slot (last index) — existing slots are already rendered.
-    const i = this.state.roastSlots.length - 1;
+  /**
+   * RT-2: reconcile the slot-UI arrays with state.roastSlots after the state
+   * object is replaced wholesale (save import). An imported save can have MORE
+   * or FEWER slots than the scene was built with; without this, updateHUD()
+   * indexes past the UI arrays and crashes on undefined (black screen).
+   */
+  private syncSlotUI(): void {
+    // Remove surplus rows (imported save has fewer slots than the current UI)
+    while (this.slotRects.length > this.state.roastSlots.length) {
+      this.slotRects.pop()?.destroy();
+      this.slotLabels.pop()?.destroy();
+      this.slotBars.pop()?.destroy();
+      this.slotBarBgs.pop()?.destroy();
+    }
+    // Add missing rows (imported save has more slots than the current UI)
+    while (this.slotRects.length < this.state.roastSlots.length) {
+      this.addSlotUIRow(this.slotRects.length);
+    }
+  }
+
+  /** Build one roast-queue slot row (rect, label, progress bar) at slot index i. */
+  private addSlotUIRow(i: number): void {
+    const qX = 5, qY = 20;
     const sx = qX + 5;
     const sy = qY + 18 + i * 30;
     const sw = 150, sh = 24;

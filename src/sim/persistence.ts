@@ -273,23 +273,33 @@ function sanityCheck(env: SaveEnvelope): string | null {
     const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday"]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const d of (ss.rescueDebts as any[])) {
+      // RT-4: entry must be a non-null object, else d.kind below would THROW a
+      // TypeError instead of returning a friendly corruption message.
+      if (d === null || typeof d !== "object")
+        return `rescueDebt entry invalid: ${String(d)}`;
       if (!VALID_DEBT_KINDS.has(d.kind))
         return `rescueDebt kind invalid: ${d.kind}`;
       if (typeof d.amountDue !== "number" || !Number.isFinite(d.amountDue) || d.amountDue < 0)
         return `rescueDebt amountDue invalid: ${d.amountDue}`;
-      if (typeof d.dueDayNumber !== "number" || d.dueDayNumber < 1)
+      // RT-4: Number.isFinite rejects NaN/Infinity — a NaN dueDayNumber passes
+      // `< 1` (false) and produces a debt that is never due (permanent ghost debt).
+      if (!Number.isFinite(d.dueDayNumber) || d.dueDayNumber < 1)
         return `rescueDebt dueDayNumber invalid: ${d.dueDayNumber}`;
     }
   }
 
   // Wave 5: validate preorderObligation when present (non-null)
+  // RT-4: all three fields must be FINITE. An Infinity totalLbs (or NaN/Infinity
+  // dueDayNumber) passes typeof/range checks and creates an obligation that is
+  // never fulfilled and never expires — endOfDay would silently consume ALL
+  // roasted stock every day forever (soft-lock via crafted/corrupt import).
   const ob = ss.preorderObligation;
   if (ob !== undefined && ob !== null) {
-    if (typeof ob.totalLbs !== "number" || ob.totalLbs <= 0)
+    if (!Number.isFinite(ob.totalLbs) || ob.totalLbs <= 0)
       return `preorderObligation totalLbs invalid: ${ob.totalLbs}`;
-    if (typeof ob.fulfilledLbs !== "number" || ob.fulfilledLbs < 0)
+    if (!Number.isFinite(ob.fulfilledLbs) || ob.fulfilledLbs < 0)
       return `preorderObligation fulfilledLbs invalid: ${ob.fulfilledLbs}`;
-    if (typeof ob.dueDayNumber !== "number" || ob.dueDayNumber < 1)
+    if (!Number.isFinite(ob.dueDayNumber) || ob.dueDayNumber < 1)
       return `preorderObligation dueDayNumber invalid: ${ob.dueDayNumber}`;
   }
 
@@ -586,12 +596,25 @@ export interface ImportResult {
   state: SimState | null;
   /** Human-readable error message on failure; null on success. */
   errorMessage: string | null;
+  /** RT-3: true when an existing save was preserved at IMPORT_BACKUP_KEY before overwrite. */
+  previousSaveBackedUp: boolean;
 }
+
+/**
+ * RT-3: key where the pre-import save is preserved. Import is destructive
+ * (overwrites SAVE_KEY); stashing the previous save here makes a mis-import
+ * recoverable instead of being the game's largest remaining data-loss surface.
+ * Single slot — each import overwrites the previous backup.
+ */
+export const IMPORT_BACKUP_KEY = "dmn_save_v1-preimport";
 
 /**
  * Parse and validate an imported save JSON string, then write it to storage
  * (overwriting any existing save).  On any failure returns ok=false with a
  * friendly message and makes NO state change.
+ *
+ * RT-3: before overwriting, the existing save (if any) is copied to
+ * IMPORT_BACKUP_KEY so a wrong-file import never destroys progress.
  *
  * Pure-function level: all validation goes through the existing deserialize()
  * path (sanity checks + migrations apply automatically).
@@ -601,7 +624,7 @@ export interface ImportResult {
  */
 export function importEnvelopeText(text: string, storage: StorageLike): ImportResult {
   if (typeof text !== "string" || text.trim().length === 0) {
-    return { ok: false, state: null, errorMessage: "Import failed: file appears to be empty." };
+    return { ok: false, state: null, errorMessage: "Import failed: file appears to be empty.", previousSaveBackedUp: false };
   }
 
   let state: SimState;
@@ -609,8 +632,20 @@ export function importEnvelopeText(text: string, storage: StorageLike): ImportRe
     state = deserialize(text);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, state: null, errorMessage: `Import failed: ${msg}` };
+    return { ok: false, state: null, errorMessage: `Import failed: ${msg}`, previousSaveBackedUp: false };
   }
+
+  // RT-3: preserve the current save before overwriting it. Best-effort — a
+  // quota failure on the backup must not block the import itself, but we do
+  // report whether the backup happened so the UI can word its toast honestly.
+  let previousSaveBackedUp = false;
+  try {
+    const prev = storage.getItem(SAVE_KEY);
+    if (prev !== null) {
+      storage.setItem(IMPORT_BACKUP_KEY, prev);
+      previousSaveBackedUp = true;
+    }
+  } catch { /* best effort — proceed with import */ }
 
   // Write the validated (and migrated) text back to storage so the next
   // tryLoad sees the canonical current-schema version.
@@ -618,10 +653,10 @@ export function importEnvelopeText(text: string, storage: StorageLike): ImportRe
     // Re-serialise through serialize() to ensure the envelope is schema-current.
     storage.setItem(SAVE_KEY, serialize(state));
   } catch {
-    return { ok: false, state: null, errorMessage: "Import failed: could not write to storage (quota or private mode?)." };
+    return { ok: false, state: null, errorMessage: "Import failed: could not write to storage (quota or private mode?).", previousSaveBackedUp };
   }
 
-  return { ok: true, state, errorMessage: null };
+  return { ok: true, state, errorMessage: null, previousSaveBackedUp };
 }
 
 // ---------------------------------------------------------------------------

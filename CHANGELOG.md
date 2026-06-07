@@ -10,9 +10,20 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 - Roaster/queue capital-investment mechanics (upgrade progression for throughput).
 - Weekday demand variation (Monday spike, mid-week dip, Friday premium — teaching business cyclicality).
 - Idea bank system (IB-001 Gusto character concept).
+- **Rescue-arc UI v1:** trigger → Old Joe modal → 4 paths + decline (loan / Marta's credit / Derek's preorder / QuickNut payday with cautionary APR math), debts persisted (schema v3), end-of-day repayment/rollover/extension processing, debt summary on the report card.
+- **Periodic autosave:** save on every `batch_ready` event — closes the crash-loss window between roast completion and end-of-day save.
+- **Save export/import:** local file download/upload (zero-server, CRIT-1 compliant).
+- **Day-summary sparkline:** last-14-days net history (local only).
+- **Optimum-price preview** per recipe in the roast modal.
 
-### In Progress
-- Rescue-arc full UI flow (player cash-flow crisis mechanic).
+### Fixed (wave-4 red-team, FIX-FIRST)
+- **RT-1 (HIGH, exploit):** rescue offer no longer re-fires while a rescue line is active — closed an infinite loan-stacking cash pump (repeat-crisis escalation per script §Re-Entry deferred to a later wave).
+- **RT-2 (HIGH, crash):** importing a save with a different queue-slot count than the live scene crashed `updateHUD` (black screen); slot UI now reconciles via `syncSlotUI()`.
+- **RT-3 (MED, data loss):** import overwrote the existing save irrecoverably; the previous save is now preserved at `IMPORT_BACKUP_KEY` before overwrite.
+- **RT-4 (MED, validation):** save sanity checks hardened — null rescue-debt entries no longer throw raw TypeErrors, and non-finite debt/preorder day numbers and `1e999`/Infinity preorder quantities (a never-expiring obligation that would silently eat all roasted stock every day) are rejected.
+
+### Housekeeping
+- Removed stale `phaser_probe*` excludes from tsconfig/vitest configs (spike leftovers); dead `shutdown()` removed in favor of Phaser's SHUTDOWN event.
 
 ## [v0.2.0-pre] — Wave 4 + PR #4 unreleased
 

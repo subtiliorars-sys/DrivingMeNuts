@@ -573,7 +573,14 @@ export function endOfDay(state: SimState): DayReport {
 
   // Wave 5: set rescueMode to "offer" when rescue arc is pending.
   // Clear "active" mode when all debts and obligations are resolved.
-  if (state.rescueArcPending) {
+  //
+  // RED-TEAM RT-1 (wave4): never re-offer while a rescue line is still ACTIVE.
+  // Without this gate, a player whose cash stays below the trigger could stack a
+  // new +$75 loan every day while old loans auto-extend fee-free — an infinite
+  // cash pump that inverts the lesson. Script §Re-Entry *does* allow repeat
+  // crises, but only with escalation (7% second loan, Marta hesitation) that v1
+  // does not implement yet; until that ships, one concurrent crisis line is canon.
+  if (state.rescueArcPending && state.rescueMode !== "active") {
     state.rescueMode = "offer";
   } else if (state.rescueMode === "active" && state.rescueDebts.length === 0 && state.preorderObligation === null) {
     state.rescueMode = null;

@@ -13,8 +13,9 @@ import {
   createState,
   endOfDay,
   optimumPrice,
+  chooseRescuePath,
 } from "./engine.js";
-import { serialize, deserialize, importEnvelopeText, type StorageLike } from "./persistence.js";
+import { serialize, deserialize, importEnvelopeText, SAVE_KEY, IMPORT_BACKUP_KEY, type StorageLike } from "./persistence.js";
 import { LORE_LINES, LORE_TIER_DAY_GATE } from "../data/lore.js";
 
 // ---------------------------------------------------------------------------
@@ -216,5 +217,130 @@ describe("netHistory", () => {
     delete env.sim.netHistory;
     const loaded = deserialize(JSON.stringify(env));
     expect(loaded.netHistory).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Wave-4 red-team regressions (RT-1, RT-3, RT-4)
+// ---------------------------------------------------------------------------
+
+describe("RT-1: no rescue re-offer while a line is active (loan-stacking pump)", () => {
+  it("keeps rescueMode 'active' even when cash stays below the trigger", () => {
+    const state = createState(11);
+    state.cash = 5; // below $25 trigger
+    endOfDay(state);
+    expect(state.rescueMode).toBe("offer");
+
+    chooseRescuePath(state, "loan");
+    expect(state.rescueMode).toBe("active");
+
+    // Burn the loan cash so we are below the trigger again, with the debt not yet due.
+    state.cash = 0;
+    endOfDay(state);
+    expect(state.rescueMode).toBe("active"); // NOT re-offered — pump closed
+    expect(state.rescueDebts.length).toBe(1); // still exactly one debt
+
+    // Player cannot take a second loan while one is active (guard path).
+    const cashBefore = state.cash;
+    chooseRescuePath(state, "loan");
+    expect(state.rescueDebts.length).toBe(1);
+    expect(state.cash).toBe(cashBefore);
+  });
+
+  it("re-offers after the active line is fully resolved", () => {
+    const state = createState(12);
+    state.cash = 5;
+    endOfDay(state);
+    chooseRescuePath(state, "loan");
+    const debt = state.rescueDebts[0];
+
+    // Jump to due day with plenty of cash: debt auto-repays, mode clears.
+    state.dayNumber = debt.dueDayNumber;
+    state.cash = 500;
+    endOfDay(state);
+    expect(state.rescueDebts.length).toBe(0);
+    expect(state.rescueMode).toBe(null);
+
+    // A fresh crisis can trigger a fresh offer.
+    state.cash = 5;
+    endOfDay(state);
+    expect(state.rescueMode).toBe("offer");
+  });
+});
+
+describe("RT-4: sanityCheck hardening (crafted/corrupt save vectors)", () => {
+  function tamper(mutate: (env: ReturnType<typeof JSON.parse>) => void): string {
+    const env = JSON.parse(serialize(createState(1)));
+    mutate(env);
+    return JSON.stringify(env);
+  }
+
+  it("rejects a null rescueDebts entry with a friendly error (no TypeError)", () => {
+    const json = tamper((env) => { env.sim.rescueDebts = [null]; });
+    expect(() => deserialize(json)).toThrow(/rescueDebt entry invalid/);
+  });
+
+  it("rejects a non-finite debt dueDayNumber (never-due ghost debt)", () => {
+    const json = tamper((env) => {
+      env.sim.rescueDebts = [{ kind: "loan", principal: 75, amountDue: 78.75, dueDayNumber: 999999111, createdOnDay: 1, rollovers: 0 }];
+    }).replace("999999111", "1e999"); // JSON.parse("1e999") === Infinity
+    expect(() => deserialize(json)).toThrow(/dueDayNumber/);
+  });
+
+  it("rejects an Infinity preorder totalLbs (would eat all roasted stock forever)", () => {
+    const json = tamper((env) => {
+      env.sim.preorderObligation = { totalLbs: 999999222, fulfilledLbs: 0, dueDayNumber: 10, cashReceived: 110, createdOnDay: 1 };
+    }).replace("999999222", "1e999");
+    expect(() => deserialize(json)).toThrow(/totalLbs/);
+  });
+
+  it("rejects a non-finite preorder dueDayNumber (never-expiring obligation)", () => {
+    const json = tamper((env) => {
+      env.sim.preorderObligation = { totalLbs: 100, fulfilledLbs: 0, dueDayNumber: 999999333, cashReceived: 110, createdOnDay: 1 };
+    }).replace("999999333", "1e999");
+    expect(() => deserialize(json)).toThrow(/dueDayNumber/);
+  });
+
+  it("still accepts a valid debt + obligation round-trip", () => {
+    const state = createState(13);
+    state.cash = 5;
+    endOfDay(state);
+    chooseRescuePath(state, "preorder");
+    const loaded = deserialize(serialize(state));
+    expect(loaded.preorderObligation?.totalLbs).toBe(state.preorderObligation?.totalLbs);
+  });
+});
+
+describe("RT-3: import preserves the previous save (data-loss surface)", () => {
+  it("backs up the existing save to IMPORT_BACKUP_KEY before overwriting", () => {
+    const storage = makeStorage();
+    const oldSave = serialize(createState(21));
+    storage.setItem(SAVE_KEY, oldSave);
+
+    const incoming = serialize(createState(22));
+    const result = importEnvelopeText(incoming, storage);
+
+    expect(result.ok).toBe(true);
+    expect(result.previousSaveBackedUp).toBe(true);
+    expect(storage.getItem(IMPORT_BACKUP_KEY)).toBe(oldSave);
+  });
+
+  it("reports previousSaveBackedUp=false when there was no prior save", () => {
+    const storage = makeStorage();
+    const result = importEnvelopeText(serialize(createState(23)), storage);
+    expect(result.ok).toBe(true);
+    expect(result.previousSaveBackedUp).toBe(false);
+    expect(storage.getItem(IMPORT_BACKUP_KEY)).toBe(null);
+  });
+
+  it("leaves the original save and writes no backup when import fails validation", () => {
+    const storage = makeStorage();
+    const oldSave = serialize(createState(24));
+    storage.setItem(SAVE_KEY, oldSave);
+
+    const result = importEnvelopeText("{\"not\":\"a save\"}", storage);
+    expect(result.ok).toBe(false);
+    expect(storage.getItem(SAVE_KEY)).toBe(oldSave);
+    expect(storage.getItem(IMPORT_BACKUP_KEY)).toBe(null);
   });
 });
