@@ -99,14 +99,22 @@ The core idle loop centers on **batch roasting**. Player loads raw peanuts into 
 The player sets a **selling price** per flavor per district. Demand is **price-elastic**:
 
 ```
-Demand = Base Demand - (Price - Base Price) * Elasticity Factor
+Demand (lbs/hr) = Base Demand − Slope × (Price − Base Price)
 ```
 
-Example (Farmers' Market, Classic Salted):
-- Base Demand (per hour): 20 units/hour
-- Base Price: $1.20/unit (profit: $0.60)
-- If player raises price to $2.00: demand drops to ~15 units/hour
-- If player drops price to $0.80: demand rises to ~28 units/hour
+**Formula (Farmers' Market, Classic Salted):**
+- Base Demand: 20 lbs/hr
+- Base Price: $1.20/lb
+- Slope: 10 (lbs/hr per $1 price change)
+
+**Worked examples:**
+- At $2.00: Demand = 20 − 10 × (2.00 − 1.20) = 20 − 8 = **12 lbs/hr**
+- At $0.80: Demand = 20 − 10 × (0.80 − 1.20) = 20 + 4 = **24 lbs/hr**
+- At $1.90 (profit peak): Demand = 20 − 10 × (1.90 − 1.20) = 20 − 7 = **13 lbs/hr**
+
+**Profit optimization:** With COGS = $0.60/lb, gross profit per lb = (Price − 0.60). Total profit = (Price − 0.60) × Demand. This function peaks at **$1.90**, strictly interior to the UI slider bounds ($0.75–$2.50). Below or above $1.90, profit declines despite margin changes.
+
+**Live source:** All demand constants are defined in `src/data/economy.ts` (`DEMAND_BASE_LBS_PER_HOUR`, `DEMAND_BASE_PRICE`, `DEMAND_SLOPE`).
 
 **District-level demand modifiers:**
 - Location foot traffic (time of day, day of week, season)
@@ -116,7 +124,7 @@ Example (Farmers' Market, Classic Salted):
 - Marketing campaigns (post-gag flip: +5% price tolerance across all districts)
 - Permits and festivals (Food Truck Festival week: 3x all district demands for 3 days)
 
-Player must balance: high prices = more margin per sale but fewer sales; low prices = volume but tight margins.
+Player must balance: high prices = more margin per sale but fewer sales; low prices = volume but tight margins. The optimal price ($1.90) is *not* the highest margin; it maximizes total profit by balancing both.
 
 ### C4. Compounding Upgrades
 
