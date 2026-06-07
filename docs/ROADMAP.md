@@ -101,7 +101,7 @@ No calendar dates; each phase gates the next. Solo dev + AI agent swarms = burst
 - In-game glossary: tap on "COGS," "margin," "cash flow," "demand elasticity" → tooltip + example from the game
 - Quiz mechanic (optional, low-friction): at milestones, one question (e.g., "Why is demand down?" → player picks answer tied to their recent price change). No wrong answers; corrective hint only.
 - Curriculum map docs/CURRICULUM_ENGAGEMENT.md: which learning goal maps to which game event
-- Educator export: teacher gets play-session transcript (no PII; shows player pricing decisions, profit trajectory, NPC encounters) to review learning
+- Educator export: teacher gets play-session transcript (no PII; shows player pricing decisions, profit trajectory, NPC encounters) to review learning ⚠ CRIT-1: this feature collects student play data — requires governance re-tier to A+B + Owner Decision BEFORE implementation (FERPA/COPPA/SOPIPA exposure)
 
 **Exit criteria:**
 - At least 5 business concepts have triggering conditions and in-game explanations

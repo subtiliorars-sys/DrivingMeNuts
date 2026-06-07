@@ -76,6 +76,8 @@ Legal documents that let you operate; they cost money upfront, expire on a sched
 - **Zone/location permits:** festival permits ($50–150/day), park vending ($100–200/season).
 - **Real delay:** permits take 2–6 weeks; you can't legally operate without them.
 
+*(varies by jurisdiction — simplified)*
+
 **Game mechanic:**
 - **Start-of-game gate:** player must secure "Health & Mobile Vendor License" before the truck goes live. This costs $500 (up-front) and takes 3 in-game days.
 - **Permit calendar:** a UI widget shows when each permit expires. At 30 days before expiry, a notification appears: "Health permit expires in 30 days."
@@ -99,6 +101,8 @@ Different places have different foot traffic, customer types, permit costs, and 
 - **Office park (lunch rush):** foot traffic 80–120/day, willing to pay $1.50–2.00 (higher income), consistent year-round, permit $100/month.
 - **Park (weekend):** foot traffic 150–250/day, price-sensitive ($1.00–1.25), weekends only, seasonal, permit $100/season.
 - **Margins vary:** office park has high purchase density but short window; market has volume but is temporary; residential is steady but slow.
+
+*(varies by jurisdiction — simplified)*
 
 **Game mechanic:**
 - **Location unlock system:** player starts at one zone (residential). After 5 days and hitting a small profit target, they unlock the next zone (market or park). Each zone has a description card:
@@ -131,8 +135,11 @@ Different places have different foot traffic, customer types, permit costs, and 
   - They diverge visibly. On a big roasting day with low sales, cash drops but profit shows red (loss). On a high-sales day, cash spikes faster than accounting profit (because suppliers net-15).
 - **Supplier payment schedule:** player buys peanuts "on net-14"—they appear in the truck immediately, but a bill icon appears on the calendar for 14 days out. If you buy too much on Day 1, Day 15's payment spike might exceed available cash.
 - **Winter alert:** in October, a "seasonal forecast" screen warns the player that sales will drop 40% Nov–Jan. If your cash reserve is below a threshold (e.g., $500), a red alert: "Cash flow risk: your savings won't cover Jan bills if you keep this pace."
-- **Cash crunch → rescue arc (no game-over):** Per GDD canon, reaching $0 triggers the "Save the Truck" rescue arc (NPCs offer loans, supplier credit, or pre-order deals) — the truck is never simply repossessed and the game never ends. This teaches: cash flow crises are solvable with community and planning; they are expensive, not fatal.
-- **Teaching example — predatory loan rate:** the game can present a high-interest emergency option as a *warning* example. If shown, it must be explicitly labelled: “This is what a payday-style loan costs — ~180–435% APR. This is why you build cash reserves.” A realistic microloan alternative (5–8% annual, in-game) is the encouraged path.
+- **Cash crunch → rescue arc (no game-over):** Per GDD canon, dropping below $50 triggers the “Save the Truck” rescue arc (NPCs offer loans, supplier credit, or pre-order deals) — the truck is never simply repossessed and the game never ends. This teaches: cash flow crises are solvable with community and planning; they are expensive, not fatal.
+- **Teaching example — predatory loan rate:**
+  > **Cautionary teaching example — not an endorsed path:** the payday-style loan appears in-game explicitly as a warning about predatory lending.
+
+  The game can present a high-interest emergency option as a *warning* example. If shown, it must be explicitly labelled: “This is what a payday-style loan costs — ~180–435% APR in some US markets (varies widely by jurisdiction; capped or banned in many places). This is why you build cash reserves.” A realistic microloan alternative (5–8% annual, in-game) is the encouraged path.
 
 **The "aha":**  
 *"I made $2,000 this week but I'm worried about my bank account. That's because I spent $1,500 on permits and peanuts upfront. My profit and cash-on-hand are different creatures. If I mess up the timing, I go broke even though I should be profitable."* This is the single biggest reason small businesses fail.
@@ -146,7 +153,7 @@ How customers hear about you and decide to buy. In food service, word-of-mouth a
 
 **Food-truck reality:**
 - Initial visibility: signage (truck paint, roadside menu board, social media if you post). Cost: minimal for a truck, maybe $20/month for prints.
-- Word-of-mouth: one satisfied customer tells friends. Surveys show 60–70% of food-truck repeat customers came from a referral.
+- Word-of-mouth: one satisfied customer tells friends. Operator reports commonly cite 60–70% of repeat customers coming from word-of-mouth (no authoritative industry survey — SME to verify).
 - Reputation mechanic: if you deliver consistently (no bad batches, fair prices, friendly service), customers return and bring friends.
 - Earned media example: the "peanuts aren't nuts" gag. If a customer finds it funny and posts on social media, you get free buzz. No ad budget needed.
 

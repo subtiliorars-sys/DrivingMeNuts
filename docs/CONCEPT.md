@@ -4,7 +4,7 @@
 A cozy pixel-art RPG + idle game where you run a roasted-peanut food truck and discover that real business is weirder and harder than you thought. Roast peanuts, drive around town, dodge the legume lecture, and learn actual small-business mechanics (margins, cash flow, seasonality, permits) without the spreadsheet.
 
 ## Target audience
-- **Primary:** casual game players aged 14–45 who love cozy games (Stardew Valley fans, comfort-gaming seekers)
+- **Primary:** casual game players aged 13–45 (COPPA/GDPR-K threshold: 13+; see RISK_REGISTER CRIT-1) who love cozy games (Stardew Valley fans, comfort-gaming seekers)
 - **Secondary:** educators, business students, small-business curious players who want to "learn by doing"
 - **Tertiary:** idle-game enthusiasts (passive progression, prestige loops)
 
@@ -16,7 +16,7 @@ A cozy pixel-art RPG + idle game where you run a roasted-peanut food truck and d
 ## Design pillars
 
 ### 1. Comedy as mechanic
-The canon joke—customers pedantic about legumes, owner exasperated—recurs **as a gameplay event and narrative spine.** Each encounter is a light RPG scenario: listen, reply (or escape), get paid, move on. The joke teaches: customer service is not always pleasant; time management beats perfect politeness. Legume-lecture encounters also hint at peanut allergen seriousness (a customer mentions they can't eat it; you mark them as an allergy-alert regular and refuse service if their allergy is at risk).
+The canon joke—customers pedantic about legumes, owner exasperated—recurs **as a gameplay event and narrative spine.** Each encounter is a light RPG scenario: listen, reply (or escape), get paid, move on. The joke teaches: customer service is not always pleasant; time management beats perfect politeness. Legume-lecture encounters also hint at peanut allergen seriousness: the owner is upfront that everything on the truck contacts peanuts and warmly points them to a nearby allergen-safe cart — honest labeling, not a refusal.
 
 ### 2. Real small-business literacy
 Game teaches:
