@@ -8,6 +8,13 @@ Canon premise: Customers inform the owner that "peanuts aren't nuts, they're leg
 
 ---
 
+**Game-time gate note (W5):** In-game tier gates are compressed vs the narrative day ranges
+above. At 14-minute real days nobody reaches "Day 21" soon, so gates are: mid=day 8,
+late=day 20. The narrative arc order (early→mid→late) is canon; the absolute day numbers
+are tunable. LL-017–020 belong to the LATE narrative section and are gated at day 20+.
+
+---
+
 ## Early Game (Days 1–20): Annoyance & Learning
 
 ### LL-001

@@ -3,10 +3,15 @@
  *
  * strings are canon from docs/LEGUME_LORE.md — edit there first, then sync here
  *
- * Tier gating (Wave 3):
+ * Tier gating (Wave 3, W5 playtest-compressed gates):
  *   early: unlocked from day 1+   (LL-001 – LL-006)
- *   mid:   unlocked from day 5+   (LL-007 – LL-020)
- *   late:  reserved for future phases
+ *   mid:   unlocked from day 8+   (LL-007 – LL-016)
+ *   late:  unlocked from day 20+  (LL-017 – LL-020; canon LATE per LEGUME_LORE.md)
+ *
+ * Gate note: day numbers are compressed vs the doc's narrative ranges (Mid=day 21+,
+ * Late=day 51+) for P1 playtest realism — at 14-minute days, nobody reaches day 21
+ * soon. Ratio is preserved (early→mid→late arc order is canon; absolute numbers tunable).
+ * See docs/LEGUME_LORE.md for the authorial intent note.
  *
  * The gag picker in engine.ts draws only from tiers whose day gate is met.
  * HUD counter denominator = unlocked pool size (honest, grows with day).
@@ -33,12 +38,13 @@ export interface LoreLine {
 /**
  * Day thresholds for each lore tier.
  * early: day 1+ (always in pool)
- * mid:   day 5+ — enough days for the pattern of repeat customers to feel real
+ * mid:   day 8+ — playtest-compressed (canon narrative is day 21+; see module note)
+ * late:  day 20+ — playtest-compressed (canon narrative is day 51+; LL-017–LL-020)
  */
 export const LORE_TIER_DAY_GATE: Readonly<Record<LoreTier, number>> = {
   early: 1,
-  mid:   5,
-  late:  999, // reserved — not yet in pool
+  mid:   8,
+  late:  20,
 } as const;
 
 /** All lore entries in the canon. Index by id for lookup. */
@@ -165,28 +171,28 @@ export const LORE_LINES: readonly LoreLine[] = [
     customer: "I probably shouldn't call them peanuts, right? They're legumes.",
     owner: "Peanuts is fine. 'Driving Me Nuts' is the brand. We own it now.",
     tone: "Smug/Proud",
-    tier: "mid",
+    tier: "late", // W5: canon LATE tier per LEGUME_LORE.md; gate day 20+
   },
   {
     id: "LL-018",
     customer: "Legumes, technically speaking.",
     owner: "You're the 847th person to say that. I'm naming my roaster after you.",
     tone: "Smug",
-    tier: "mid",
+    tier: "late", // W5: canon LATE tier per LEGUME_LORE.md; gate day 20+
   },
   {
     id: "LL-019",
     customer: "Did you know—",
     owner: "—that peanuts are legumes? Yeah. I named my business after that specific annoyance.",
     tone: "Deadpan/Proud",
-    tier: "mid",
+    tier: "late", // W5: canon LATE tier per LEGUME_LORE.md; gate day 20+
   },
   {
     id: "LL-020",
     customer: "Legumes, not nuts.",
     owner: "Legumes, not nuts. But have you tasted them? Best legumes in three counties.",
     tone: "Smug",
-    tier: "mid",
+    tier: "late", // W5: canon LATE tier per LEGUME_LORE.md; gate day 20+
   },
 ] as const;
 

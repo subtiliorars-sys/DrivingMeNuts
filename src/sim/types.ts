@@ -47,6 +47,13 @@ export interface SimState {
   roastedStockLbs: number;      // lbs of roasted peanuts ready to sell
   /** Weighted-average COGS per lb of current roasted stock (for COGS-at-sale). */
   roastedCostBasisPerLb: number;
+  /**
+   * W2 blended-pool: weighted-average RECIPE_DEMAND_MULT of roasted stock.
+   * Updated exactly like roastedCostBasisPerLb when a batch completes.
+   * tick() multiplies demand by this value. Default 1.0 (classic_salted baseline).
+   * applyOffline conservatively uses classic_salted (1.0) per spec §4.
+   */
+  roastedDemandMultBlended: number;
 
   // ---- Roast queue ----------------------------------------------------
   roastSlots: RoastSlot[];      // length = current number of unlocked slots
@@ -135,8 +142,12 @@ export type SimEventKind =
   | "day_ended"
   | "offline_applied"
   | "rescue_arc_triggered"
-  | "gag"
-  | "recipe_unlocked";
+  | "gag";
+  // NOTE W15: "recipe_unlocked" SimEvent was specced in RECIPE_BATCH_UI.md §3e but
+  // never emitted from endOfDay(). GameScene detects new unlocks via Set-diff
+  // (unlockedBefore snapshot vs post-endOfDay state.recipesUnlocked) — that is
+  // the live path and it works. Emitting a redundant event was removed to keep
+  // endOfDay's event list honest. See RECIPE_BATCH_UI.md §7 deviation note.
 
 export interface SimEvent {
   kind: SimEventKind;

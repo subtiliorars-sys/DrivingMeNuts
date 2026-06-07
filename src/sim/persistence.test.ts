@@ -13,6 +13,7 @@ import {
   tryLoad,
   trySave,
   resetSave,
+  safeStorage,
   SAVE_KEY,
   CORRUPT_KEY,
   CURRENT_SCHEMA_VERSION,
@@ -373,5 +374,190 @@ describe("version mismatch", () => {
       expect(result.ok).toBe(false);
       expect(result.errorMessage).toMatch(/starting fresh/i);
     }
+  });
+
+  it("v1 save migrates to v2: roastedDemandMultBlended defaults to 1.0", () => {
+    // Simulate a v1 save: schemaVersion=1, no roastedDemandMultBlended field
+    const state = createState(1);
+    const json = serialize(state);
+    const env = JSON.parse(json);
+    // Downgrade to v1 format (no blended field)
+    env.schemaVersion = 1;
+    delete env.sim.roastedDemandMultBlended;
+
+    const loaded = deserialize(JSON.stringify(env));
+    expect(loaded.roastedDemandMultBlended).toBeCloseTo(1.0, 5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W1: safeStorage — throwing StorageLike mock → tryLoad/trySave degrade gracefully
+// ---------------------------------------------------------------------------
+
+describe("safeStorage fallback (W1)", () => {
+  it("safeStorage returns a StorageLike with getItem/setItem/removeItem", () => {
+    // In test environment, window is not defined — safeStorage falls back to in-memory
+    const s = safeStorage();
+    expect(typeof s.getItem).toBe("function");
+    expect(typeof s.setItem).toBe("function");
+    expect(typeof s.removeItem).toBe("function");
+  });
+
+  it("in-memory fallback: setItem and getItem round-trip", () => {
+    const s = safeStorage();
+    s.setItem("test_key", "hello");
+    expect(s.getItem("test_key")).toBe("hello");
+    s.removeItem("test_key");
+    expect(s.getItem("test_key")).toBeNull();
+  });
+
+  it("safeStorage() in-memory fallback: tryLoad and trySave work with no real localStorage", () => {
+    // In the test environment window.localStorage is unavailable, so safeStorage()
+    // returns the in-memory fallback. Verify tryLoad + trySave work cleanly with it.
+    const s = safeStorage();
+    // No save exists — should return fresh state
+    const result = tryLoad(s, Date.now());
+    expect(result.ok).toBe(false); // no save → fresh start
+    expect(result.errorMessage).toBeNull();
+    expect(result.state.dayNumber).toBe(1);
+
+    // trySave should work without throwing
+    expect(() => trySave(s, result.state)).not.toThrow();
+    // After save, tryLoad should return the saved state
+    const result2 = tryLoad(s, Date.now());
+    expect(result2.ok).toBe(true);
+    expect(result2.state.dayNumber).toBe(1);
+  });
+
+  it("throwing StorageLike mock: trySave calls onSaveFailed callback (W8)", () => {
+    const throwingStorage: StorageLike = {
+      getItem() { return null; },
+      setItem() { throw new Error("QuotaExceededError"); },
+      removeItem() { /* ok */ },
+    };
+    const state = createState(1);
+    let callCount = 0;
+    const onFail = () => { callCount++; };
+
+    trySave(throwingStorage, state, 0, onFail);
+    expect(callCount).toBe(1);
+
+    // Second call with same callback: still fires (caller controls one-time logic)
+    trySave(throwingStorage, state, 0, onFail);
+    expect(callCount).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W2: blended-pool demand multiplier round-trips and sanity validation
+// ---------------------------------------------------------------------------
+
+describe("blended demand multiplier (W2)", () => {
+  it("roastedDemandMultBlended defaults to 1.0 on fresh state", () => {
+    const state = createState(1);
+    expect(state.roastedDemandMultBlended).toBeCloseTo(1.0, 5);
+  });
+
+  it("round-trips through serialize/deserialize", () => {
+    const state = createState(1);
+    state.roastedDemandMultBlended = 0.40; // ghost_pepper only
+    const loaded = deserialize(serialize(state));
+    expect(loaded.roastedDemandMultBlended).toBeCloseTo(0.40, 5);
+  });
+
+  it("invalid blended multiplier (0.0 = out of range) fails sanity and triggers fallback", () => {
+    const state = createState(1);
+    const json = serialize(state);
+    const env = JSON.parse(json);
+    env.sim.roastedDemandMultBlended = 0.0; // invalid: must be > 0
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/roastedDemandMultBlended invalid/);
+  });
+
+  it("invalid blended multiplier (> 1.0) fails sanity", () => {
+    const state = createState(1);
+    const json = serialize(state);
+    const env = JSON.parse(json);
+    env.sim.roastedDemandMultBlended = 1.5; // invalid: must be <= 1
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/roastedDemandMultBlended invalid/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W3: deserialize slot validation — tampered recipe and bogus roasterTier
+// ---------------------------------------------------------------------------
+
+describe("deserialize slot and tier validation (W3)", () => {
+  it("tampered slot.recipe 'x' → sanity failure → fresh-state fallback via tryLoad", () => {
+    const storage = makeStorage();
+    const state = createState(1);
+    const json = serialize(state);
+    const env = JSON.parse(json);
+    env.sim.roastSlots[0].recipe = "x"; // not a valid RecipeId
+    storage.setItem(SAVE_KEY, JSON.stringify(env));
+
+    const result = tryLoad(storage, Date.now());
+    expect(result.ok).toBe(false);
+    expect(result.errorMessage).toMatch(/starting fresh/i);
+    expect(result.state.dayNumber).toBe(1); // fresh state
+  });
+
+  it("bogus roasterTier → sanity failure → fresh-state fallback via tryLoad", () => {
+    const storage = makeStorage();
+    const state = createState(1);
+    const json = serialize(state);
+    const env = JSON.parse(json);
+    env.sim.roasterTier = "steam_powered"; // not a valid RoasterTier
+    storage.setItem(SAVE_KEY, JSON.stringify(env));
+
+    const result = tryLoad(storage, Date.now());
+    expect(result.ok).toBe(false);
+    expect(result.errorMessage).toMatch(/starting fresh/i);
+  });
+
+  it("invalid slot.status → sanity failure", () => {
+    const state = createState(1);
+    const json = serialize(state);
+    const env = JSON.parse(json);
+    env.sim.roastSlots[0].status = "burning"; // not a valid status
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/status invalid/);
+  });
+
+  it("negative secondsRemaining → sanity failure", () => {
+    const state = createState(1);
+    const json = serialize(state);
+    const env = JSON.parse(json);
+    env.sim.roastSlots[0].secondsRemaining = -5;
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/secondsRemaining invalid/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W14: refuse to overwrite saves with schemaVersion > CURRENT (forward-compat load)
+// ---------------------------------------------------------------------------
+
+describe("W14: future-schema forward-compat", () => {
+  it("saves with schemaVersion > CURRENT load without throwing (pass-through)", () => {
+    const state = createState(1);
+    const json = serialize(state);
+    const env = JSON.parse(json);
+    env.schemaVersion = CURRENT_SCHEMA_VERSION + 5; // far future
+
+    // Should not throw; forward-compat pass-through
+    expect(() => deserialize(JSON.stringify(env))).not.toThrow();
+  });
+
+  it("future-schema save round-trips correctly via tryLoad", () => {
+    const storage = makeStorage();
+    const state = createState(1);
+    state.cash = 99.99;
+    const json = serialize(state);
+    const env = JSON.parse(json);
+    env.schemaVersion = CURRENT_SCHEMA_VERSION + 1; // next version
+    storage.setItem(SAVE_KEY, JSON.stringify(env));
+
+    const result = tryLoad(storage, Date.now());
+    // Forward-compat: load succeeds (not forced to fresh state)
+    expect(result.errorMessage).toBeNull();
+    expect(result.state.cash).toBeCloseTo(99.99);
   });
 });

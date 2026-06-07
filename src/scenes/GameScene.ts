@@ -37,7 +37,7 @@ import {
   projectedDemand,
 } from "../sim/engine.js";
 import type { SimState, DayReport } from "../sim/types.js";
-import { tryLoad, trySave, resetSave } from "../sim/persistence.js";
+import { tryLoad, trySave, resetSave, safeStorage } from "../sim/persistence.js";
 import { LORE_BY_ID } from "../data/lore.js";
 import { drawLegsy } from "./legsy.js";
 import {
@@ -253,6 +253,10 @@ export class GameScene extends Phaser.Scene {
   // ---- Persistence ---------------------------------------------------------
   /** Cumulative wall-clock seconds while this scene has been visible. */
   private playtimeSeconds = 0;
+  /** W1: safe storage proxy (localStorage or in-memory fallback). */
+  private storage = safeStorage();
+  /** W8: fire the save-failure toast at most once per session. */
+  private saveFailed = false;
   /** Bound reference so the same function can be removed in shutdown(). */
   private readonly onVisibilityChange: () => void = () => {
     if (document.visibilityState === "hidden") {
@@ -276,7 +280,9 @@ export class GameScene extends Phaser.Scene {
     const H = this.scale.height;  // 270
 
     // ---- Load save (§4 load path) ----------------------------------------
-    const loadResult = tryLoad(window.localStorage);
+    // W1: use safeStorage() so blocked localStorage degrades to in-memory.
+    this.storage = safeStorage();
+    const loadResult = tryLoad(this.storage);
     this.state = loadResult.state;
 
     if (loadResult.errorMessage) {
@@ -291,6 +297,12 @@ export class GameScene extends Phaser.Scene {
     // ---- Register save-on-hide listeners (spec §3) -----------------------
     document.addEventListener("visibilitychange", this.onVisibilityChange);
     window.addEventListener("pagehide", this.onPageHide);
+    // W4: register cleanup via SHUTDOWN event (Phaser calls this; shutdown() is dead code).
+    this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
+      document.removeEventListener("visibilitychange", this.onVisibilityChange);
+      window.removeEventListener("pagehide", this.onPageHide);
+      this.dismissTutorial();
+    });
 
 
     // ---- Backdrop (District: Farmers' Market) — P1_SPRITE_SPEC #10 --------
@@ -532,8 +544,8 @@ export class GameScene extends Phaser.Scene {
       { fontSize: "6px", color: "#F5DEB3", fontFamily: "monospace" }
     ).setOrigin(0.5);
     this.muteBtn.on("pointerdown", () => {
-      audioInit(window.localStorage);
-      const nowMuted = toggleMute(window.localStorage);
+      audioInit(this.storage);
+      const nowMuted = toggleMute(this.storage);
       if (this.muteBtnLabel) {
         this.muteBtnLabel.setText(nowMuted ? "UN-MUTE" : "MUTE");
       }
@@ -543,7 +555,7 @@ export class GameScene extends Phaser.Scene {
 
     // Initialise audio prefs from storage (won't play anything — just reads mute flag)
     // Actual AudioContext creation is deferred to first pointer-down (browser policy).
-    const savedMute = window.localStorage.getItem(MUTE_KEY);
+    const savedMute = this.storage.getItem(MUTE_KEY);
     if (savedMute !== null && this.muteBtnLabel) {
       // Reflect persisted state (audioInit not yet called, but we can read the key)
       const persisted = savedMute === "1";
@@ -552,8 +564,8 @@ export class GameScene extends Phaser.Scene {
 
     // ---- First-run tutorial init (Wave 3) ---------------------------------
     // Only show tutorial if no save existed at load time (fresh player).
-    // Uses a parallel localStorage key so save schema is untouched.
-    if (!loadResult.ok && window.localStorage.getItem(this.TUTORIAL_KEY) === null) {
+    // Uses a parallel storage key so save schema is untouched.
+    if (!loadResult.ok && this.storage.getItem(this.TUTORIAL_KEY) === null) {
       // Short delay so the backdrop finishes rendering before the first bubble
       this.time.delayedCall(400, () => this.showTutorialStep(0));
     }
@@ -1298,9 +1310,14 @@ export class GameScene extends Phaser.Scene {
     this.updateHUD();
   }
 
-  /** Persist current state to localStorage. Called at safe save points only (never mid-tick). */
+  /** Persist current state to storage. Called at safe save points only (never mid-tick). */
   private saveGame(): void {
-    trySave(window.localStorage, this.state, this.playtimeSeconds);
+    // W8: fire one-time non-blaming toast on first save failure.
+    const onFail = this.saveFailed ? undefined : () => {
+      this.saveFailed = true;
+      this.showToast("Heads up — saving isn't working on this device; progress lasts this session only.");
+    };
+    trySave(this.storage, this.state, this.playtimeSeconds, onFail);
   }
 
   // ---------------------------------------------------------------------------
@@ -1524,9 +1541,9 @@ export class GameScene extends Phaser.Scene {
     group.add(this.add.text(mX + 184, mY + mH - 14, "YES, RESET", { fontSize: "9px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
     confirmBtn.on("pointerdown", () => {
       group.destroy(true);
-      resetSave(window.localStorage);
-      // Also clear tutorial-seen so the new player gets the tutorial again
-      window.localStorage.removeItem(this.TUTORIAL_KEY);
+      resetSave(this.storage);
+      // Also clear tutorial-seen (W9: same storage, so tutorial re-shows after any reset)
+      this.storage.removeItem(this.TUTORIAL_KEY);
       this.state = createState(1);
       this.playtimeSeconds = 0;
       this.tutorialStep = -1; // reset tutorial tracking
@@ -1668,7 +1685,11 @@ export class GameScene extends Phaser.Scene {
   private markTutorialDone(): void {
     this.tutorialStep = -2; // sentinel: permanently done this session
     this.dismissTutorial();
-    window.localStorage.setItem(this.TUTORIAL_KEY, "1");
+    // W10: wrap in try/catch; storage may throw if blocked.
+    // safeStorage() normally handles this, but the in-memory fallback can't
+    // persist across sessions anyway — the try/catch prevents triggerEndOfDay
+    // from wedging if reportOpen is set before this line runs.
+    try { this.storage.setItem(this.TUTORIAL_KEY, "1"); } catch { /* best-effort */ }
   }
 
   private dismissTutorial(): void {

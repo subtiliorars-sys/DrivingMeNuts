@@ -224,9 +224,8 @@ export const OFFLINE_EARN_RATE_FRACTION = 0.20;
 
 /**
  * Absolute ceiling on offline earnings per hour ($).
- * NOTE: $100/hour RATIFIED by owner 2026-06-07 (GDD C5 + DARK_PATTERN_GATE B.2 updated); this constant is
- * deliberately 60× stricter ($100/hr) to limit offline catch-up at P1 scale.
- * Reconcile with canon before P2 wires the full offline system.
+ * RATIFIED 2026-06-07 by owner (GDD C5 + DARK_PATTERN_GATE B.2): $100/hr is canon.
+ * docs/PERSISTENCE.md Q9 and docs/GDD.md C5 both reference this value.
  */
 export const OFFLINE_CAP_DOLLARS_PER_HOUR = 100;
 

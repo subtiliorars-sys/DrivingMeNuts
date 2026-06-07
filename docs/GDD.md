@@ -256,7 +256,9 @@ Key insight:
    - **Net profit (today):** $66.60 − $5.00 = **$61.60**
    - **Cash at end of day:** $1200 + $61.60 = **$1261.60**
 
-2. **Why this day was strong:** Player was capacity-bound but efficient. They roasted 6 batches in 4 hours (morning), sold 70 of 74 lbs ready, and hit the high-traffic Farmers' Market window. At the default price ($1.50), they captured the profit peak of the demand curve. Unmet demand (~30 lbs, since 17 lbs/hr × 3 hours = 51 available, but player had only 30) reveals the constraint: **roaster capacity, not demand.**
+2. **Why this day was strong:** Player roasted 6 batches (60 lbs) but only sold 74 lbs total — wait, let's tally correctly: morning 30 lbs + afternoon 40 lbs + evening 4 lbs = **74 lbs sold**. Starting raw stock was 20 lbs (Batch 1–4) + 100 lbs ordered (Batch 5–9 = 50 lbs roasted, 50 lbs remain raw). Inventory ledger: 120 lbs raw in → 74 lbs sold + 4 lbs leftover roasted + 50 lbs unroasted raw (held for tomorrow) → 120 lbs accounted for (consistent). The "sold 70 of 74" phrasing in Step 3 was the morning+afternoon tally before evening; total across the day is all 74 lbs sold except the 4 lbs leftover from Batch 4.
+
+   **P1 engine note:** The P1 engine is **demand-bound** (single slot, 1 roaster: 60 lbs/hr capacity vs ~17 lbs/hr demand at $1.50). The player in this walkthrough had more than enough roasting capacity to meet demand — the constraint was selling time, not production speed. Capacity becomes the binding constraint when districts/travel (P2) compress selling windows or when a player tries to serve multiple high-traffic districts simultaneously.
 3. **Upgrade insight:** If the player had 2 queue slots, they could roast Batch 2 while Batch 1 sells, doubling throughput. This day's bottleneck (40 lbs sold, not 51) is bridged by upgrading queue slots to 2 or 3, opening the path to +50–100% revenue days.
 4. **Next decision:** $1261.60 puts them within reach of a $500 queue-slot upgrade (total cost for one +1 slot). Or a $300 permit expedite for a third district. Player tracks their next milestone.
 

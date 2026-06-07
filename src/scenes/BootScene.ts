@@ -14,7 +14,7 @@
 import Phaser from "phaser";
 import { drawLegsy } from "./legsy.js";
 import { audioInit, playButtonTick } from "./audio.js";
-import { SAVE_KEY } from "../sim/persistence.js";
+import { SAVE_KEY, safeStorage, resetSave } from "../sim/persistence.js";
 
 // Palette A constants (same subset used in GameScene)
 const P = {
@@ -95,7 +95,9 @@ export class BootScene extends Phaser.Scene {
     drawLegsy(this, truckX + 20, truckY + 8, 0.65);
 
     // ---- Check if a save exists (to decide whether to show Reset) ----------
-    const hasSave = window.localStorage.getItem(SAVE_KEY) !== null;
+    // W1: use safeStorage so blocked localStorage falls back to in-memory.
+    const storage = safeStorage();
+    const hasSave = storage.getItem(SAVE_KEY) !== null;
 
     // ---- START button ------------------------------------------------------
     const btnY = H * 0.55;
@@ -110,7 +112,7 @@ export class BootScene extends Phaser.Scene {
     startBtn.on("pointerout",  () => startBtn.setAlpha(1.0));
     startBtn.on("pointerdown", () => {
       // First gesture — resume AudioContext (browser auto-play policy)
-      audioInit(window.localStorage);
+      audioInit(storage);
       playButtonTick();
       this.scene.start("GameScene");
     });
@@ -128,9 +130,9 @@ export class BootScene extends Phaser.Scene {
       resetBtn.on("pointerover", () => resetBtn.setAlpha(0.85));
       resetBtn.on("pointerout",  () => resetBtn.setAlpha(1.0));
       resetBtn.on("pointerdown", () => {
-        audioInit(window.localStorage);
+        audioInit(storage);
         playButtonTick();
-        this.showResetConfirm();
+        this.showResetConfirm(storage);
       });
     }
 
@@ -143,9 +145,10 @@ export class BootScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
   // Reset confirm dialog (reuses the same pattern as GameScene.showResetConfirm)
   // Kept local to BootScene so GameScene doesn't need to know about title flow.
+  // W9: uses resetSave(storage) + CORRUPT_KEY import so both reset paths are identical.
   // ---------------------------------------------------------------------------
 
-  private showResetConfirm(): void {
+  private showResetConfirm(storage = safeStorage()): void {
     const W = this.scale.width;
     const H = this.scale.height;
     const mW = 240, mH = 80;
@@ -189,8 +192,9 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5));
     confirmBtn.on("pointerdown", () => {
       group.destroy(true);
-      window.localStorage.removeItem(SAVE_KEY);
-      window.localStorage.removeItem("dmn_save_v1-corrupt");
+      // W9: use resetSave (imports CORRUPT_KEY, no hardcoded string) and clear tutorial
+      resetSave(storage);
+      storage.removeItem("dmn_tutorial_seen"); // also clear tutorial so fresh start re-tutorials
       // Show brief confirmation, then allow player to start fresh
       const toast = this.add.text(W / 2, H / 2, "Save reset.", {
         fontSize: "9px", color: "#F5DEB3", fontFamily: "monospace",

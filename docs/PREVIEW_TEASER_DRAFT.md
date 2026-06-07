@@ -29,7 +29,7 @@ Every sale teaches: the cheaper you price, the more you sell—but margin shrink
 
 - **Idle that respects your time:** No mandatory grind. No countdown timers forcing you to log in daily. No streaks. Play for 10 minutes or 2 hours—there's no FOMO.
 - **Real small-business math under the hood:** COGS (Cost of Goods Sold), gross margin, break-even analysis, inventory management. The numbers are plausible, simplified for clarity, and sourced to real-world food-truck benchmarks.
-- **A running joke as a game mechanic:** The peanuts-aren't-nuts gag isn't just flavor text. It triggers mechanics (Legume Lore collectibles, gag combos, bonuses). The joke evolves from annoyance into brand identity—just like the owner's journey.
+- **A running joke as a game mechanic:** The peanuts-aren't-nuts gag isn't just flavor text. It triggers Legume Lore collectibles (20 dialogue variants in P1). Planned features: gag combos, bonus mechanics as the joke evolves from annoyance into brand identity—just like the owner's journey.
 
 ---
 
@@ -57,4 +57,4 @@ The game collects zero data. It's fully offline after the initial load. No accou
 
 ---
 
-**Developed by [OWNER NAME — EDIT: pending explicit owner approval to name in public].**
+**Developed independently.**

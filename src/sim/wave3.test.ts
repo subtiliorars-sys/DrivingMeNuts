@@ -267,18 +267,18 @@ describe("lore tier gating", () => {
     }
   });
 
-  it("mid-tier lines have tier='mid'", () => {
+  it("mid-tier lines have tier='mid' (W5: LL-007–LL-016 are mid; LL-017–020 re-tiered to late)", () => {
     const midLines = LORE_LINES.filter((l) => l.tier === "mid");
-    // LL-007 through LL-020 are mid
-    expect(midLines.length).toBeGreaterThanOrEqual(14);
+    // W5: LL-007 through LL-016 are mid (10 lines); LL-017–020 are now late
+    expect(midLines.length).toBeGreaterThanOrEqual(10);
     for (const line of midLines) {
       expect(line.tier).toBe("mid");
     }
   });
 
-  it("LORE_TIER_DAY_GATE: early gate is day 1, mid gate is day 5", () => {
+  it("LORE_TIER_DAY_GATE: early gate is day 1, mid gate is day 8 (W5 playtest-compressed)", () => {
     expect(LORE_TIER_DAY_GATE.early).toBe(1);
-    expect(LORE_TIER_DAY_GATE.mid).toBe(5);
+    expect(LORE_TIER_DAY_GATE.mid).toBe(8); // W5: compressed from canon day 21 for playtest
   });
 
   it("on day 1: only early-tier lines are in the pool (6 lines)", () => {
@@ -289,17 +289,17 @@ describe("lore tier gating", () => {
     expect(pool.length).toBe(earlyCount);
   });
 
-  it("on day 4: still only early-tier lines (mid gate = 5)", () => {
+  it("on day 7: still only early-tier lines (mid gate = 8)", () => {
     const state = createState(1);
-    state.dayNumber = 4;
+    state.dayNumber = 7;
     const pool = LORE_LINES.filter((l) => state.dayNumber >= LORE_TIER_DAY_GATE[l.tier]);
     const earlyCount = LORE_LINES.filter((l) => l.tier === "early").length;
     expect(pool.length).toBe(earlyCount);
   });
 
-  it("on day 5: early + mid lines are in the pool", () => {
+  it("on day 8: early + mid lines are in the pool (W5: mid gate = 8)", () => {
     const state = createState(1);
-    state.dayNumber = 5;
+    state.dayNumber = 8;
     const pool = LORE_LINES.filter((l) => state.dayNumber >= LORE_TIER_DAY_GATE[l.tier]);
     const earlyCount = LORE_LINES.filter((l) => l.tier === "early").length;
     const midCount   = LORE_LINES.filter((l) => l.tier === "mid").length;
@@ -324,9 +324,9 @@ describe("lore tier gating", () => {
     }
   });
 
-  it("gag events on day 5+ can include mid-tier ids", () => {
+  it("gag events on day 8+ can include mid-tier ids (W5: mid gate = 8)", () => {
     const state = createState(42);
-    state.dayNumber = 5;
+    state.dayNumber = 8; // W5: mid gate is now 8, not 5
     state.roastedStockLbs = 5000;
     const allEvents: ReturnType<typeof tick>[] = [];
     // Run multiple simulated days worth to sample a good set of gags
@@ -336,7 +336,7 @@ describe("lore tier gating", () => {
     const gagIds = allEvents.flat().filter((e) => e.kind === "gag").map((e) => e.detail.loreId as string);
     expect(gagIds.length).toBeGreaterThan(0);
 
-    // All ids must be in LORE_BY_ID and be either early or mid tier
+    // All ids must be in LORE_BY_ID and be either early or mid tier (late gate = 20)
     for (const id of gagIds) {
       const line = LORE_BY_ID[id];
       expect(line).toBeDefined();

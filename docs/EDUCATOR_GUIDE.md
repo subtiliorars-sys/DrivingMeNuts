@@ -272,9 +272,11 @@ Use this checklist to prepare and run a classroom session. All steps are **pract
 **Checkpoint at Day 5 (2 min):**
 - Pause the class. Ask: **"What's your current cash? Did you roast? What price did you pick?"** Quick poll. No judgment—just surface the variety of strategies already visible.
 
+**Timing note:** A full in-game day ≈ 14 real minutes (SIM_TIME_SCALE=60; 14 sim-hours × 60 real-seconds each = 840 real seconds). For multi-day exercises, have students use the **END DAY** button deliberately rather than waiting for the clock to fill.
+
 **Play Phase 2: Days 6–10 (15–20 min)**
 - Resume play. Watch for the Legume Gag (should trigger 3–5 times by Day 10, depending on sales volume). When it happens, point it out: **"That's the running joke of the game. Every few sales, a customer reminds you peanuts are legumes. Keep track—it's a mechanic."**
-- If a student runs low on cash (<$50), the game will show the rescue arc screen (Old Joe, Marta, or Derek offers help). Walk them through reading the offer: **"What is this NPC giving you? What does it cost?"**
+- If a student runs low on cash (<$25 end-of-day, planned UI), the rescue arc flag is set — no rescue screen appears in the P1 build. **(rescue-arc walkthrough is planned, not yet in P1 build)**
 
 **Final Debrief (10–15 min, whole class):**
 - **Ask (cold call or volunteers):**

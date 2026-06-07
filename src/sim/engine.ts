@@ -42,6 +42,9 @@ import {
   GAG_EVERY_N_LBS_SOLD,
 } from "../data/economy.js";
 
+// default blended multiplier = classic_salted = 1.0
+const DEFAULT_DEMAND_MULT_BLENDED = RECIPE_DEMAND_MULT["classic_salted"];
+
 import { LORE_LINES, LORE_TIER_DAY_GATE } from "../data/lore.js";
 
 import type {
@@ -81,17 +84,19 @@ function cogsPerLb(recipe: RecipeId): number {
 }
 
 /**
- * Demand in lbs/hour at a given price, scaled by per-recipe demand multiplier.
- * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × RECIPE_DEMAND_MULT[recipe]
+ * Demand in lbs/hour at a given price, scaled by the provided demand multiplier.
+ * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × demandMult
  * Clamped to [0, DEMAND_MAX_LBS_PER_HOUR].
  * Small Gaussian-ish jitter applied via PRNG so repeat ticks aren't exactly equal.
- * Default recipe "classic_salted" preserves backward compat (mult = 1.0).
+ *
+ * W2: tick() passes state.roastedDemandMultBlended as demandMult so the blended-pool
+ * recipe multiplier is applied to live sales. Default 1.0 preserves backward compat.
  */
-function demandLbsPerHour(price: number, state: SimState, recipe: RecipeId = "classic_salted"): number {
+function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0): number {
   const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - DEMAND_BASE_PRICE);
   // ±10% jitter (two uniform samples averaged → triangular distribution)
   const jitter = ((nextRand(state) + nextRand(state)) / 2 - 0.5) * 0.20;
-  return clamp(base * (1 + jitter) * RECIPE_DEMAND_MULT[recipe], 0, DEMAND_MAX_LBS_PER_HOUR);
+  return clamp(base * (1 + jitter) * demandMult, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 /**
@@ -157,6 +162,7 @@ export function createState(seed = 1): SimState {
     rawStockLbs: STARTING_RAW_STOCK_LBS,
     roastedStockLbs: 0,
     roastedCostBasisPerLb: 0,
+    roastedDemandMultBlended: DEFAULT_DEMAND_MULT_BLENDED, // W2: 1.0 at start (classic_salted)
     roastSlots: slots,
     roasterTier: "tin_pan",
     sellPrice: DEFAULT_SELL_PRICE,
@@ -197,6 +203,13 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
       state.roastedCostBasisPerLb = totalLbs > 0
         ? (oldLbs * state.roastedCostBasisPerLb + newLbs * batchBasis) / totalLbs
         : batchBasis;
+
+      // W2: update blended demand multiplier (weighted average, same pattern as cost basis).
+      const batchMult = slot.recipe ? RECIPE_DEMAND_MULT[slot.recipe] : DEFAULT_DEMAND_MULT_BLENDED;
+      state.roastedDemandMultBlended = totalLbs > 0
+        ? (oldLbs * state.roastedDemandMultBlended + newLbs * batchMult) / totalLbs
+        : batchMult;
+
       state.roastedStockLbs = totalLbs;
       events.push({
         kind: "batch_ready",
@@ -209,8 +222,9 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
 
   // 2. Customer purchases (if roasted stock available)
   if (state.roastedStockLbs > 0) {
-    // Convert lbs/hour demand to lbs/second, then scale by dt
-    const lbsPerSec = demandLbsPerHour(state.sellPrice, state) / 3_600;
+    // Convert lbs/hour demand to lbs/second, then scale by dt.
+    // W2: pass blended demand multiplier so mixed inventory sells at weighted velocity.
+    const lbsPerSec = demandLbsPerHour(state.sellPrice, state, state.roastedDemandMultBlended) / 3_600;
     const demandedLbs = lbsPerSec * dtSeconds;
     const soldLbs = Math.min(demandedLbs, state.roastedStockLbs);
 
@@ -442,7 +456,11 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
 
   // Peak hourly earn rate: estimate from current price × base demand at that price.
   // We use a deterministic approximation (no jitter) so tests are predictable.
-  // F2: use new linear demand formula
+  // F2: use new linear demand formula.
+  // W2 spec §4: applyOffline conservatively uses classic_salted demand multiplier (1.0)
+  // because offline time spans multiple potential recipes and we cannot know the
+  // blend that would have applied. This over-estimates slightly, but the
+  // maxEarnFromStock cap limits actual earnings to available stock value anyway.
   const baseDemandAtPrice = clamp(
     DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (state.sellPrice - DEMAND_BASE_PRICE),
     0,
