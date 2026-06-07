@@ -4,25 +4,33 @@
 
 ---
 
-> **Build status — read before class prep**
+> **Build status — read before class prep** *(refreshed 2026-06-07)*
 >
-> This guide describes the FULL designed experience. The current P1 build is a subset:
+> This guide describes the FULL designed experience. The current P1 build has grown well
+> beyond the original idle slice. Status as of the latest build:
 >
-> | Feature | P1 Status |
-> |---------|-----------|
-> | One district (Farmers' Market) | SHIPPED |
-> | Roast queue, pricing, demand curve | SHIPPED |
-> | Day cycle, report card | SHIPPED |
-> | Permits UI | NOT SHIPPED (planned P2) |
-> | Save / load | NOT SHIPPED — refresh restarts the game (planned P1.5, browser localStorage only) |
-> | Spoilage | NOT SHIPPED (planned P2) |
-> | Dual ledger (cash vs. profit) | NOT SHIPPED (planned P2) |
-> | Seasonality | NOT SHIPPED (planned P2) |
-> | Hint / skip systems | NOT SHIPPED (planned) |
+> **SHIPPED (playable now):**
 >
-> Where this guide describes features not yet in the P1 build, they are tagged **(planned)**.
-> Use P1 in class today for COGS, pricing, break-even, and the report card. Other concepts
-> are coming — this guide covers them for planning purposes.
+> | Feature | Notes |
+> |---------|-------|
+> | One district (Farmers' Market) | The full roast → price → sell → day-report loop |
+> | Roast queue, pricing, demand curve, day cycle | Core idle loop; profit-optimum pricing |
+> | Recipes (3) + roaster/queue upgrades | Classic Salted from start; Honey Cinnamon / Ghost Pepper unlock by lifetime revenue |
+> | **Save / load** | Browser localStorage; auto-saves and reloads (corruption-safe). Save export/import to a file too. |
+> | **Bookkeeping — Ledger v1 + BOOKS panel** | Daily P&L rows, a live balance sheet (assets = liabilities + equity), and a **cash-vs-profit** teaching line. Weekly recap every 7 days. |
+> | Supplier relationship + bulk discounts | Loyalty discount earned by ordering volume; teaches working capital |
+> | "Save the Truck" rescue arc | No bankruptcy — a cash crunch offers a fair loan / supplier credit / pre-order / cautionary payday (with honest APR). Repeat crises escalate. |
+> | Achievements + Goals panel | Progress markers (no power rewards); Legume Lore collection; comeback-line tiers |
+> | "Legumes. Not Nuts." brand campaign | Flip the running gag into brand equity |
+> | Accessibility + Settings (⚙ MENU) | Reduced-motion, colour-blind cues, sound toggle |
+> | **In-game Glossary** | Plain-language definitions (COGS, margin, APR, profit-vs-cash, deferred revenue, **peanut allergy**) + the "simplified / varies by location" disclaimer |
+> | First-run tutorial, audio/SFX + mute, milestone celebrations | Onboarding + game-feel |
+>
+> **IN REVIEW (open PRs, not yet merged):** auto-sell off-peak upgrade; weather *foundation* (constants only — no gameplay effect until a later demand-wiring step).
+>
+> **PLANNED (P2+, not yet built):** truck driving + multiple districts + NPC quests (the RPG layer); permits UI; **spoilage** (and the refrigerated-truck upgrade that depends on it); the **full** dual-ledger (interest split, accounts-payable calendar); **weather affecting demand** + seasons; large-text accessibility.
+>
+> **Use in class today:** COGS, pricing & the demand curve, break-even, the day-report and the **BOOKS** panel (profit vs. cash), the rescue arc (debt & APR), and the Glossary. The rest is on the roadmap — this guide covers it for planning.
 
 ---
 
@@ -36,12 +44,12 @@ The game maps 10 core business concepts to playable moments. A typical 40-minute
 | **Gross Margin vs. Markup** | The pricing slider (left: $0.75/lb, right: $2.50/lb). As you move it, a margin % appears (green if >60%, yellow if 45–60%, red if <45%). | "At $1.50/lb, your margin is 60%. If you drop to $1.00, it's 40%. Why does a 33% price cut hurt so much worse?" |
 | **Permits & Licensing** | Day 1 gate: spend $500 and wait 3 in-game days to get a Health & Mobile Vendor permit before operating. Renewal is required or the truck closes. **(planned P2)** | "The game doesn't let you start. Why? What does a real permit cost, and what would happen if you ignored the deadline?" |
 | **Location Strategy** | Unlock screen shows 4–5 districts (Farmers' Market, Office Quarter, Boardwalk, etc.). Each has different foot traffic, seasons, and permit costs. **(planned P2)** | "Which district looks best? Revenue per day, or profit per day? Why are they different?" |
-| **Cash Flow vs. Profit** | Dual ledger: "Cash in bank" (real money now) vs. "Profit this week" (calculated at week-end). A big roasting day can drop cash but show red profit. **(planned P2)** | "You made $200 this week but you're broke. Explain why those two things can both be true." |
+| **Cash Flow vs. Profit** | **SHIPPED (BOOKS panel):** live balance sheet + a day-report line showing that debt payments lower cash but are *not* an expense, so profit ≠ cash. A big roasting day can drop cash while profit stays positive. *(Full dual-ledger with interest split is P2.)* | "You made $200 this week but you're broke. Explain why those two things can both be true." |
 | **Marketing & Reputation** | Customer "Legume Gag" (customers say "peanuts aren't nuts, they're legumes"). Each time you win the gag exchange, a Legume Lore entry unlocks, and that customer becomes a repeat buyer. | "Free marketing vs. paid ads: how does the game model earning customers?" |
-| **Seasonality** | Calendar shows the full year. Summer (high traffic, festivals) vs. winter (quiet, but gift-box premium pricing available). Revenue forecast by month. **(planned P2)** | "If you ignore the forecast and don't save in summer, what happens in January?" |
+| **Seasonality / cyclicality** | **PARTIAL:** weekday demand variation is shipped (Mon slow → Sat peak, shown openly). Full-year seasons + weather-affecting-demand are P2 (a weather *foundation* is in an open PR). | "If you ignore the forecast and don't save in summer, what happens in January?" |
 | **Break-Even Analysis** | Daily goal UI shows a target: "Sell 6 lbs today to cover fixed costs." (At $1.50/lb sell price, COGS $0.60/lb, gross profit $0.90/lb: $5.00 daily fixed ÷ $0.90 = 6 lbs.) If you exceed it, the target turns green. **(planned: break-even UI not in P1)** | "What does break-even mean? Is every sale profitable?" |
 | **Unit Economics** | End-of-day report: revenue, COGS, gross profit, location costs, net profit. Weekly table shows which location/day combos were best. (P1 report card shows single-district breakdown; multi-location weekly table **(planned P2)**.) | "You sold at two locations. Same revenue, different profit. Why?" |
-| **Simple Bookkeeping** | Receipt journal organized by date and type (income, expense). Weekly auto-generated summary: income, COGS, fixed costs, net profit. **(planned P2)** | "Why keep a journal? What pattern would you spot if you looked at the last 4 weeks?" |
+| **Simple Bookkeeping** | **SHIPPED:** Ledger v1 — a 30-day daily P&L table (revenue, COGS, fixed, net, debt payments, cash) in the BOOKS panel, plus an auto weekly recap (revenue, net, margin, best day). *(A full receipt journal by income/expense type is P2.)* | "Why keep a journal? What pattern would you spot if you looked at the last 4 weeks?" |
 
 ---
 
