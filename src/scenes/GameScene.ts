@@ -2653,7 +2653,7 @@ export class GameScene extends Phaser.Scene {
 
     const panel = this.add.rectangle(cx, cy, bw, bh, P.PANEL_BG, 0.96).setStrokeStyle(2, P.AWNING);
     const t1 = this.add.text(cx, subtitle ? cy - 7 : cy, title,
-      { fontSize: "11px", color: "#2C2416", fontFamily: "monospace", fontStyle: "bold", align: "center" }
+      { fontSize: "11px", color: "#2C2416", fontFamily: "monospace", fontStyle: "bold", align: "center", wordWrap: { width: bw - 12 } }
     ).setOrigin(0.5);
     g.add(panel);
     g.add(t1);
@@ -2700,6 +2700,12 @@ export class GameScene extends Phaser.Scene {
       this.celebrationTimer = undefined;
     }
     if (this.celebrationGroup) {
+      // RT: Phaser doesn't auto-kill tweens when a target is destroyed, so kill
+      // the in-flight scale-pop/confetti tweens first (else they'd keep running
+      // against destroyed objects until self-completing — harmless but untidy).
+      for (const obj of this.celebrationGroup.getChildren()) {
+        this.tweens.killTweensOf(obj);
+      }
       this.celebrationGroup.destroy(true);
       this.celebrationGroup = undefined;
     }
