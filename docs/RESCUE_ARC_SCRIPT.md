@@ -312,7 +312,7 @@ If the player's end-of-day cash drops below $25 again (same trigger):
 > "trust dented, not reversed"). Net wealth from a defaulted order is now ~0.
 >
 > **Loan APR honesty (A2):** the loan card annualizes the flat fee on its real
-> 14-day term (≈130%/yr at 5%, ≈182% at 7%) — the same simple-APR basis as
+> 14-day term (≈130%/yr at 5%, ≈183% at 7%) — the same simple-APR basis as
 > QuickNut's 391% — not the prior "~20%/yr" season framing. Old Joe is still
 > clearly the cheaper friend-loan; the number is just truthful now.
 

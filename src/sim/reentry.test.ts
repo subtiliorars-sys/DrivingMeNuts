@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createState, endOfDay, chooseRescuePath } from "./engine.js";
+import { createState, endOfDay, chooseRescuePath, balanceSheet } from "./engine.js";
 import { serialize, deserialize } from "./persistence.js";
 import {
   RESCUE_LOAN_PRINCIPAL,
@@ -27,6 +27,7 @@ import {
   RESCUE_PAYDAY_PRINCIPAL,
   RESCUE_PAYDAY_FEE,
   RESCUE_CREDIT_AMOUNT_DUE,
+  DAILY_FIXED_COSTS,
 } from "../data/economy.js";
 import type { SimState } from "./types.js";
 
@@ -181,37 +182,43 @@ describe("re-entry escalation", () => {
     void totalLbs;
   });
 
-  it("RT-1b: the preorder loop is NOT net-positive over repeated defaults", () => {
-    // Model the exploit: take preorder cash, convert to inventory, default, repeat.
-    // With the fix, each default leaves an equal debt, so net worth (cash + raw
-    // inventory value − debts owed) never ratchets up across cycles.
+  it("RT-1b: equity (net worth) is CONSERVED through grant and default — no free money", () => {
+    // The canonical net-worth measure is balanceSheet().equity (assets − liabilities).
+    // Grant: cash up, deferred-revenue liability up → equity flat.
+    // Default: deferred revenue → preorder_default debt at the SAME value → equity
+    //          changes only by the day's fixed costs, never by a windfall.
     const state = createState(9);
-    state.cash = 50;
+    state.cash = 50; state.rawStockLbs = 0;
 
-    const netWorth = (): number => {
-      const debts = state.rescueDebts.reduce((s, d) => s + d.amountDue, 0);
-      return state.cash + state.rawStockLbs * 0.40 - debts;
-    };
+    intoOffer(state);
+    const eqBeforeGrant = balanceSheet(state).equity;
+    chooseRescuePath(state, "preorder"); // +$110 cash, +$110 deferred revenue
+    expect(balanceSheet(state).equity).toBeCloseTo(eqBeforeGrant, 6);
 
-    const before = netWorth();
-    for (let cycle = 0; cycle < 3; cycle++) {
-      state.cash = 10;            // force a crisis
-      endOfDay(state);
-      if (state.rescueMode !== "offer") break;
-      chooseRescuePath(state, "preorder"); // +cash, owe lbs
-      // never deliver; jump to due day
-      state.roastedStockLbs = 0;
-      // due day is the LATEST among debts/obligation
-      const due = Math.max(
-        state.preorderObligation?.dueDayNumber ?? 0,
-        ...state.rescueDebts.map((d) => d.dueDayNumber),
-        state.dayNumber,
-      );
-      state.dayNumber = due;
-      endOfDay(state);
-    }
-    // Net worth must not have grown by free money (allow small fixed-cost drift down).
-    expect(netWorth()).toBeLessThanOrEqual(before + 0.01);
+    // Deliver nothing, run to the due day, close.
+    state.roastedStockLbs = 0;
+    state.dayNumber = state.preorderObligation!.dueDayNumber;
+    const eqBeforeDefault = balanceSheet(state).equity;
+    endOfDay(state);
+    // Only the day's fixed costs leave; the $110 deferred-rev became a $110 debt.
+    expect(balanceSheet(state).equity).toBeCloseTo(eqBeforeDefault - DAILY_FIXED_COSTS, 2);
+    // And the gate keeps the arc "active" (debt outstanding) → no free re-infusion.
+    expect(state.rescueMode).toBe("active");
+  });
+
+  it("RT-1b: partial delivery owes exactly the UNEARNED remainder", () => {
+    const state = createState(12);
+    intoOffer(state);
+    chooseRescuePath(state, "preorder"); // 100 lbs / $110
+    // Deliver half: 50 of 100 lbs.
+    state.roastedStockLbs = 50;
+    state.roastedCostBasisPerLb = 0.60;
+    state.dayNumber = state.preorderObligation!.dueDayNumber;
+    endOfDay(state);
+    const d = state.rescueDebts.find((x) => x.kind === "preorder_default");
+    expect(d).toBeDefined();
+    // unearned = cashReceived × (1 − 50/100) = $110 × 0.5 = $55
+    expect(d!.amountDue).toBeCloseTo(RESCUE_PREORDER_CASH * 0.5, 6);
   });
 
   it("preorder_default debt survives a save round-trip", () => {
@@ -224,6 +231,27 @@ describe("re-entry escalation", () => {
     const loaded = deserialize(serialize(state));
     const d = loaded.rescueDebts.find((x) => x.kind === "preorder_default");
     expect(d).toBeDefined();
+  });
+
+  it("F-4: a crafted oversized debt amountDue is rejected on load", () => {
+    const state = createState(13);
+    intoOffer(state);
+    chooseRescuePath(state, "loan");
+    const env = JSON.parse(serialize(state));
+    env.sim.rescueDebts[0].amountDue = 1e15; // unrepayable soft-lock attempt
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/amountDue/);
+  });
+
+  it("F-5: a crafted 'offer' mode with an outstanding debt is coerced to 'active'", () => {
+    const state = createState(14);
+    intoOffer(state);
+    chooseRescuePath(state, "loan"); // active debt
+    const env = JSON.parse(serialize(state));
+    env.sim.rescueMode = "offer"; // crafted desync: offer on top of a live debt
+    const loaded = deserialize(JSON.stringify(env));
+    // Coerced back to active so the one-concurrent-crisis gate still holds.
+    expect(loaded.rescueMode).toBe("active");
+    expect(loaded.rescueDebts.length).toBe(1);
   });
 
   it("rescueEntryCount round-trips and legacy saves default to 0", () => {

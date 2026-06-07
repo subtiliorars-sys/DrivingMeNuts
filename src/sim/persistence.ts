@@ -327,7 +327,9 @@ function sanityCheck(env: SaveEnvelope): string | null {
         return `rescueDebt entry invalid: ${String(d)}`;
       if (!VALID_DEBT_KINDS.has(d.kind))
         return `rescueDebt kind invalid: ${d.kind}`;
-      if (typeof d.amountDue !== "number" || !Number.isFinite(d.amountDue) || d.amountDue < 0)
+      // RT-1b/F-4: bound the magnitude (mirrors the ledger cap) so a crafted
+      // save can't inject an unrepayable 1e15 debt and soft-lock the player.
+      if (typeof d.amountDue !== "number" || !Number.isFinite(d.amountDue) || d.amountDue < 0 || d.amountDue > 1e9)
         return `rescueDebt amountDue invalid: ${d.amountDue}`;
       // RT-4: Number.isFinite rejects NaN/Infinity — a NaN dueDayNumber passes
       // `< 1` (false) and produces a debt that is never due (permanent ghost debt).
@@ -562,6 +564,16 @@ export function deserialize(json: string): SimState {
         }
       : null;
 
+  // RT-1b/F-5: keep the one-concurrent-crisis invariant intact on load. A
+  // crafted save with rescueMode "offer" AND an outstanding debt/obligation
+  // would let the player open a fresh offer on top of a live crisis (stacking
+  // two infusions). It's net-neutral (each path books its matching debt), but
+  // coercing to "active" preserves the gate's guarantee regardless of input.
+  const rescueModeCoerced: "offer" | "active" | null =
+    rescueMode === "offer" && (rescueDebts.length > 0 || preorderObligation !== null)
+      ? "active"
+      : rescueMode;
+
   // Wave 4 polish: revive netHistory; default [] if absent (safe — empty history is correct
   // for saves that predate this field; no migration needed per additive-optional rule).
   const rawNetHistory = (ss as SerializedSimState).netHistory;
@@ -644,7 +656,7 @@ export function deserialize(json: string): SimState {
     dayNumber: sim.dayNumber,
     dayStats,
     rescueArcPending: sim.rescueArcPending,
-    rescueMode,
+    rescueMode: rescueModeCoerced,
     rescueEntryCount,
     rescueDebts,
     preorderObligation,

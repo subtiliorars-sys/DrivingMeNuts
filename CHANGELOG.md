@@ -12,7 +12,7 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ### Fixed (re-entry red-team, FIX-FIRST)
 - **RT-1b (HIGH, cash pump):** defaulting on Derek's pre-order was free money — the upfront cash for undelivered lbs had no mechanical cost (no clawback, no reputation system), so the arc could be farmed for unbounded cash (my escalation would have doubled the rate). Fixed: a short/zero delivery now converts the **unearned cash into a `preorder_default` debt** owed back (gentle — no hard cash-yank, honoring the script's "trust dented, not reversed"). Net wealth from a defaulted order is now ~0. New debt kind threads through summary/HUD/persistence; pump-closure regression-tested.
-- **F3 (MED, A2 accuracy):** Old Joe's loan APR was shown ~6× too low (≈20%/yr via a fictional "4 seasons" basis). Now annualized on the real 14-day term (≈130%/yr at 5%, ≈182% at 7%) — the same simple-APR basis as QuickNut's 391%. Still clearly the cheaper friend-loan; just truthful.
+- **F3 (MED, A2 accuracy):** Old Joe's loan APR was shown ~6× too low (≈20%/yr via a fictional "4 seasons" basis). Now annualized on the real 14-day term (≈130%/yr at 5%, ≈183% at 7%) — the same simple-APR basis as QuickNut's 391%. Still clearly the cheaper friend-loan; just truthful.
 - 13 new/expanded tests; 336 unit + 5 boot green.
 
 ### Consolidation (wave 7, PR #9 — stacks on PR #8; no new scope)
