@@ -19,6 +19,7 @@ import {
   GLOSSARY_BY_ID,
   GLOSSARY_DISCLAIMER,
 } from "../data/glossary.js";
+import { loadMutePref, isMuted, MUTE_KEY } from "../scenes/audio.js";
 
 /** In-memory storage with a seedable backing map. */
 function makeStorage(seed: Record<string, string> = {}): Pick<Storage, "getItem" | "setItem"> & { map: Map<string, string> } {
@@ -55,6 +56,16 @@ describe("accessibility prefs", () => {
     // round-trips through a fresh init
     prefsInit(makeStorage({ [COLORBLIND_KEY]: "1" }));
     expect(isColorblindCues()).toBe(true);
+  });
+
+  it("RT F1: loadMutePref syncs mute from storage without a gesture", () => {
+    loadMutePref(makeStorage({ [MUTE_KEY]: "1" }));
+    expect(isMuted()).toBe(true);
+    loadMutePref(makeStorage({ [MUTE_KEY]: "0" }));
+    expect(isMuted()).toBe(false);
+    // Absent key → treated as not-muted (default).
+    loadMutePref(makeStorage());
+    expect(isMuted()).toBe(false);
   });
 
   it("marginCue thresholds match the HUD coloring (≥60 healthy, ≥45 tight, else low)", () => {

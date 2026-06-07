@@ -37,7 +37,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     id: "gross-margin",
     term: "Gross Margin",
     definition: "The share of each sale left after COGS, as a percentage. Higher is healthier. It's the room you have to cover fixed costs and still profit.",
-    inGame: "At $1.50/lb with $0.60 COGS, gross margin is 60%. The day report flags anything under ~60% as tight.",
+    inGame: "At $1.50/lb with $0.60 COGS, gross margin is 60%. The game flags margin under ~60% as 'tight' and under ~45% as 'low'.",
   },
   {
     id: "net-vs-cash",
@@ -79,7 +79,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     id: "apr",
     term: "APR (Annual Percentage Rate)",
     definition: "The cost of borrowing, expressed as a yearly rate, so you can compare loans fairly. A small-sounding flat fee on a short loan can be a HUGE APR. Always compare the APR, not the flat fee. (Simplified — real loans vary; check the actual terms.)",
-    inGame: "Old Joe's friendly loan is ~130%/yr APR. The QuickNut payday option is ~391%/yr — same $-ish fee, far worse when annualized. That gap is the lesson.",
+    inGame: "Old Joe's friendly loan is ~130%/yr APR. The QuickNut payday option is ~391%/yr — both are small-sounding flat fees, but the annualized cost is far worse. That gap is the lesson.",
   },
   {
     id: "deferred-revenue",

@@ -69,6 +69,7 @@ import {
   playBatchReady,
   playDayEnd,
   playButtonTick,
+  loadMutePref,
 } from "./audio.js";
 
 // LORE_LOADED_COUNT removed — denominator is now computed dynamically in updateHUD()
@@ -665,6 +666,9 @@ export class GameScene extends Phaser.Scene {
     // Load accessibility/display prefs BEFORE the first HUD render (colorblind
     // cue is read in updateHUD; reduced-motion in the animation helpers).
     prefsInit(this.storage);
+    // RT F1: sync the saved mute pref so the Settings Sound toggle reflects it
+    // (no AudioContext yet — that waits for the first gesture).
+    loadMutePref(this.storage);
 
     // Initial HUD render
     this.updateHUD();
@@ -673,7 +677,7 @@ export class GameScene extends Phaser.Scene {
     // Consolidates mute + accessibility toggles + the Glossary. Sits where the
     // lone mute button used to be (bottom-right of the HUD bar).
     const dpY2 = H - 18;
-    const setX = W - 96;
+    const setX = W - 118; // RT F2: clear of the END DAY button (centered at W-50)
     const settingsBtn = this.add.rectangle(setX, dpY2 + 5, 36, 14, 0x445566)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
@@ -799,10 +803,13 @@ export class GameScene extends Phaser.Scene {
     const marginPct = this.state.sellPrice > 0
       ? ((this.state.sellPrice - cogsPerLbClassic) / this.state.sellPrice) * 100
       : 0;
-    const marginColor = marginPct >= 60 ? "#4A7C4E" : marginPct >= 45 ? "#C08A00" : "#C0392B";
+    // RT F6: derive the color bucket from marginCue() so the color thresholds
+    // and the word cue can never drift apart (single source of truth).
+    const cueWord = marginCue(marginPct);
+    const marginColor = cueWord === "healthy" ? "#4A7C4E" : cueWord === "tight" ? "#C08A00" : "#C0392B";
     // WCAG 1.4.1: when colorblind cues are on, the color-coded margin also
     // carries a word so color isn't the only signal.
-    const cue = isColorblindCues() ? ` (${marginCue(marginPct)})` : "";
+    const cue = isColorblindCues() ? ` (${cueWord})` : "";
     this.txtDemandHint.setText(
       `~${demandLbsHr.toFixed(0)} lbs/hr  margin ${marginPct.toFixed(0)}%${cue}`
     ).setStyle({ ...TEXT_STYLE_LABEL, color: marginColor });
