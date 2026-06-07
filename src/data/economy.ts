@@ -439,6 +439,25 @@ export const RESCUE_PREORDER_LBS_REPEAT = 200;
 export const RESCUE_PREORDER_CASH_REPEAT = 220;
 
 // ---------------------------------------------------------------------------
+// Auto-sell off-peak upgrade  (GDD C4 — "automatically sell remaining batches
+// at 10% discount if not sold by end of day")
+//
+// One-time purchase. When enabled, endOfDay liquidates roasted stock left over
+// AFTER the day's sales and AFTER fulfilling any Derek pre-order, at a 10%
+// discount. Teaches: clearance pricing / reducing waste / freeing working
+// capital — selling cheap beats holding idle inventory. Default-OFF (a save
+// without the upgrade behaves exactly as before: leftover roasted stock carries
+// to the next day). DARK_PATTERN note: framed as "reduce waste," not "never miss
+// a sale" — no FOMO, no timer to beat.
+// ---------------------------------------------------------------------------
+
+/** Fractional discount applied to the sell price when auto-selling leftovers. */
+export const AUTO_SELL_DISCOUNT = 0.10;
+
+/** One-time cost of the auto-sell upgrade ($). Owner-locked 2026-06-07. */
+export const AUTO_SELL_COST = 1_500;
+
+// ---------------------------------------------------------------------------
 // Ledger v1 — daily P&L bookkeeping  (GDD D2 end-of-day report; seed for the
 // P2 dual-ledger system referenced in GDD F)
 // ---------------------------------------------------------------------------

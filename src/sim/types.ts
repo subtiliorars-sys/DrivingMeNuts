@@ -180,6 +180,15 @@ export interface SimState {
    */
   brandCampaignActive: boolean;
 
+  // ---- Auto-sell off-peak (GDD C4 — additive-optional, no schema bump) --
+  /**
+   * True once the player buys the auto-sell upgrade. When set, endOfDay
+   * liquidates leftover roasted stock at AUTO_SELL_DISCOUNT (after sales +
+   * preorder fulfillment). Additive-optional in the save (absent → false → the
+   * pre-upgrade behaviour: leftover roasted stock carries to the next day).
+   */
+  autoSellEnabled: boolean;
+
   // ---- Rescue aftermath (schema v4) -------------------------------------
   /**
    * Aftermath paths already shown ("loan" | "credit" | "payday" | "preorder").
@@ -374,6 +383,14 @@ export interface DayReport {
    * not a P&L expense — shown as its own report-card line). 0 when none.
    */
   debtService: number;
+  /**
+   * Auto-sell off-peak: lbs of leftover roasted stock liquidated at end of day
+   * (0 when the upgrade is off or there was nothing left). For a clarifying
+   * report-card sub-line; the revenue is already folded into `revenue`.
+   */
+  autoSellLbs: number;
+  /** Auto-sell off-peak: $ from the discounted liquidation (folded into revenue). */
+  autoSellRevenue: number;
   /**
    * Weekly recap, attached every WEEK_RECAP_EVERY_DAYS days; null otherwise.
    * Factual totals only (DARK_PATTERN_GATE-compliant — no streak framing).

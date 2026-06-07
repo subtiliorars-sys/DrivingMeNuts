@@ -124,6 +124,8 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   comebackTier?: number;
   /** Schema v4: brand campaign purchased (permanent). */
   brandCampaignActive?: boolean;
+  /** Auto-sell wave (additive-optional): auto-sell upgrade owned. Absent → false. */
+  autoSellEnabled?: boolean;
   /** Schema v4: rescue aftermath paths already shown (max 4 entries). */
   aftermathSeen?: string[];
   /** Schema v4: aftermath beats queued but not yet displayed (RT5-1). */
@@ -387,6 +389,10 @@ function sanityCheck(env: SaveEnvelope): string | null {
   if (ss.brandCampaignActive !== undefined && typeof ss.brandCampaignActive !== "boolean")
     return `brandCampaignActive invalid: ${ss.brandCampaignActive}`;
 
+  // Auto-sell wave: autoSellEnabled must be a boolean when present.
+  if (ss.autoSellEnabled !== undefined && typeof ss.autoSellEnabled !== "boolean")
+    return `autoSellEnabled invalid: ${ss.autoSellEnabled}`;
+
   // Schema v4: aftermathSeen / pendingAftermath must be arrays of strings.
   for (const key of ["aftermathSeen", "pendingAftermath"] as const) {
     const arr = ss[key];
@@ -612,6 +618,8 @@ export function deserialize(json: string): SimState {
 
   // Schema v4: brand campaign flag + aftermath history (defensive defaults).
   const brandCampaignActive = ss.brandCampaignActive === true;
+  // Auto-sell wave: additive-optional, absent → false (pre-upgrade behaviour).
+  const autoSellEnabled = ss.autoSellEnabled === true;
   const VALID_AFTERMATH_PATHS = new Set(["loan", "credit", "payday", "preorder"]);
   const aftermathSeen: string[] = Array.isArray(ss.aftermathSeen)
     ? ss.aftermathSeen.filter((p): p is string => typeof p === "string" && VALID_AFTERMATH_PATHS.has(p))
@@ -683,6 +691,7 @@ export function deserialize(json: string): SimState {
     ledger,
     comebackTier,
     brandCampaignActive,
+    autoSellEnabled,
     aftermathSeen,
     pendingAftermath,
     achievementsUnlocked,
