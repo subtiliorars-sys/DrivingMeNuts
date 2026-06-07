@@ -89,6 +89,14 @@ import {
   supplierLevelFor,
   supplierDiscountFor,
   SUPPLIER_LEVEL_THRESHOLDS,
+  RESCUE_LOAN_PRINCIPAL,
+  RESCUE_LOAN_FEE_RATE,
+  RESCUE_LOAN_FEE_RATE_REPEAT,
+  RESCUE_LOAN_DUE_DAYS,
+  RESCUE_PREORDER_LBS,
+  RESCUE_PREORDER_CASH,
+  RESCUE_PREORDER_LBS_REPEAT,
+  RESCUE_PREORDER_CASH_REPEAT,
   type RecipeId,
   type RoasterTier,
 } from "../data/economy.js";
@@ -869,6 +877,8 @@ export class GameScene extends Phaser.Scene {
       } else if (debt.kind === "payday") {
         const rNote = debt.rollovers > 0 ? ` [×${debt.rollovers}]` : "";
         parts.push(`QuickNut: $${debt.amountDue.toFixed(2)} due d${debt.dueDayNumber}${rNote}`);
+      } else if (debt.kind === "preorder_default") {
+        parts.push(`Owe Derek $${debt.amountDue.toFixed(2)} — ${daysLeft}d left`);
       }
     }
     if (this.state.preorderObligation) {
@@ -2567,6 +2577,23 @@ export class GameScene extends Phaser.Scene {
     if (this.rescueModalOpen || this.state.rescueMode !== "offer") return;
     this.rescueModalOpen = true;
 
+    // Re-entry escalation (RESCUE_ARC_SCRIPT §Re-Entry): a repeat crisis (the
+    // player has taken a path before) gets harsher loan/preorder terms + varied
+    // dialogue. The one-concurrent-crisis gate guarantees we only reach here
+    // after the prior crisis fully resolved, so this is never a debt-stacking pump.
+    const isRepeat = this.state.rescueEntryCount >= 1;
+    const loanRate = isRepeat ? RESCUE_LOAN_FEE_RATE_REPEAT : RESCUE_LOAN_FEE_RATE;
+    const loanOwe = (RESCUE_LOAN_PRINCIPAL * (1 + loanRate)).toFixed(2);
+    const loanPct = (loanRate * 100).toFixed(0);
+    // RT-1b/F3 (A2 accuracy): annualize the flat fee on the ACTUAL 14-day term —
+    // the same simple-APR basis QuickNut's 391% uses — so the friendly loan isn't
+    // shown ~6x cheaper than it is. ~130% (5%) / ~182% (7%); still << QuickNut.
+    const loanApr = Math.round(loanRate * (365 / RESCUE_LOAN_DUE_DAYS) * 100);
+    const preLbs  = isRepeat ? RESCUE_PREORDER_LBS_REPEAT : RESCUE_PREORDER_LBS;
+    const preCash = isRepeat ? RESCUE_PREORDER_CASH_REPEAT : RESCUE_PREORDER_CASH;
+    const preCogs = Math.round(preLbs * 0.50);   // ~$0.50/lb roasted-cost rule of thumb
+    const preProfit = preCash - preCogs;
+
     const W = this.scale.width;
     const H = this.scale.height;
     const mW = 460, mH = 240;
@@ -2596,10 +2623,12 @@ export class GameScene extends Phaser.Scene {
       this.add.text(mX + 52, mY + 6, "TILL RUNS THIN — Old Joe's at the Window", TEXT_STYLE_HEADER)
     );
 
-    // ---- Old Joe dialogue ----
+    // ---- Old Joe dialogue (varies on re-entry — never shaming) ----
+    const joeDialogue = isRepeat
+      ? "\"I see you're in it again. That's part of the game — no shame in it.\nLet's talk about what changed. Terms are a touch steeper this time:\nrepeat borrowing costs more. That's the lesson, not a punishment.\""
+      : "\"Long day? Cash-flow problems aren't shameful — that's how you learn.\nBefore tomorrow gets worse, let's talk about what gets you through the week.\"";
     this.rescueModalGroup.add(
-      this.add.text(mX + 52, mY + 20,
-        "\"Long day? Cash-flow problems aren't shameful — that's how you learn.\nBefore tomorrow gets worse, let's talk about what gets you through the week.\"",
+      this.add.text(mX + 52, mY + 20, joeDialogue,
         { ...TEXT_STYLE_LABEL, color: "#5A3A1A", wordWrap: { width: mW - 60 } }
       )
     );
@@ -2627,18 +2656,18 @@ export class GameScene extends Phaser.Scene {
     const cards: CardDef[] = [
       {
         id: "loan",
-        label: "OLD JOE'S LOAN",
+        label: isRepeat ? "OLD JOE'S LOAN ↑" : "OLD JOE'S LOAN",
         color: P.CASH_GREEN,
         lines: [
           "+$75 cash now",
-          "Owe: $78.75",
+          `Owe: $${loanOwe}`,
           "Due: 14 days",
-          "5% flat/season",
-          "(≈20%/yr)",
+          `${loanPct}% flat fee`,
+          `(≈${loanApr}%/yr APR)`,
           "",
-          "Fair handshake.",
-          "Pay any time.",
-          "No hidden fees.",
+          ...(isRepeat
+            ? ["Steeper this time", "— repeat debt", "costs more."]
+            : ["Fair handshake.", "Pay any time.", "No hidden fees."]),
         ],
       },
       {
@@ -2652,26 +2681,27 @@ export class GameScene extends Phaser.Scene {
           "Due: 14 days",
           "No interest.",
           "",
-          "Marta vouched",
-          "for you. Sell,",
-          "then pay.",
+          ...(isRepeat
+            ? ["\"I vouched for", "you. Don't make", "me regret it.\""]
+            : ["Marta vouched", "for you. Sell,", "then pay."]),
         ],
       },
       {
         id: "preorder",
-        label: "DEREK'S ORDER",
+        label: isRepeat ? "DEREK'S ORDER ↑" : "DEREK'S ORDER",
         color: 0x5A7A8A,
         lines: [
-          "+$110 cash now",
-          "Deliver 100lbs",
+          `+$${preCash} cash now`,
+          `Deliver ${preLbs}lbs`,
           "roasted in 7d",
           "",
-          "Rev: $110",
-          "COGS: ~$50",
-          "Profit: ~$60",
+          `Rev: $${preCash}`,
+          `COGS: ~$${preCogs}`,
+          `Profit: ~$${preProfit}`,
           "",
-          "Execute or",
-          "trust is dented.",
+          ...(isRepeat
+            ? ["Bigger order —", "prove you scale."]
+            : ["Execute or", "trust is dented."]),
         ],
       },
       {
@@ -2762,16 +2792,19 @@ export class GameScene extends Phaser.Scene {
 
       const pathId = card.id;
       const handler = (): void => {
-        chooseRescuePath(this.state, pathId);
+        // Capture the event so the confirm toast reflects ACTUAL terms (base or
+        // escalated re-entry terms), not hardcoded first-time numbers.
+        const ev = chooseRescuePath(this.state, pathId);
+        const d = ev.detail;
         this.closeRescueModal();
         this.updateHUD();
         // Toast confirming the choice (factual, not congratulatory)
         const toastMsg = pathId === "loan"
-          ? "Old Joe's loan: +$75. Owe $78.75 in 14 days."
+          ? `Old Joe's loan: +$${RESCUE_LOAN_PRINCIPAL}. Owe $${(d.amountDue as number).toFixed(2)} in 14 days.`
           : pathId === "credit"
           ? "Marta's credit: +125 lbs raw. Owe $50 in 14 days."
           : pathId === "preorder"
-          ? "Derek's order accepted: +$110. Deliver 100 lbs roasted in 7 days."
+          ? `Derek's order accepted: +$${d.cashChange as number}. Deliver ${d.totalLbs as number} lbs roasted in 7 days.`
           : pathId === "payday"
           ? "QuickNut: +$50. $57.50 due in 14 days. Rolls +$7.50 if unpaid."
           : "Old Joe nods. Door stays open.";

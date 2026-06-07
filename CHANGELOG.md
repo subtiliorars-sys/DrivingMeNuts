@@ -6,6 +6,15 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added — rescue re-entry escalation (owner-approved 2026-06-07; the RT-1 deferral)
+- The rescue arc now **escalates on repeat**. The one-concurrent-crisis gate from RT-1 still holds (a new offer only appears once the prior crisis is fully resolved — no debt-stacking pump), but a *repeat* crisis gets harsher terms: Old Joe's loan fee **5% → 7%**, Derek's pre-order scales **100 lbs/$110 → 200 lbs/$220** (bigger infusion + delivery challenge, ≤ $250 P2 cap). Marta's credit and QuickNut are unchanged (Marta gets a relationship note in dialogue; QuickNut is already the cautionary option). Old Joe's dialogue varies ("I see you're in it again…") — never shaming.
+- New `SimState.rescueEntryCount` (additive-optional, no schema bump) tracks paths taken; escalation makes repeat borrowing **costlier, never a pump**.
+
+### Fixed (re-entry red-team, FIX-FIRST)
+- **RT-1b (HIGH, cash pump):** defaulting on Derek's pre-order was free money — the upfront cash for undelivered lbs had no mechanical cost (no clawback, no reputation system), so the arc could be farmed for unbounded cash (my escalation would have doubled the rate). Fixed: a short/zero delivery now converts the **unearned cash into a `preorder_default` debt** owed back (gentle — no hard cash-yank, honoring the script's "trust dented, not reversed"). Net wealth from a defaulted order is now ~0. New debt kind threads through summary/HUD/persistence; pump-closure regression-tested.
+- **F3 (MED, A2 accuracy):** Old Joe's loan APR was shown ~6× too low (≈20%/yr via a fictional "4 seasons" basis). Now annualized on the real 14-day term (≈130%/yr at 5%, ≈183% at 7%) — the same simple-APR basis as QuickNut's 391%. Still clearly the cheaper friend-loan; just truthful.
+- 13 new/expanded tests; 336 unit + 5 boot green.
+
 ### Consolidation (wave 7, PR #9 — stacks on PR #8; no new scope)
 - **Cross-system integration test** (`src/sim/wave7_integration.test.ts`): a 7-day trading loop exercising buy→roast→sell→close with a mid-week save/load round-trip, asserting ledger P&L identity, weekly-recap timing, supplier leveling, achievement unlocks, and RT6-1 no-phantom-equity all compose end-to-end.
 - **RISK_REGISTER standing-trigger review** for waves 5–6 (triggers #4 data + #6/A4 dark-pattern): Tier A retained (local-only, no PII, no egress); dark-pattern gate passed for recap/achievements/campaign; A2 accuracy hardened by RT6-1. SME 93-claim walk remains owner-gated.

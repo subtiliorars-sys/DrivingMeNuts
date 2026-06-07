@@ -110,6 +110,8 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   rescueDebts?: RescueDebt[];
   /** Wave 5 (schema v3): preorder obligation. Optional for forward-compat. */
   preorderObligation?: PreorderObligation | null;
+  /** Re-entry escalation (additive-optional): rescue paths taken so far. Absent → 0. */
+  rescueEntryCount?: number;
   /**
    * Wave 4 polish: last-14-days net history for sparkline.
    * Optional/additive — absent on older saves; defaults to [] on load.
@@ -316,7 +318,7 @@ function sanityCheck(env: SaveEnvelope): string | null {
   if (ss.rescueDebts !== undefined) {
     if (!Array.isArray(ss.rescueDebts))
       return `rescueDebts must be an array`;
-    const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday"]);
+    const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday", "preorder_default"]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const d of (ss.rescueDebts as any[])) {
       // RT-4: entry must be a non-null object, else d.kind below would THROW a
@@ -325,7 +327,9 @@ function sanityCheck(env: SaveEnvelope): string | null {
         return `rescueDebt entry invalid: ${String(d)}`;
       if (!VALID_DEBT_KINDS.has(d.kind))
         return `rescueDebt kind invalid: ${d.kind}`;
-      if (typeof d.amountDue !== "number" || !Number.isFinite(d.amountDue) || d.amountDue < 0)
+      // RT-1b/F-4: bound the magnitude (mirrors the ledger cap) so a crafted
+      // save can't inject an unrepayable 1e15 debt and soft-lock the player.
+      if (typeof d.amountDue !== "number" || !Number.isFinite(d.amountDue) || d.amountDue < 0 || d.amountDue > 1e9)
         return `rescueDebt amountDue invalid: ${d.amountDue}`;
       // RT-4: Number.isFinite rejects NaN/Infinity — a NaN dueDayNumber passes
       // `< 1` (false) and produces a debt that is never due (permanent ghost debt).
@@ -408,6 +412,12 @@ function sanityCheck(env: SaveEnvelope): string | null {
   if (ss.supplierLbsPurchased !== undefined) {
     if (!Number.isFinite(ss.supplierLbsPurchased) || ss.supplierLbsPurchased < 0 || ss.supplierLbsPurchased > 1e12)
       return `supplierLbsPurchased invalid: ${ss.supplierLbsPurchased}`;
+  }
+
+  // Re-entry escalation: rescueEntryCount must be a finite non-negative number.
+  if (ss.rescueEntryCount !== undefined) {
+    if (!Number.isFinite(ss.rescueEntryCount) || ss.rescueEntryCount < 0)
+      return `rescueEntryCount invalid: ${ss.rescueEntryCount}`;
   }
 
   // RT6-1: rawCostBasisPerLb must be finite, non-negative, and not above the
@@ -519,8 +529,14 @@ export function deserialize(json: string): SimState {
   // Wave 5: revive rescue arc fields (default to safe values if absent — migration may not have run)
   const ss = sim as SerializedSimState;
   const rescueMode = (ss.rescueMode === "offer" || ss.rescueMode === "active") ? ss.rescueMode : null;
+  // Re-entry escalation: revive the entry counter; default 0 (legacy saves never
+  // tracked it — a fresh count is honest, and only escalates after a future entry).
+  const rescueEntryCount =
+    typeof ss.rescueEntryCount === "number" && Number.isFinite(ss.rescueEntryCount) && ss.rescueEntryCount >= 0
+      ? Math.floor(ss.rescueEntryCount)
+      : 0;
 
-  const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday"]);
+  const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday", "preorder_default"]);
   const rescueDebts: RescueDebt[] = Array.isArray(ss.rescueDebts)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? (ss.rescueDebts as any[])
@@ -547,6 +563,16 @@ export function deserialize(json: string): SimState {
           createdOnDay: Number(rawOb.createdOnDay ?? 1),
         }
       : null;
+
+  // RT-1b/F-5: keep the one-concurrent-crisis invariant intact on load. A
+  // crafted save with rescueMode "offer" AND an outstanding debt/obligation
+  // would let the player open a fresh offer on top of a live crisis (stacking
+  // two infusions). It's net-neutral (each path books its matching debt), but
+  // coercing to "active" preserves the gate's guarantee regardless of input.
+  const rescueModeCoerced: "offer" | "active" | null =
+    rescueMode === "offer" && (rescueDebts.length > 0 || preorderObligation !== null)
+      ? "active"
+      : rescueMode;
 
   // Wave 4 polish: revive netHistory; default [] if absent (safe — empty history is correct
   // for saves that predate this field; no migration needed per additive-optional rule).
@@ -630,7 +656,8 @@ export function deserialize(json: string): SimState {
     dayNumber: sim.dayNumber,
     dayStats,
     rescueArcPending: sim.rescueArcPending,
-    rescueMode,
+    rescueMode: rescueModeCoerced,
+    rescueEntryCount,
     rescueDebts,
     preorderObligation,
     unitsSoldLifetime: sim.unitsSoldLifetime,

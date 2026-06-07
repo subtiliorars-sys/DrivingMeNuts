@@ -294,6 +294,28 @@ If the player's end-of-day cash drops below $25 again (same trigger):
 
 - **Never shaming, never hard-locking.** The arc repeats as many times as needed. The game assumes the player is learning, not failing.
 
+> **Live status (2026-06-07, owner-approved — RT-1 deferral resolved):** SHIPPED.
+> Engine: `chooseRescuePath` escalates on `SimState.rescueEntryCount ≥ 1` — loan
+> fee 5%→7% (`RESCUE_LOAN_FEE_RATE_REPEAT`), Derek 100lb/$110→200lb/$220
+> (`RESCUE_PREORDER_*_REPEAT`); Marta/QuickNut terms unchanged. The RT-1
+> one-concurrent-crisis gate (no offer while a crisis is active) REMAINS the
+> load-bearing anti-pump protection — escalation only makes repeat borrowing
+> costlier. UI: Old Joe's dialogue + card terms vary on re-entry. Tests:
+> `src/sim/reentry.test.ts` (incl. an RT-1 no-stacking regression).
+>
+> **Re-entry red-team (RT-1b) fix — preorder default is no longer free money:**
+> the earlier "cash already credited, no clawback — failure costs reputation
+> only" rule was a cash pump (there is no reputation mechanic, so a defaulted
+> Derek order was free cash; the arc re-triggered weekly). Fixed: a short/zero
+> delivery converts the UNEARNED cash (`cashReceived × undelivered%`) into a
+> `preorder_default` debt owed back to Derek (gentle, no hard cash-yank — honors
+> "trust dented, not reversed"). Net wealth from a defaulted order is now ~0.
+>
+> **Loan APR honesty (A2):** the loan card annualizes the flat fee on its real
+> 14-day term (≈130%/yr at 5%, ≈183% at 7%) — the same simple-APR basis as
+> QuickNut's 391% — not the prior "~20%/yr" season framing. Old Joe is still
+> clearly the cheaper friend-loan; the number is just truthful now.
+
 ---
 
 ## Tone Notes for Dialogue Writing

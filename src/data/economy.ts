@@ -360,6 +360,32 @@ export const RESCUE_PAYDAY_FEE = 7.50;
 export const RESCUE_PAYDAY_DUE_DAYS = 14;
 
 // ---------------------------------------------------------------------------
+// Re-entry escalation  (RESCUE_ARC_SCRIPT.md §Re-Entry — owner-approved 2026-06-07)
+//
+// The rescue arc may repeat (the one-concurrent-crisis gate from RT-1 still
+// holds: a new offer only appears AFTER the prior crisis is fully resolved).
+// On a REPEAT entry (the player has been through the arc before), terms
+// escalate — teaching that repeated borrowing is riskier and costlier:
+//   - Old Joe's loan fee rises 5% → 7%.
+//   - Derek's pre-order scales up: 100 lbs/$110 → 200 lbs/$220 (bigger infusion,
+//     bigger delivery challenge; stays ≤ $250 per the script's P2-scope cap).
+//   - Marta's credit terms are UNCHANGED — the escalation is a relationship note
+//     in dialogue ("I vouched for you"), not harsher numbers.
+//   - QuickNut (payday) is UNCHANGED — it is already the cautionary option.
+//
+// Escalation makes repeat borrowing WORSE for the player, so it cannot become a
+// cash pump (the RT-1 concern); it is purely a cost increase + bigger obligation.
+// ---------------------------------------------------------------------------
+
+/** Re-entry: Old Joe's loan fee rate on a repeat crisis (vs 5% first time). */
+export const RESCUE_LOAN_FEE_RATE_REPEAT = 0.07;
+
+/** Re-entry: Derek's pre-order size on a repeat crisis (lbs to deliver). */
+export const RESCUE_PREORDER_LBS_REPEAT = 200;
+/** Re-entry: Derek's pre-order cash upfront on a repeat crisis ($). */
+export const RESCUE_PREORDER_CASH_REPEAT = 220;
+
+// ---------------------------------------------------------------------------
 // Ledger v1 — daily P&L bookkeeping  (GDD D2 end-of-day report; seed for the
 // P2 dual-ledger system referenced in GDD F)
 // ---------------------------------------------------------------------------
