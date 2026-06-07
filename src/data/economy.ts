@@ -325,3 +325,36 @@ export const RESCUE_ARC_CASH_THRESHOLD = 25;
 
 /** Emit one 'gag' SimEvent per this many cumulative lbs sold (whole-game counter). */
 export const GAG_EVERY_N_LBS_SOLD = 80;
+
+// ---------------------------------------------------------------------------
+// Rescue arc constants  (RESCUE_ARC_SCRIPT.md — Wave 5)
+// All numbers derive from the script; do not hardcode elsewhere.
+// ---------------------------------------------------------------------------
+
+/** Path 1 — Old Joe Fair Loan: cash advanced. */
+export const RESCUE_LOAN_PRINCIPAL = 75;
+/** Path 1 — Old Joe Fair Loan: flat interest rate per season (5%). */
+export const RESCUE_LOAN_FEE_RATE = 0.05;
+/** Path 1 — Old Joe Fair Loan: repayment window in game-days. */
+export const RESCUE_LOAN_DUE_DAYS = 14;
+
+/** Path 2 — Marta's Supplier Credit: raw peanuts credited (lbs at $0.40 base). */
+export const RESCUE_CREDIT_RAW_LBS = 125;
+/** Path 2 — Marta's Supplier Credit: dollar amount due (= 125 lbs × $0.40). */
+export const RESCUE_CREDIT_AMOUNT_DUE = 50;
+/** Path 2 — Marta's Supplier Credit: repayment window in game-days. */
+export const RESCUE_CREDIT_DUE_DAYS = 14;
+
+/** Path 3 — Derek's Pre-Order: lbs of roasted peanuts to deliver. */
+export const RESCUE_PREORDER_LBS = 100;
+/** Path 3 — Derek's Pre-Order: cash received upfront. */
+export const RESCUE_PREORDER_CASH = 110;
+/** Path 3 — Derek's Pre-Order: delivery window in game-days. */
+export const RESCUE_PREORDER_DUE_DAYS = 7;
+
+/** Path 4 — QuickNut Payday: cash advanced. */
+export const RESCUE_PAYDAY_PRINCIPAL = 50;
+/** Path 4 — QuickNut Payday: flat fee per 14-day period. */
+export const RESCUE_PAYDAY_FEE = 7.50;
+/** Path 4 — QuickNut Payday: repayment window in game-days per period. */
+export const RESCUE_PAYDAY_DUE_DAYS = 14;

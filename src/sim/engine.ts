@@ -46,6 +46,18 @@ import {
   GAG_EVERY_N_LBS_SOLD,
   DAY_FACTOR,
   DAY_NAMES,
+  RESCUE_LOAN_PRINCIPAL,
+  RESCUE_LOAN_FEE_RATE,
+  RESCUE_LOAN_DUE_DAYS,
+  RESCUE_CREDIT_RAW_LBS,
+  RESCUE_CREDIT_AMOUNT_DUE,
+  RESCUE_CREDIT_DUE_DAYS,
+  RESCUE_PREORDER_LBS,
+  RESCUE_PREORDER_CASH,
+  RESCUE_PREORDER_DUE_DAYS,
+  RESCUE_PAYDAY_PRINCIPAL,
+  RESCUE_PAYDAY_FEE,
+  RESCUE_PAYDAY_DUE_DAYS,
 } from "../data/economy.js";
 
 // default blended multiplier = classic_salted = 1.0
@@ -58,6 +70,7 @@ import type {
   RoastSlot,
   DayReport,
   SimEvent,
+  RescueDebt,
 } from "./types.js";
 
 import type { RecipeId } from "../data/economy.js";
@@ -178,6 +191,9 @@ export function createState(seed = 1): SimState {
     dayNumber: 1,
     dayStats: { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0, offlineEarned: 0 },
     rescueArcPending: false,
+    rescueMode: null,
+    rescueDebts: [],
+    preorderObligation: null,
     unitsSoldLifetime: 0,
     gagsSeen: new Set<string>(),
     lifetimeEarned: 0,
@@ -402,6 +418,125 @@ export function endOfDay(state: SimState): DayReport {
     }
   }
 
+  // ---- Wave 5: rescue arc — preorder fulfillment + debt auto-repayment ----
+  // Processed before fixed costs so the player gets full benefit of the day's earnings.
+  const rescueEvents: SimEvent[] = [];
+
+  // 3a. Preorder fulfillment: allocate roasted stock toward obligation
+  if (state.preorderObligation) {
+    const ob = state.preorderObligation;
+    const remaining = ob.totalLbs - ob.fulfilledLbs;
+    const canFulfill = Math.min(remaining, state.roastedStockLbs);
+    if (canFulfill > 0) {
+      ob.fulfilledLbs += canFulfill;
+      state.roastedStockLbs = Math.max(0, state.roastedStockLbs - canFulfill);
+    }
+
+    if (state.dayNumber >= ob.dueDayNumber) {
+      // Delivery day: check if fully or partially fulfilled
+      if (ob.fulfilledLbs >= ob.totalLbs) {
+        // Full delivery — success
+        rescueEvents.push({
+          kind: "preorder_fulfilled",
+          dayNumber: state.dayNumber,
+          daySecond: state.dayElapsedSeconds,
+          detail: {
+            fulfilledLbs: ob.fulfilledLbs,
+            totalLbs: ob.totalLbs,
+            message: "Derek's order delivered in full.",
+          },
+        });
+        state.preorderObligation = null;
+      } else {
+        // Partial delivery — pro-rata payment adjustment (we already received cash upfront;
+        // script says trust dented, not reversed; we keep the math clean:
+        // the cash was already credited, no clawback — delivery failure costs reputation only)
+        const pct = ob.fulfilledLbs / ob.totalLbs;
+        rescueEvents.push({
+          kind: "preorder_partial",
+          dayNumber: state.dayNumber,
+          daySecond: state.dayElapsedSeconds,
+          detail: {
+            fulfilledLbs: ob.fulfilledLbs,
+            totalLbs: ob.totalLbs,
+            pctDelivered: pct,
+            message: `Partial delivery: ${ob.fulfilledLbs.toFixed(0)} of ${ob.totalLbs} lbs. Derek is disappointed.`,
+          },
+        });
+        state.preorderObligation = null;
+      }
+    }
+  }
+
+  // 3b. Debt repayment: attempt auto-deduct for due debts
+  const remainingDebts: RescueDebt[] = [];
+  for (const debt of state.rescueDebts) {
+    if (state.dayNumber >= debt.dueDayNumber) {
+      if (state.cash >= debt.amountDue) {
+        // Can pay — auto-deduct
+        state.cash -= debt.amountDue;
+        applyCashFloor(state);
+        let message = "";
+        if (debt.kind === "payday") {
+          message = debt.rollovers > 0
+            ? `Paid off QuickNut. That fee money is gone — that's the lesson.`
+            : `QuickNut repaid $${debt.amountDue.toFixed(2)}.`;
+        } else if (debt.kind === "loan") {
+          message = `Old Joe's loan repaid. $${debt.amountDue.toFixed(2)} paid.`;
+        } else {
+          message = `Supplier credit paid. $${debt.amountDue.toFixed(2)} paid.`;
+        }
+        rescueEvents.push({
+          kind: "debt_repaid",
+          dayNumber: state.dayNumber,
+          daySecond: state.dayElapsedSeconds,
+          detail: { debtKind: debt.kind, amountPaid: debt.amountDue, message },
+        });
+        // Do NOT push to remainingDebts — debt is cleared
+      } else if (debt.kind === "payday") {
+        // Payday rollover: add $7.50 fee, extend by 14 days
+        const rolloverFee = RESCUE_PAYDAY_FEE;
+        debt.amountDue += rolloverFee;
+        debt.dueDayNumber += RESCUE_PAYDAY_DUE_DAYS;
+        debt.rollovers += 1;
+        rescueEvents.push({
+          kind: "payday_rollover",
+          dayNumber: state.dayNumber,
+          daySecond: state.dayElapsedSeconds,
+          detail: {
+            newAmountDue: debt.amountDue,
+            newDueDayNumber: debt.dueDayNumber,
+            rollovers: debt.rollovers,
+            message: `QuickNut rolled over: +$${rolloverFee.toFixed(2)} fee. Total owed $${debt.amountDue.toFixed(2)}.`,
+          },
+        });
+        remainingDebts.push(debt);
+      } else {
+        // Loan or credit: gentle extension (one more period, no extra fee per script)
+        debt.dueDayNumber += RESCUE_LOAN_DUE_DAYS;
+        rescueEvents.push({
+          kind: "debt_extended",
+          dayNumber: state.dayNumber,
+          daySecond: state.dayElapsedSeconds,
+          detail: {
+            debtKind: debt.kind,
+            newDueDayNumber: debt.dueDayNumber,
+            amountDue: debt.amountDue,
+            message: debt.kind === "loan"
+              ? `Old Joe extends the loan — $${debt.amountDue.toFixed(2)} now due day ${debt.dueDayNumber}.`
+              : `Supplier extends credit — $${debt.amountDue.toFixed(2)} now due day ${debt.dueDayNumber}.`,
+          },
+        });
+        remainingDebts.push(debt);
+      }
+    } else {
+      remainingDebts.push(debt); // not due yet
+    }
+  }
+  state.rescueDebts = remainingDebts;
+
+  // ---- End Wave 5 rescue-arc processing ----
+
   const cashBefore = state.cash;
   // cash already includes all revenue credits (from tick + applyOffline) and ingredient debits
   // (from startRoast). endOfDay only needs to deduct the fixed overhead.
@@ -427,6 +562,17 @@ export function endOfDay(state: SimState): DayReport {
     dayFactor: todayFactor,
     dayName: todayName,
   });
+
+  // Wave 5: build active-debt summary line for the report card.
+  const activeDebtSummary = buildActiveDebtSummary(state);
+
+  // Wave 5: set rescueMode to "offer" when rescue arc is pending.
+  // Clear "active" mode when all debts and obligations are resolved.
+  if (state.rescueArcPending) {
+    state.rescueMode = "offer";
+  } else if (state.rescueMode === "active" && state.rescueDebts.length === 0 && state.preorderObligation === null) {
+    state.rescueMode = null;
+  }
 
   // Reset day stats and advance day counter
   state.dayStats = { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0, offlineEarned: 0 };
@@ -456,7 +602,178 @@ export function endOfDay(state: SimState): DayReport {
     cashBefore,
     cashAfter,
     insightLine,
+    activeDebtSummary,
+    rescueEvents,
   };
+}
+
+// ---------------------------------------------------------------------------
+// chooseRescuePath(state, path) → SimEvent
+// Apply a rescue path when the player selects one from the rescue-offer modal.
+// Deterministic; no PRNG. Cash floor respected. Returns an event for the log.
+// ---------------------------------------------------------------------------
+
+export type RescuePath = "loan" | "credit" | "preorder" | "payday" | "decline";
+
+/**
+ * Apply the chosen rescue path to the state.
+ *
+ * "loan"     — +$75 cash; debt $78.75 due in 14 game-days.
+ * "credit"   — +125 lbs raw stock; debt $50.00 due in 14 game-days.
+ * "preorder" — +$110 cash; obligation: deliver 100 lbs roasted in 7 days.
+ * "payday"   — +$50 cash; debt $57.50 due in 14 game-days; rolls over on miss.
+ * "decline"  — no state change; rescueMode reset to null (re-triggers next time).
+ */
+export function chooseRescuePath(state: SimState, path: RescuePath): SimEvent {
+  // The offer modal is only available in "offer" mode.
+  // Guard: if not in offer mode, treat as decline (idempotent).
+  if (state.rescueMode !== "offer") {
+    return {
+      kind: "rescue_path_chosen",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: { path: "decline", reason: "not_in_offer_mode" },
+    };
+  }
+
+  if (path === "decline") {
+    // Player declines — clear offer mode, can re-trigger on next low-cash day
+    state.rescueMode = null;
+    state.rescueArcPending = false;
+    return {
+      kind: "rescue_path_chosen",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: { path, cashChange: 0 },
+    };
+  }
+
+  if (path === "loan") {
+    const principal = RESCUE_LOAN_PRINCIPAL;
+    const fee = principal * RESCUE_LOAN_FEE_RATE;
+    const amountDue = principal + fee; // $78.75
+    const debt: RescueDebt = {
+      kind: "loan",
+      principal,
+      amountDue,
+      dueDayNumber: state.dayNumber + RESCUE_LOAN_DUE_DAYS,
+      createdOnDay: state.dayNumber,
+      rollovers: 0,
+    };
+    state.cash += principal;
+    applyCashFloor(state);
+    state.rescueDebts.push(debt);
+    state.rescueMode = "active";
+    state.rescueArcPending = false;
+    return {
+      kind: "rescue_path_chosen",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: { path, cashChange: principal, amountDue, dueDayNumber: debt.dueDayNumber },
+    };
+  }
+
+  if (path === "credit") {
+    // +125 lbs raw stock (not cash); debt $50 due in 14 days
+    state.rawStockLbs += RESCUE_CREDIT_RAW_LBS;
+    const debt: RescueDebt = {
+      kind: "credit",
+      principal: RESCUE_CREDIT_AMOUNT_DUE,
+      amountDue: RESCUE_CREDIT_AMOUNT_DUE,
+      dueDayNumber: state.dayNumber + RESCUE_CREDIT_DUE_DAYS,
+      createdOnDay: state.dayNumber,
+      rollovers: 0,
+    };
+    state.rescueDebts.push(debt);
+    state.rescueMode = "active";
+    state.rescueArcPending = false;
+    return {
+      kind: "rescue_path_chosen",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: { path, rawLbsAdded: RESCUE_CREDIT_RAW_LBS, amountDue: RESCUE_CREDIT_AMOUNT_DUE, dueDayNumber: debt.dueDayNumber },
+    };
+  }
+
+  if (path === "preorder") {
+    // Only one preorder obligation at a time
+    if (state.preorderObligation !== null) {
+      return {
+        kind: "rescue_path_chosen",
+        dayNumber: state.dayNumber,
+        daySecond: state.dayElapsedSeconds,
+        detail: { path, reason: "preorder_already_active" },
+      };
+    }
+    state.cash += RESCUE_PREORDER_CASH;
+    applyCashFloor(state);
+    state.preorderObligation = {
+      totalLbs: RESCUE_PREORDER_LBS,
+      fulfilledLbs: 0,
+      dueDayNumber: state.dayNumber + RESCUE_PREORDER_DUE_DAYS,
+      cashReceived: RESCUE_PREORDER_CASH,
+      createdOnDay: state.dayNumber,
+    };
+    state.rescueMode = "active";
+    state.rescueArcPending = false;
+    return {
+      kind: "rescue_path_chosen",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: { path, cashChange: RESCUE_PREORDER_CASH, totalLbs: RESCUE_PREORDER_LBS, dueDayNumber: state.preorderObligation.dueDayNumber },
+    };
+  }
+
+  // path === "payday"
+  const principal = RESCUE_PAYDAY_PRINCIPAL;
+  const amountDue = principal + RESCUE_PAYDAY_FEE; // $57.50
+  const debt: RescueDebt = {
+    kind: "payday",
+    principal,
+    amountDue,
+    dueDayNumber: state.dayNumber + RESCUE_PAYDAY_DUE_DAYS,
+    createdOnDay: state.dayNumber,
+    rollovers: 0,
+  };
+  state.cash += principal;
+  applyCashFloor(state);
+  state.rescueDebts.push(debt);
+  state.rescueMode = "active";
+  state.rescueArcPending = false;
+  return {
+    kind: "rescue_path_chosen",
+    dayNumber: state.dayNumber,
+    daySecond: state.dayElapsedSeconds,
+    detail: { path, cashChange: principal, amountDue, dueDayNumber: debt.dueDayNumber, aprPct: 391 },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// buildActiveDebtSummary — one-line liability summary for the report card
+// ---------------------------------------------------------------------------
+
+function buildActiveDebtSummary(state: SimState): string | null {
+  const parts: string[] = [];
+
+  for (const debt of state.rescueDebts) {
+    const daysLeft = debt.dueDayNumber - state.dayNumber;
+    if (debt.kind === "loan") {
+      parts.push(`Owe Old Joe $${debt.amountDue.toFixed(2)} — day ${state.dayNumber}/${debt.dueDayNumber} (${daysLeft} days left)`);
+    } else if (debt.kind === "credit") {
+      parts.push(`Owe supplier $${debt.amountDue.toFixed(2)} — day ${state.dayNumber}/${debt.dueDayNumber} (${daysLeft} days left)`);
+    } else if (debt.kind === "payday") {
+      const rolloverNote = debt.rollovers > 0 ? ` [${debt.rollovers}x rolled]` : "";
+      parts.push(`QuickNut: $${debt.amountDue.toFixed(2)} due day ${debt.dueDayNumber}${rolloverNote}`);
+    }
+  }
+
+  if (state.preorderObligation) {
+    const ob = state.preorderObligation;
+    const daysLeft = ob.dueDayNumber - state.dayNumber;
+    parts.push(`Derek's order: ${ob.fulfilledLbs.toFixed(0)}/${ob.totalLbs} lbs — ${daysLeft} days left`);
+  }
+
+  return parts.length > 0 ? parts.join(" | ") : null;
 }
 
 // ---------------------------------------------------------------------------

@@ -79,6 +79,26 @@ export interface SimState {
    */
   rescueArcPending: boolean;
 
+  /**
+   * Wave 5: rescue-arc mode the player is currently in.
+   * "offer" — rescue modal should be shown at the start of the next day.
+   * "active" — player has chosen a path; debts/obligations are live.
+   * null — not in rescue arc.
+   */
+  rescueMode: "offer" | "active" | null;
+
+  /**
+   * Active debts from rescue paths (loan, credit, payday).
+   * Multiple debts can stack (e.g. payday rolls over).
+   */
+  rescueDebts: RescueDebt[];
+
+  /**
+   * Active preorder obligation from Derek's bulk-order path.
+   * At most one at a time (cannot accept a second while one is live).
+   */
+  preorderObligation: PreorderObligation | null;
+
   // ---- Legume Lore collectible (Wave 2) --------------------------------
   /** Cumulative lbs sold across all days — drives gag trigger cadence. */
   unitsSoldLifetime: number;
@@ -106,6 +126,52 @@ export interface SimState {
 }
 
 // ---------------------------------------------------------------------------
+// Rescue arc types (Wave 5)
+// ---------------------------------------------------------------------------
+
+/** Which rescue path originated this debt. */
+export type RescueDebtKind = "loan" | "credit" | "payday";
+
+/**
+ * A single debt record created by a rescue path.
+ * Persisted in rescueDebts[].
+ */
+export interface RescueDebt {
+  /** Discriminates loan vs supplier credit vs payday. */
+  kind: RescueDebtKind;
+  /** Original principal advanced ($). */
+  principal: number;
+  /** Current amount owed ($) — increases on payday rollover. */
+  amountDue: number;
+  /** Game-day the debt is due (day player must have repaid by end-of-day). */
+  dueDayNumber: number;
+  /** Day the debt was created (informational). */
+  createdOnDay: number;
+  /**
+   * How many times the payday debt has rolled over.
+   * 0 for loan/credit (they do not compound).
+   */
+  rollovers: number;
+}
+
+/**
+ * An active preorder obligation from Derek's bulk-order path.
+ * Tracks how many lbs of roasted peanuts the player must deliver.
+ */
+export interface PreorderObligation {
+  /** Total lbs of roasted peanuts to deliver. */
+  totalLbs: number;
+  /** Lbs fulfilled so far (incremented by preorder auto-allocation in endOfDay). */
+  fulfilledLbs: number;
+  /** Game-day the delivery is due (end-of that day). */
+  dueDayNumber: number;
+  /** Cash already received upfront (informational; already in state.cash). */
+  cashReceived: number;
+  /** Day the obligation was created (informational). */
+  createdOnDay: number;
+}
+
+// ---------------------------------------------------------------------------
 // DayReport — returned by endOfDay(), consumed by the HUD report card.
 // Matches UI_WIREFRAMES §4 layout exactly.
 // ---------------------------------------------------------------------------
@@ -127,6 +193,17 @@ export interface DayReport {
   cashAfter: number;            // cash after applying net
   /** One insight line for the HUD report card (question, not shame). */
   insightLine: string;
+  /**
+   * Wave 5: one-line liability summary for the report card while debts are active.
+   * null when no debts or obligations are live.
+   */
+  activeDebtSummary: string | null;
+  /**
+   * Wave 5: rescue-arc events that occurred during end-of-day processing
+   * (debt repayments, rollovers, preorder resolution).
+   * Empty array when no rescue-arc activity occurred.
+   */
+  rescueEvents: SimEvent[];
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +220,14 @@ export type SimEventKind =
   | "offline_applied"
   | "rescue_arc_triggered"
   | "gag"
-  | "upgrade_purchased";
+  | "upgrade_purchased"
+  // Wave 5: rescue arc events
+  | "rescue_path_chosen"
+  | "debt_repaid"
+  | "debt_extended"
+  | "payday_rollover"
+  | "preorder_fulfilled"
+  | "preorder_partial";
   // NOTE W15: "recipe_unlocked" SimEvent was specced in RECIPE_BATCH_UI.md §3e but
   // never emitted from endOfDay(). GameScene detects new unlocks via Set-diff
   // (unlockedBefore snapshot vs post-endOfDay state.recipesUnlocked) — that is

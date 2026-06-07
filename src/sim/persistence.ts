@@ -15,7 +15,7 @@
  * CRIT-1: LOCAL-ONLY. No server sync without a distinct Owner Decision.
  */
 
-import type { SimState } from "./types.js";
+import type { SimState, RescueDebt, PreorderObligation } from "./types.js";
 import { createState, applyOffline } from "./engine.js";
 import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS } from "../data/economy.js";
 import type { RecipeId, RoasterTier } from "../data/economy.js";
@@ -32,7 +32,7 @@ export const SAVE_KEY = "dmn_save_v1";
 export const CORRUPT_KEY = "dmn_save_v1-corrupt";
 
 /** Bump on every breaking schema change. Migration chain lives in MIGRATIONS below. */
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 // ---------------------------------------------------------------------------
 // StorageLike interface — injectable, testable
@@ -102,6 +102,12 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   recipesUnlocked: string[];
   /** W2: blended-pool recipe demand multiplier (schema v2). */
   roastedDemandMultBlended?: number;
+  /** Wave 5 (schema v3): rescue mode. Optional for forward-compat. */
+  rescueMode?: "offer" | "active" | null;
+  /** Wave 5 (schema v3): rescue debts. Optional for forward-compat. */
+  rescueDebts?: RescueDebt[];
+  /** Wave 5 (schema v3): preorder obligation. Optional for forward-compat. */
+  preorderObligation?: PreorderObligation | null;
 };
 
 interface SaveMeta {
@@ -136,6 +142,27 @@ const MIGRATIONS: Record<number, Migrator> = {
       sim: {
         ...env.sim,
         roastedDemandMultBlended: 1.0, // default: classic_salted multiplier
+      },
+    };
+    return upgraded;
+  },
+
+  /**
+   * v2 → v3 (Wave 5): add rescue-arc fields.
+   * Defaults: rescueMode null, rescueDebts [], preorderObligation null.
+   * Existing saves have no active rescue arc, so these safe defaults are correct.
+   */
+  2: (raw) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const env = raw as any;
+    const upgraded: SaveEnvelope = {
+      ...env,
+      schemaVersion: 3,
+      sim: {
+        ...env.sim,
+        rescueMode: null,
+        rescueDebts: [],
+        preorderObligation: null,
       },
     };
     return upgraded;
@@ -230,6 +257,34 @@ function sanityCheck(env: SaveEnvelope): string | null {
   if (mult !== undefined) {
     if (!Number.isFinite(mult) || mult <= 0 || mult > 1)
       return `roastedDemandMultBlended invalid: ${mult}`;
+  }
+
+  // Wave 5: validate rescueDebts array when present
+  const ss = s as SerializedSimState;
+  if (ss.rescueDebts !== undefined) {
+    if (!Array.isArray(ss.rescueDebts))
+      return `rescueDebts must be an array`;
+    const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday"]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const d of (ss.rescueDebts as any[])) {
+      if (!VALID_DEBT_KINDS.has(d.kind))
+        return `rescueDebt kind invalid: ${d.kind}`;
+      if (typeof d.amountDue !== "number" || !Number.isFinite(d.amountDue) || d.amountDue < 0)
+        return `rescueDebt amountDue invalid: ${d.amountDue}`;
+      if (typeof d.dueDayNumber !== "number" || d.dueDayNumber < 1)
+        return `rescueDebt dueDayNumber invalid: ${d.dueDayNumber}`;
+    }
+  }
+
+  // Wave 5: validate preorderObligation when present (non-null)
+  const ob = ss.preorderObligation;
+  if (ob !== undefined && ob !== null) {
+    if (typeof ob.totalLbs !== "number" || ob.totalLbs <= 0)
+      return `preorderObligation totalLbs invalid: ${ob.totalLbs}`;
+    if (typeof ob.fulfilledLbs !== "number" || ob.fulfilledLbs < 0)
+      return `preorderObligation fulfilledLbs invalid: ${ob.fulfilledLbs}`;
+    if (typeof ob.dueDayNumber !== "number" || ob.dueDayNumber < 1)
+      return `preorderObligation dueDayNumber invalid: ${ob.dueDayNumber}`;
   }
 
   return null;
@@ -330,6 +385,38 @@ export function deserialize(json: string): SimState {
       ? blended
       : 1.0;
 
+  // Wave 5: revive rescue arc fields (default to safe values if absent — migration may not have run)
+  const ss = sim as SerializedSimState;
+  const rescueMode = (ss.rescueMode === "offer" || ss.rescueMode === "active") ? ss.rescueMode : null;
+
+  const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday"]);
+  const rescueDebts: RescueDebt[] = Array.isArray(ss.rescueDebts)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? (ss.rescueDebts as any[])
+        .filter((d) => VALID_DEBT_KINDS.has(d.kind) && typeof d.amountDue === "number")
+        .map((d) => ({
+          kind: d.kind as RescueDebt["kind"],
+          principal: Number(d.principal ?? d.amountDue),
+          amountDue: Number(d.amountDue),
+          dueDayNumber: Number(d.dueDayNumber),
+          createdOnDay: Number(d.createdOnDay ?? 1),
+          rollovers: Number(d.rollovers ?? 0),
+        }))
+    : [];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawOb = ss.preorderObligation as any;
+  const preorderObligation: PreorderObligation | null =
+    rawOb != null && typeof rawOb === "object" && typeof rawOb.totalLbs === "number"
+      ? {
+          totalLbs: Number(rawOb.totalLbs),
+          fulfilledLbs: Number(rawOb.fulfilledLbs ?? 0),
+          dueDayNumber: Number(rawOb.dueDayNumber),
+          cashReceived: Number(rawOb.cashReceived ?? 0),
+          createdOnDay: Number(rawOb.createdOnDay ?? 1),
+        }
+      : null;
+
   const state: SimState = {
     cash: sim.cash,
     rawStockLbs: sim.rawStockLbs,
@@ -350,6 +437,9 @@ export function deserialize(json: string): SimState {
     dayNumber: sim.dayNumber,
     dayStats,
     rescueArcPending: sim.rescueArcPending,
+    rescueMode,
+    rescueDebts,
+    preorderObligation,
     unitsSoldLifetime: sim.unitsSoldLifetime,
     gagsSeen: revivedGagsSeen,
     lifetimeEarned: Number(sim.lifetimeEarned ?? 0),

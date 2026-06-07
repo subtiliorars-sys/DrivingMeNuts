@@ -37,6 +37,8 @@ import {
   projectedDemand,
   buyRoasterUpgrade,
   buyQueueSlot,
+  chooseRescuePath,
+  type RescuePath,
 } from "../sim/engine.js";
 import type { SimState, DayReport } from "../sim/types.js";
 import { tryLoad, trySave, resetSave, safeStorage } from "../sim/persistence.js";
@@ -232,6 +234,12 @@ export class GameScene extends Phaser.Scene {
   private upgradesModalGroup?: Phaser.GameObjects.Group;
   private upgradesModalOpen = false;
 
+  // ---- Rescue arc modal state (Wave 5) ------------------------------------
+  private rescueModalGroup?: Phaser.GameObjects.Group;
+  private rescueModalOpen = false;
+  /** HUD chip showing active debt/obligation status. */
+  private rescueHudChip?: Phaser.GameObjects.Text;
+
   // ---- Supply modal working qty -------------------------------------------
   private supplyQty = 50; // default qty for supply modal
 
@@ -413,6 +421,12 @@ export class GameScene extends Phaser.Scene {
       ...TEXT_STYLE_LABEL, color: "#C0A060",
     }).setOrigin(1, 0);
 
+    // ---- Rescue arc HUD chip (Wave 5) — neutral framing, visible while debt/obligation active --
+    // Positioned below the lore counter; hidden when no active debt.
+    this.rescueHudChip = this.add.text(W - 6, 28, "", {
+      fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+    }).setOrigin(1, 0).setVisible(false);
+
     // ---- Roast Queue Panel (P1_SPRITE_SPEC #13) ----------------------------
     // Panel: 160×80 px, top-left area at x=5, y=20
     const qX = 5, qY = 20;
@@ -451,7 +465,7 @@ export class GameScene extends Phaser.Scene {
 
       const slotIndex = i;
       slotRect.on("pointerdown", () => {
-        if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen) {
+        if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen) {
           this.advanceTutorialOnAction(1); // step 1: "start a roast"
           this.handleSlotClick(slotIndex);
         }
@@ -516,7 +530,7 @@ export class GameScene extends Phaser.Scene {
       fontSize: "8px", color: "#2C2416", fontFamily: "monospace",
     }).setOrigin(0.5);
     buyBtn.on("pointerdown", () => {
-      if (!this.reportOpen) {
+      if (!this.reportOpen && !this.rescueModalOpen) {
         this.advanceTutorialOnAction(0); // step 0: "buy raw peanuts"
         this.openSupplyModal();
       }
@@ -533,7 +547,7 @@ export class GameScene extends Phaser.Scene {
       fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
     }).setOrigin(0.5);
     upgradesBtn.on("pointerdown", () => {
-      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen) {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.rescueModalOpen) {
         this.openUpgradesModal();
       }
     });
@@ -551,7 +565,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(W - 50, dpY + 5, "END DAY", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
-    endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen) this.triggerEndOfDay(); });
+    endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen) this.triggerEndOfDay(); });
 
     // ---- Reset Save button (spec req; tucked in bottom-left corner) --------
     // Player-initiated only — confirm dialog prevents accidents. (DARK_PATTERN_GATE §B.3)
@@ -560,7 +574,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.add.text(28, dpY + 5, "RESET", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
     resetBtn.on("pointerdown", () => {
-      if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen) return;
+      if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen) return;
       this.showResetConfirm();
     });
 
@@ -615,7 +629,7 @@ export class GameScene extends Phaser.Scene {
     // Track wall-clock playtime (excludes offline time; used by trySave meta)
     this.playtimeSeconds += delta / 1_000;
 
-    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen) return;
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -748,6 +762,38 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.txtRawStock.setStyle(TEXT_STYLE_LABEL);
     }
+
+    // Wave 5: rescue arc HUD chip — neutral, factual, never shaming
+    if (this.rescueHudChip) {
+      const chipText = this.buildRescueHudChipText();
+      if (chipText) {
+        this.rescueHudChip.setText(chipText).setVisible(true);
+      } else {
+        this.rescueHudChip.setVisible(false);
+      }
+    }
+  }
+
+  /** Build a short HUD chip string for active debts/obligations. Neutral framing. */
+  private buildRescueHudChipText(): string | null {
+    const parts: string[] = [];
+    for (const debt of this.state.rescueDebts) {
+      const daysLeft = debt.dueDayNumber - this.state.dayNumber;
+      if (debt.kind === "loan") {
+        parts.push(`Owe Old Joe $${debt.amountDue.toFixed(2)} — ${daysLeft}d left`);
+      } else if (debt.kind === "credit") {
+        parts.push(`Supplier: owe $${debt.amountDue.toFixed(2)} — ${daysLeft}d left`);
+      } else if (debt.kind === "payday") {
+        const rNote = debt.rollovers > 0 ? ` [×${debt.rollovers}]` : "";
+        parts.push(`QuickNut: $${debt.amountDue.toFixed(2)} due d${debt.dueDayNumber}${rNote}`);
+      }
+    }
+    if (this.state.preorderObligation) {
+      const ob = this.state.preorderObligation;
+      const daysLeft = ob.dueDayNumber - this.state.dayNumber;
+      parts.push(`Derek: ${ob.fulfilledLbs.toFixed(0)}/${ob.totalLbs}lbs — ${daysLeft}d left`);
+    }
+    return parts.length > 0 ? parts.join(" | ") : null;
   }
 
   // ---------------------------------------------------------------------------
@@ -1308,7 +1354,7 @@ export class GameScene extends Phaser.Scene {
 
     const slotIndex = i;
     slotRect.on("pointerdown", () => {
-      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen) {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen) {
         this.handleSlotClick(slotIndex);
       }
     });
@@ -1483,6 +1529,14 @@ export class GameScene extends Phaser.Scene {
     // Pause the sim — reportOpen flag stops tick() calls
     const report = endOfDay(this.state);
 
+    // Wave 5: surface rescue arc events as toasts (factual, never shaming)
+    for (const ev of report.rescueEvents) {
+      const msg = ev.detail.message as string | undefined;
+      if (msg) {
+        this.time.delayedCall(500, () => this.showToast(msg));
+      }
+    }
+
     // Show recipe-unlock toasts for any newly unlocked recipes.
     const RECIPE_LABELS: Record<RecipeId, string> = {
       classic_salted: "Classic Salted",
@@ -1512,7 +1566,8 @@ export class GameScene extends Phaser.Scene {
     const H = this.scale.height;
     const rW = 300;
     // +14px for F1 "Cash spent on production" row; +14px more when offline row present (spec §6)
-    const rH = 224 + (r.offlineEarned > 0 ? 14 : 0);
+    // +14px for Wave 5 liability line when debts/obligations are active
+    const rH = 224 + (r.offlineEarned > 0 ? 14 : 0) + (r.activeDebtSummary ? 14 : 0);
     const rX = (W - rW) / 2;
     const rY = (H - rH) / 2;
 
@@ -1554,6 +1609,10 @@ export class GameScene extends Phaser.Scene {
         ? [[`Offline rest earnings:`, `+$${r.offlineEarned.toFixed(2)}`, TEXT_STYLE_GREEN] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
         : []),
       [`Net Profit:`, `$${r.net.toFixed(2)}`, r.net >= 0 ? TEXT_STYLE_GREEN : TEXT_STYLE_RED],
+      // Wave 5: liability line — teaches liabilities vs cash (neutral, not shaming)
+      ...(r.activeDebtSummary
+        ? [[`Liabilities:`, r.activeDebtSummary, TEXT_STYLE_RED] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
+        : []),
     ];
 
     let rowY = rY + 42;
@@ -1604,9 +1663,14 @@ export class GameScene extends Phaser.Scene {
       this.reportGroup = undefined;
     }
     this.reportOpen = false;
-    // Save after report is dismissed — state is fully consistent post-endOfDay (spec §3)
+    // Save after report is dismissed �� state is fully consistent post-endOfDay (spec §3)
     this.saveGame();
     this.updateHUD();
+
+    // Wave 5: open rescue-offer modal after report if trigger fired this day
+    if (this.state.rescueMode === "offer") {
+      this.time.delayedCall(300, () => this.openRescueModal());
+    }
   }
 
   /** Persist current state to storage. Called at safe save points only (never mid-tick). */
@@ -1786,6 +1850,312 @@ export class GameScene extends Phaser.Scene {
     if (b.customerLine.active) b.customerLine.destroy();
     if (b.ownerLine.active)    b.ownerLine.destroy();
     this.gagBubble = undefined;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rescue arc modal (Wave 5 — RESCUE_ARC_SCRIPT.md)
+  //
+  // Opens after the day-report dismisses, when state.rescueMode === "offer".
+  // Four paths + QuickNut cautionary display + decline.
+  // DARK_PATTERN_GATE compliance: no locked options, no pressure framing,
+  // no countdown. QuickNut shown with full APR math; player may choose it —
+  // the math itself is the teaching moment.
+  // ---------------------------------------------------------------------------
+
+  private openRescueModal(): void {
+    if (this.rescueModalOpen || this.state.rescueMode !== "offer") return;
+    this.rescueModalOpen = true;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const mW = 460, mH = 240;
+    const mX = (W - mW) / 2;
+    const mY = (H - mH) / 2;
+
+    this.rescueModalGroup = this.add.group();
+
+    // ---- Backdrop ----
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.70)
+      .setInteractive();
+    this.rescueModalGroup.add(backdrop);
+
+    // ---- Panel ----
+    this.rescueModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG)
+        .setStrokeStyle(2, P.PANEL_BORDER)
+    );
+
+    // ---- Old Joe portrait (Legsy-style code-drawn gruff elder) ----
+    // Weathered, 70s. Different from Legsy: wider body, no pod shape — a human silhouette.
+    // Built with same Palette A + monochrome; separate from drawLegsy (which is the mascot).
+    this.drawOldJoePortrait(mX + 22, mY + mH - 14);
+
+    // ---- Header ----
+    this.rescueModalGroup.add(
+      this.add.text(mX + 52, mY + 6, "TILL RUNS THIN — Old Joe's at the Window", TEXT_STYLE_HEADER)
+    );
+
+    // ---- Old Joe dialogue ----
+    this.rescueModalGroup.add(
+      this.add.text(mX + 52, mY + 20,
+        "\"Long day? Cash-flow problems aren't shameful — that's how you learn.\nBefore tomorrow gets worse, let's talk about what gets you through the week.\"",
+        { ...TEXT_STYLE_LABEL, color: "#5A3A1A", wordWrap: { width: mW - 60 } }
+      )
+    );
+
+    // ---- Divider ----
+    this.rescueModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + 48, mW - 8, 1, P.PANEL_BORDER)
+    );
+
+    // ---- Option cards (4 paths + decline) ----
+    // Each card: 84px wide, 170px tall — 5 columns
+    const cardW = 84, cardH = 170;
+    const cardY = mY + 52;
+    const cardGap = 4;
+    const totalCardsW = cardW * 5 + cardGap * 4;
+    const cardsStartX = mX + (mW - totalCardsW) / 2;
+
+    type CardDef = {
+      id: RescuePath;
+      label: string;
+      color: number;
+      lines: string[];
+    };
+
+    const cards: CardDef[] = [
+      {
+        id: "loan",
+        label: "OLD JOE'S LOAN",
+        color: P.CASH_GREEN,
+        lines: [
+          "+$75 cash now",
+          "Owe: $78.75",
+          "Due: 14 days",
+          "5% flat/season",
+          "(≈20%/yr)",
+          "",
+          "Fair handshake.",
+          "Pay any time.",
+          "No hidden fees.",
+        ],
+      },
+      {
+        id: "credit",
+        label: "MARTA'S CREDIT",
+        color: P.AWNING,
+        lines: [
+          "+125 lbs raw",
+          "(cash stays)",
+          "Owe: $50.00",
+          "Due: 14 days",
+          "No interest.",
+          "",
+          "Marta vouched",
+          "for you. Sell,",
+          "then pay.",
+        ],
+      },
+      {
+        id: "preorder",
+        label: "DEREK'S ORDER",
+        color: 0x5A7A8A,
+        lines: [
+          "+$110 cash now",
+          "Deliver 100lbs",
+          "roasted in 7d",
+          "",
+          "Rev: $110",
+          "COGS: ~$50",
+          "Profit: ~$60",
+          "",
+          "Execute or",
+          "trust is dented.",
+        ],
+      },
+      {
+        id: "payday",
+        label: "QUICKNUT ⚠",
+        color: 0xDD6600,
+        lines: [
+          "+$50 cash now",
+          "Owe: $57.50",
+          "Due: 14 days",
+          "",
+          "APR: ~391%",
+          "Roll: +$7.50/2wk",
+          "",
+          "Old Joe says:",
+          "\"Come to me",
+          "first.\"",
+        ],
+      },
+      {
+        id: "decline",
+        label: "DECLINE",
+        color: 0x888866,
+        lines: [
+          "No action now.",
+          "",
+          "Can re-trigger",
+          "next low-cash",
+          "day.",
+          "",
+          "Old Joe:",
+          "\"Door's open.",
+          "Think on it.\"",
+        ],
+      },
+    ];
+
+    for (let ci = 0; ci < cards.length; ci++) {
+      const card = cards[ci];
+      const cx = cardsStartX + ci * (cardW + cardGap);
+      const isQuickNut = card.id === "payday";
+
+      // Card background — QuickNut gets an off-palette "sketchy flyer" look
+      const cardBg = this.add.rectangle(cx + cardW / 2, cardY + cardH / 2, cardW, cardH,
+        isQuickNut ? 0xFFEEBB : P.PANEL_BG
+      ).setStrokeStyle(isQuickNut ? 2 : 1, isQuickNut ? 0xDD6600 : P.PANEL_BORDER)
+        .setInteractive({ cursor: "pointer" });
+      this.rescueModalGroup.add(cardBg);
+
+      // Card header label
+      const headerColor = isQuickNut ? "#CC4400" : "#2C2416";
+      this.rescueModalGroup.add(
+        this.add.text(cx + cardW / 2, cardY + 5, card.label, {
+          fontSize: "6px", color: headerColor, fontFamily: "monospace", fontStyle: "bold",
+          wordWrap: { width: cardW - 4 }, align: "center",
+        }).setOrigin(0.5, 0)
+      );
+
+      // Card detail lines
+      let lineY = cardY + 18;
+      for (const line of card.lines) {
+        if (line) {
+          const lineColor = isQuickNut && (line.includes("391") || line.includes("Roll")) ? "#CC2200" : "#2C2416";
+          this.rescueModalGroup.add(
+            this.add.text(cx + 2, lineY, line, {
+              fontSize: "5px", color: lineColor, fontFamily: "monospace",
+              wordWrap: { width: cardW - 4 },
+            })
+          );
+        }
+        lineY += 8;
+      }
+
+      // Choose button at card bottom
+      const btnLabel = card.id === "decline" ? "SKIP" :
+                       card.id === "payday" ? "CHOOSE (see warning)" : "CHOOSE";
+      const btnColor = card.id === "decline" ? 0x999977 :
+                       isQuickNut ? 0xDD6600 : P.AWNING;
+      const chooseBtn = this.add.rectangle(cx + cardW / 2, cardY + cardH - 8, cardW - 6, 13, btnColor)
+        .setStrokeStyle(1, P.PANEL_BORDER)
+        .setInteractive({ cursor: "pointer" });
+      this.rescueModalGroup.add(chooseBtn);
+      this.rescueModalGroup.add(
+        this.add.text(cx + cardW / 2, cardY + cardH - 8, btnLabel, {
+          fontSize: "5px", color: "#2C2416", fontFamily: "monospace",
+        }).setOrigin(0.5)
+      );
+
+      const pathId = card.id;
+      const handler = (): void => {
+        chooseRescuePath(this.state, pathId);
+        this.closeRescueModal();
+        this.updateHUD();
+        // Toast confirming the choice (factual, not congratulatory)
+        const toastMsg = pathId === "loan"
+          ? "Old Joe's loan: +$75. Owe $78.75 in 14 days."
+          : pathId === "credit"
+          ? "Marta's credit: +125 lbs raw. Owe $50 in 14 days."
+          : pathId === "preorder"
+          ? "Derek's order accepted: +$110. Deliver 100 lbs roasted in 7 days."
+          : pathId === "payday"
+          ? "QuickNut: +$50. $57.50 due in 14 days. Rolls +$7.50 if unpaid."
+          : "Old Joe nods. Door stays open.";
+        this.showToast(toastMsg);
+        this.saveGame();
+      };
+
+      chooseBtn.on("pointerdown", handler);
+      cardBg.on("pointerdown", handler);
+      chooseBtn.on("pointerover", () => chooseBtn.setAlpha(0.85));
+      chooseBtn.on("pointerout",  () => chooseBtn.setAlpha(1.0));
+      cardBg.on("pointerover",  () => cardBg.setAlpha(0.9));
+      cardBg.on("pointerout",   () => cardBg.setAlpha(1.0));
+    }
+
+    // ---- QuickNut extra warning strip at bottom (per script: Old Joe shows flyer + warning) ----
+    const warnY = cardY + cardH + 4;
+    this.rescueModalGroup.add(
+      this.add.text(mX + 52, warnY,
+        "QuickNut APR math: $7.50 fee on $50 for 14 days = 15%/period × 26 periods/yr = ~391% APR. Old Joe: \"It's designed to keep people in debt.\"",
+        { fontSize: "5px", color: "#994400", fontFamily: "monospace", wordWrap: { width: mW - 60 } }
+      )
+    );
+
+    // ---- Old Joe's closing note ----
+    this.rescueModalGroup.add(
+      this.add.text(mX + 52, warnY + 10,
+        "\"Whatever you choose — keep an eye on the till. Cash flow is predictable if you're watching.\"",
+        { fontSize: "5px", color: "#5A3A1A", fontFamily: "monospace", fontStyle: "italic", wordWrap: { width: mW - 60 } }
+      )
+    );
+  }
+
+  private closeRescueModal(): void {
+    if (this.rescueModalGroup) {
+      this.rescueModalGroup.destroy(true);
+      this.rescueModalGroup = undefined;
+    }
+    this.rescueModalOpen = false;
+  }
+
+  /**
+   * Draw Old Joe — weathered elder in a peanut-roasting-league cap.
+   * Programmer-art, code-drawn. Palette A only.
+   * (x, y) = bottom-centre of figure.
+   */
+  private drawOldJoePortrait(x: number, y: number): void {
+    const g = this.rescueModalGroup!;
+    const s = 0.9; // scale
+
+    // Cap (faded, rectangular brim)
+    g.add(this.add.rectangle(x, y - 54 * s, 20 * s, 6 * s, P.PANEL_BORDER)); // brim
+    g.add(this.add.rectangle(x, y - 58 * s, 16 * s, 8 * s, 0x6A4F2F));       // crown (darker)
+
+    // Head
+    g.add(this.add.ellipse(x, y - 44 * s, 18 * s, 20 * s, P.NPC_SKIN));
+
+    // Eyes (small, world-weary — narrower than Legsy's)
+    g.add(this.add.rectangle(x - 4 * s, y - 46 * s, 4 * s, 2 * s, P.TEXT));
+    g.add(this.add.rectangle(x + 4 * s, y - 46 * s, 4 * s, 2 * s, P.TEXT));
+
+    // Wrinkle lines (horizontal marks each side of mouth area)
+    g.add(this.add.rectangle(x - 6 * s, y - 42 * s, 3 * s, 1 * s, 0xB89070));
+    g.add(this.add.rectangle(x + 6 * s, y - 42 * s, 3 * s, 1 * s, 0xB89070));
+
+    // Mouth (straight line — weathered, not smiling)
+    g.add(this.add.rectangle(x, y - 39 * s, 6 * s, 1 * s, P.TEXT));
+
+    // Body (flannel shirt — wider than head)
+    g.add(this.add.rectangle(x, y - 25 * s, 22 * s, 24 * s, 0x5A3A1A)); // flannel brown
+
+    // Arms (raised slightly — holding flyer in right hand)
+    g.add(this.add.rectangle(x - 14 * s, y - 24 * s, 6 * s, 14 * s, P.NPC_SKIN));
+    g.add(this.add.rectangle(x + 14 * s, y - 28 * s, 6 * s, 18 * s, P.NPC_SKIN)); // right arm raised
+
+    // Legs
+    g.add(this.add.rectangle(x - 6 * s, y - 7 * s, 7 * s, 12 * s, P.PANEL_BORDER));
+    g.add(this.add.rectangle(x + 6 * s, y - 7 * s, 7 * s, 12 * s, P.PANEL_BORDER));
+
+    // QuickNut flyer in right hand (small neon-orange rectangle)
+    g.add(this.add.rectangle(x + 18 * s, y - 34 * s, 10 * s, 8 * s, 0xFF6600)
+      .setStrokeStyle(1, 0xDD4400));
+    g.add(this.add.text(x + 18 * s, y - 34 * s, "QN", {
+      fontSize: "4px", color: "#FFEE00", fontFamily: "monospace",
+    }).setOrigin(0.5));
   }
 
   // ---------------------------------------------------------------------------
