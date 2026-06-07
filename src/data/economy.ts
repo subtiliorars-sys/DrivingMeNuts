@@ -211,6 +211,59 @@ export const DAY_NAMES: readonly string[] = [
 ] as const;
 
 // ---------------------------------------------------------------------------
+// Weather  (GDD C3 — "Weather (rainy: −20%, hot sunny: +15%)")
+//
+// FOUNDATION ONLY (this wave): the constants + a pure, deterministic
+// weatherForDay() + a per-save weatherSeed. It is NOT yet wired into the demand
+// curve — wiring it into demandLbsPerHour is an economy-rippling change deferred
+// to an attended session (docs/SYSTEMS_BACKLOG.md §1). Until wired, weather has
+// ZERO gameplay effect; this just makes the (forecastable, predictable) calendar
+// available so the eventual wiring + a forecast UI are a small, safe step.
+//
+// Determinism: weatherForDay is a PURE hash of (dayNumber, seed) — it does NOT
+// consume the live PRNG stream (that would perturb the demand jitter and break
+// determinism tests). Because it's a pure function of the day, a 1-day forecast
+// is trivial: weatherForDay(dayNumber + 1, seed).
+// ---------------------------------------------------------------------------
+
+export type Weather = "clear" | "hot_sunny" | "rainy";
+
+/** Demand multiplier per weather state (GDD C3). Applied ON TOP of the day
+ *  factor when wiring lands; 1.0 today (unwired). */
+export const WEATHER_FACTOR: Readonly<Record<Weather, number>> = {
+  clear:     1.00, // baseline — most days
+  hot_sunny: 1.15, // +15% (GDD)
+  rainy:     0.80, // −20% (GDD)
+} as const;
+
+/** Human-readable label per weather state (for the future forecast UI). */
+export const WEATHER_LABEL: Readonly<Record<Weather, string>> = {
+  clear:     "Clear",
+  hot_sunny: "Hot & Sunny",
+  rainy:     "Rainy",
+} as const;
+
+/** Default weatherSeed for fresh/legacy saves (keeps weather deterministic). */
+export const WEATHER_DEFAULT_SEED = 1;
+
+/**
+ * Deterministic weather for a given 1-indexed game day and per-save seed.
+ * Pure integer hash (Knuth multiplicative + xorshift mixing) → [0,1) → bucket.
+ * Distribution ~50% clear / 25% hot-sunny / 25% rainy — mild, weighted toward
+ * baseline so the calendar feels like weather, not chaos. No PRNG consumption.
+ */
+export function weatherForDay(dayNumber: number, seed: number): Weather {
+  let h = (Math.imul(dayNumber >>> 0, 2654435761) + (seed >>> 0)) >>> 0;
+  h ^= h >>> 15;
+  h = Math.imul(h, 2246822519) >>> 0;
+  h ^= h >>> 13;
+  const r = (h >>> 0) / 0x100000000; // [0, 1)
+  if (r < 0.50) return "clear";
+  if (r < 0.75) return "hot_sunny";
+  return "rainy";
+}
+
+// ---------------------------------------------------------------------------
 // Pricing bounds  (UI_WIREFRAMES §2 slider spec)
 // ---------------------------------------------------------------------------
 

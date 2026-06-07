@@ -6,6 +6,9 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added — weather foundation (GDD C3; foundation only, NOT wired into demand)
+- `WEATHER_FACTOR {clear:1.0, hot_sunny:1.15, rainy:0.80}` + `WEATHER_LABEL` + a **pure, deterministic** `weatherForDay(dayNumber, seed)` (integer hash → ~50/25/25 buckets, no PRNG-stream consumption) + per-save `weatherSeed` (additive-optional persistence, default `WEATHER_DEFAULT_SEED` for legacy saves). **Zero gameplay effect** — weather is not read by the demand curve; this just makes the predictable, forecastable calendar available so the eventual demand-wiring + a forecast UI are a small, safe step (wiring deferred to an attended session per docs/SYSTEMS_BACKLOG.md §1, since it ripples the economy tests). Red-team PASS (inert + additive-safe confirmed). 9 new tests (determinism, distribution, forecast, persistence/crafted-save); 357 unit + 5 boot green.
+
 ### Added — milestone celebration juice (stacks on Polish & Pedagogy)
 - **Celebration overlay** for earned moments — the first achievement of a day and each comeback-tier unlock get a brief, non-blocking banner with a confetti burst (scale-pop in, auto-dismiss). Never gates input, never pauses the sim, no countdown/pressure (DARK_PATTERN_GATE-clean).
 - **Respects reduced motion** (from the accessibility wave): static banner, no particle burst, no scale-pop when reduced-motion is on. UI-only — no sim/economy/persistence changes. 348 unit + 5 boot green.
