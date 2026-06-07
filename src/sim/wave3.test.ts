@@ -348,9 +348,8 @@ describe("lore tier gating", () => {
     expect(midIds.length).toBeGreaterThan(0);
   });
 
-  it("total LORE_LINES count is 20 (early + mid; late reserved)", () => {
-    // Wave 3 ships LL-001–LL-020 (6 early + 14 mid)
-    expect(LORE_LINES.length).toBe(20);
+  it("total LORE_LINES count is 40 (6 early + 10 mid + 24 late — Wave 4 polish loaded LL-021–LL-040)", () => {
+    expect(LORE_LINES.length).toBe(40);
   });
 
   it("every LORE_LINES entry has tier field", () => {

@@ -120,6 +120,15 @@ export interface SimState {
    */
   recipesUnlocked: Set<string>;
 
+  // ---- Net-history sparkline (last 14 days, capped) -------------------
+  /**
+   * Net profit for each of the last 14 completed days (index 0 = oldest).
+   * Updated in endOfDay after net is computed. Missing on legacy saves → default [].
+   * Additive optional field: absent = empty history, no migration needed (safe because
+   * an empty array is the correct default for a save that predates this field).
+   */
+  netHistory: number[];
+
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
   rngState: number;

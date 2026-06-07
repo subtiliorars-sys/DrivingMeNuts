@@ -198,6 +198,7 @@ export function createState(seed = 1): SimState {
     gagsSeen: new Set<string>(),
     lifetimeEarned: 0,
     recipesUnlocked: new Set<string>(["classic_salted"]),
+    netHistory: [],
     rngState: seed >>> 0,
   };
 }
@@ -409,6 +410,10 @@ export function endOfDay(state: SimState): DayReport {
 
   // Accumulate lifetime earnings BEFORE resetting dayStats (spec §6d).
   state.lifetimeEarned += revenue;
+
+  // Append today's net to the rolling 14-day history (sparkline source).
+  state.netHistory.push(net);
+  if (state.netHistory.length > 14) state.netHistory.shift();
 
   // Evaluate recipe unlock thresholds against updated lifetimeEarned.
   // State is mutated; GameScene detects new unlocks via state.recipesUnlocked post-call.
@@ -847,6 +852,27 @@ export function dayFactorFor(dayNumber: number): number {
   // dayNumber is 1-indexed; (dayNumber - 1) % 7 maps it to Mon=0 … Sun=6
   const idx = ((dayNumber - 1) % 7 + 7) % 7; // safe modulo for any integer
   return DAY_FACTOR[idx];
+}
+
+// ---------------------------------------------------------------------------
+// optimumPrice(recipe) → $ per lb
+// Pure helper: the price that maximises total profit for a given recipe.
+// Derivation: d/dp [(p - cogs) * demand(p)] = 0 with demand linear in p gives
+//   p* = (BASE_LBS_PER_HOUR / DEMAND_SLOPE + DEMAND_BASE_PRICE + cogs) / 2
+// Clamped to [PRICE_MIN, PRICE_MAX] so the UI can always display it.
+// Exported for recipe-card two-row preview (Wave 4 polish, item 6).
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the profit-maximising price for a given recipe.
+ * Uses the global demand curve constants (no recipe-specific demand mult —
+ * the formula is the same regardless of demand-mult scaling because the mult
+ * cancels out in the first-order condition).
+ */
+export function optimumPrice(recipe: RecipeId): number {
+  const cogs = RAW_PEANUT_BASE_PRICE + RECIPES[recipe].ingredientCostPerLb;
+  const pStar = (DEMAND_BASE_LBS_PER_HOUR / DEMAND_SLOPE + DEMAND_BASE_PRICE + cogs) / 2;
+  return clamp(parseFloat(pStar.toFixed(2)), PRICE_MIN, PRICE_MAX);
 }
 
 // ---------------------------------------------------------------------------

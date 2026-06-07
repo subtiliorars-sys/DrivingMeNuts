@@ -6,7 +6,7 @@
  * Tier gating (Wave 3, W5 playtest-compressed gates):
  *   early: unlocked from day 1+   (LL-001 – LL-006)
  *   mid:   unlocked from day 8+   (LL-007 – LL-016)
- *   late:  unlocked from day 20+  (LL-017 – LL-020; canon LATE per LEGUME_LORE.md)
+ *   late:  unlocked from day 20+  (LL-017 – LL-040; canon LATE per LEGUME_LORE.md)
  *
  * Gate note: day numbers are compressed vs the doc's narrative ranges (Mid=day 21+,
  * Late=day 51+) for P1 playtest realism — at 14-minute days, nobody reaches day 21
@@ -193,6 +193,150 @@ export const LORE_LINES: readonly LoreLine[] = [
     owner: "Legumes, not nuts. But have you tasted them? Best legumes in three counties.",
     tone: "Smug",
     tier: "late", // W5: canon LATE tier per LEGUME_LORE.md; gate day 20+
+  },
+
+  // ---- Late Game (LL-021–LL-040): verbatim from docs/LEGUME_LORE.md ----
+  // Loaded in Wave 4 polish batch; gate day 20+ (LORE_TIER_DAY_GATE.late = 20).
+
+  {
+    id: "LL-021",
+    customer: "I saw somewhere that legumes are healthier than tree nuts.",
+    owner: "So they're superior legumes AND they're still driving me nuts. Double win.",
+    tone: "Smug/Playful",
+    tier: "late",
+  },
+  {
+    id: "LL-022",
+    customer: "Legumes have more protein than people think.",
+    owner: "People think legumes are nuts. That's the baseline. We're beating expectations.",
+    tone: "Professorial",
+    tier: "late",
+  },
+  {
+    id: "LL-023",
+    customer: "Your truck name finally makes sense.",
+    owner: "*grins* \"Three months of you people saying that, and NOW you get it.\"",
+    tone: "Smug/Warm",
+    tier: "late",
+  },
+  {
+    id: "LL-024",
+    customer: "I teach biology. Legumes.",
+    owner: "I teach economics. This legume costs you $1.50. Legume economics driving me nuts.",
+    tone: "Smug/Professorial",
+    tier: "late",
+  },
+  {
+    id: "LL-025",
+    customer: "They're in the fabaceae family, scientifically.",
+    owner: "I'm in the 'sell peanuts and smile' family, scientifically. You winning the trivia; I'm winning the day.",
+    tone: "Smug/Warm",
+    tier: "late",
+  },
+  {
+    id: "LL-026",
+    customer: "So if they're legumes, why do you call them—",
+    owner: "Peanuts. Because it's fun to confuse people. And because 'Driving Me Nuts' is a better truck name than 'Legume Logistics.'",
+    tone: "Smug",
+    tier: "late",
+  },
+  {
+    id: "LL-027",
+    customer: "I should probably tell you—legumes.",
+    owner: "But you're going to anyway. Make it a large, and I'll smile about it.",
+    tone: "Warm/Deadpan",
+    tier: "late",
+  },
+  {
+    id: "LL-028",
+    customer: "Aren't these technically—",
+    owner: "—legumes? Yeah. You want the honey cinnamon or the classic salted?",
+    tone: "Warm/Efficient",
+    tier: "late",
+  },
+  {
+    id: "LL-029",
+    customer: "I'm about to blow your mind. Legumes.",
+    owner: "*laughs* \"You're 6 months too late. But I appreciate the energy.\"",
+    tone: "Warm/Amused",
+    tier: "late",
+  },
+  {
+    id: "LL-030",
+    customer: "Wait, are these—peanuts are legumes, aren't they?",
+    owner: "Yes. And I'm still here. Still roasting them. Still driving me nuts—but also, still making money. So it works out.",
+    tone: "Philosophical/Smug",
+    tier: "late",
+  },
+  {
+    id: "LL-031",
+    customer: "I just realized. Legumes!",
+    owner: "Welcome. You're in good company. Also, that'll be $1.50.",
+    tone: "Warm/Knowing",
+    tier: "late",
+  },
+  {
+    id: "LL-032",
+    customer: "These are legumes, right? That's the whole thing?",
+    owner: "That's the whole thing. That's been the whole thing since day one. I've made peace with it.",
+    tone: "Zen/Proud",
+    tier: "late",
+  },
+  {
+    id: "LL-033",
+    customer: "I brought my cousin to tell you. She's a botanist. Legumes.",
+    owner: "Tell your cousin the botanist I've received her message loud and clear. Via dozens of botanists. Can I sell you both something?",
+    tone: "Smug/Warm",
+    tier: "late",
+  },
+  {
+    id: "LL-034",
+    customer: "My kid is going to come tell you too. She learned it today.",
+    owner: "*smiles* \"Kids get it first. She'll be the 50th person to tell me before she's in high school. I'm building a legacy.\"",
+    tone: "Warm/Proud",
+    tier: "late",
+  },
+  {
+    id: "LL-035",
+    customer: "Okay, so here's what I learned...",
+    owner: "Legumes. I know. You're about to order, you're going to enjoy them, and you're going to come back next week and tell me again.",
+    tone: "Smug/Affectionate",
+    tier: "late",
+  },
+  {
+    id: "LL-036",
+    customer: "Cashews are berries, technically.",
+    owner: "*too tired to argue* \"Sure. They're all something other than what the name says. I'm not surprised anymore. Want some legume?\"",
+    tone: "Resigned",
+    tier: "late",
+  },
+  {
+    id: "LL-037",
+    customer: "But you roast them, so does that make them... cooked legumes?",
+    owner: "Congratulations, you've invented a subcategory. Very late-game of you.",
+    tone: "Smug",
+    tier: "late",
+  },
+  {
+    id: "LL-038",
+    customer: "Do legumes taste better than regular nuts?",
+    owner: "There are no regular nuts here, friend. Only legumes. Very good legumes. Taste and decide.",
+    tone: "Zen",
+    tier: "late",
+  },
+  {
+    id: "LL-039",
+    customer: "I feel like I'm doing you a service by pointing this out.",
+    owner: "You're not. But I appreciate the sentiment. Five dollars for a bag of legumes?",
+    tone: "Warm/Blunt",
+    tier: "late",
+  },
+  {
+    id: "LL-040",
+    customer: "You know, 'Driving Me Nuts' is actually the perfect name if they're legumes.",
+    owner: "*lights up* \"Thank you. First person to get that intentionally. You win—free sample of the experimental flavor.\"",
+    tone: "Warm/Celebratory",
+    tier: "late",
   },
 ] as const;
 

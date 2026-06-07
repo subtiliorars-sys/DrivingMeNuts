@@ -108,6 +108,12 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   rescueDebts?: RescueDebt[];
   /** Wave 5 (schema v3): preorder obligation. Optional for forward-compat. */
   preorderObligation?: PreorderObligation | null;
+  /**
+   * Wave 4 polish: last-14-days net history for sparkline.
+   * Optional/additive — absent on older saves; defaults to [] on load.
+   * No schema bump needed: missing field = empty history, no migration required.
+   */
+  netHistory?: number[];
 };
 
 interface SaveMeta {
@@ -417,6 +423,13 @@ export function deserialize(json: string): SimState {
         }
       : null;
 
+  // Wave 4 polish: revive netHistory; default [] if absent (safe — empty history is correct
+  // for saves that predate this field; no migration needed per additive-optional rule).
+  const rawNetHistory = (ss as SerializedSimState).netHistory;
+  const netHistory: number[] = Array.isArray(rawNetHistory)
+    ? rawNetHistory.filter((v): v is number => typeof v === "number" && Number.isFinite(v)).slice(-14)
+    : [];
+
   const state: SimState = {
     cash: sim.cash,
     rawStockLbs: sim.rawStockLbs,
@@ -444,6 +457,7 @@ export function deserialize(json: string): SimState {
     gagsSeen: revivedGagsSeen,
     lifetimeEarned: Number(sim.lifetimeEarned ?? 0),
     recipesUnlocked: revivedRecipesUnlocked,
+    netHistory,
     rngState: sim.rngState,
   };
 
@@ -558,6 +572,56 @@ export function trySave(
     console.warn("[DMN] Save failed (storage quota or private mode?).", err);
     if (onSaveFailed) onSaveFailed();
   }
+}
+
+// ---------------------------------------------------------------------------
+// importEnvelopeText — validate + store a save JSON string from file import
+// (item 2: Save Export/Import; CRIT-1 compliant — zero server, all local)
+// ---------------------------------------------------------------------------
+
+export interface ImportResult {
+  /** Whether the import succeeded and the state was stored. */
+  ok: boolean;
+  /** Loaded SimState on success; null on failure. */
+  state: SimState | null;
+  /** Human-readable error message on failure; null on success. */
+  errorMessage: string | null;
+}
+
+/**
+ * Parse and validate an imported save JSON string, then write it to storage
+ * (overwriting any existing save).  On any failure returns ok=false with a
+ * friendly message and makes NO state change.
+ *
+ * Pure-function level: all validation goes through the existing deserialize()
+ * path (sanity checks + migrations apply automatically).
+ *
+ * @param text     Raw text content from the imported file.
+ * @param storage  StorageLike (window.localStorage in game, mock in tests).
+ */
+export function importEnvelopeText(text: string, storage: StorageLike): ImportResult {
+  if (typeof text !== "string" || text.trim().length === 0) {
+    return { ok: false, state: null, errorMessage: "Import failed: file appears to be empty." };
+  }
+
+  let state: SimState;
+  try {
+    state = deserialize(text);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, state: null, errorMessage: `Import failed: ${msg}` };
+  }
+
+  // Write the validated (and migrated) text back to storage so the next
+  // tryLoad sees the canonical current-schema version.
+  try {
+    // Re-serialise through serialize() to ensure the envelope is schema-current.
+    storage.setItem(SAVE_KEY, serialize(state));
+  } catch {
+    return { ok: false, state: null, errorMessage: "Import failed: could not write to storage (quota or private mode?)." };
+  }
+
+  return { ok: true, state, errorMessage: null };
 }
 
 // ---------------------------------------------------------------------------

@@ -35,13 +35,14 @@ import {
   setPrice,
   endOfDay,
   projectedDemand,
+  optimumPrice,
   buyRoasterUpgrade,
   buyQueueSlot,
   chooseRescuePath,
   type RescuePath,
 } from "../sim/engine.js";
 import type { SimState, DayReport } from "../sim/types.js";
-import { tryLoad, trySave, resetSave, safeStorage } from "../sim/persistence.js";
+import { tryLoad, trySave, resetSave, safeStorage, serialize, importEnvelopeText } from "../sim/persistence.js";
 import { LORE_BY_ID } from "../data/lore.js";
 import { drawLegsy } from "./legsy.js";
 import {
@@ -638,8 +639,10 @@ export class GameScene extends Phaser.Scene {
     const prevDayElapsed = this.state.dayElapsedSeconds;
     const events = tick(this.state, dtSeconds);
 
-    // Handle events for coin pops, gag bubbles, and day-end trigger
-    // F5: accumulate revenue; spawn one pop per COIN_POP_THRESHOLD earned
+    // Handle events for coin pops, gag bubbles, and day-end trigger.
+    // F5: accumulate revenue; spawn one pop per COIN_POP_THRESHOLD earned.
+    // Item 1: trySave on batch_ready — closes the crash-loss window between
+    //         roast completion and end-of-day save (cheap; no UI noise on success).
     for (const ev of events) {
       if (ev.kind === "sale") {
         this.coinPopAccum += ev.detail.revenue as number;
@@ -649,6 +652,7 @@ export class GameScene extends Phaser.Scene {
       }
       if (ev.kind === "batch_ready") {
         playBatchReady();
+        this.saveGame();
       }
     }
     if (this.coinPopAccum >= this.COIN_POP_THRESHOLD) {
@@ -902,23 +906,26 @@ export class GameScene extends Phaser.Scene {
 
     const refreshPreview = (): void => {
       const cogs = cogsForRecipe(this.roastModalRecipe);
-      const revenue1 = this.state.sellPrice * this.roastModalBatchLbs;
       const cogsTotal = cogs * this.roastModalBatchLbs;
-      const margin1 = this.state.sellPrice > 0
-        ? ((this.state.sellPrice - cogs) / this.state.sellPrice) * 100
-        : 0;
-      // Honey Cinnamon optimal price hint from spec: p* ≈ $1.95; generic: highlight current price
-      const optPrice = this.state.sellPrice;
-      const demandHint = projectedDemand(optPrice, this.roastModalRecipe);
       const roastMins = (RECIPES[this.roastModalRecipe].roastSecondsPerLbTinPan * this.roastModalBatchLbs) / 60;
 
+      // Row A: at current price
+      const curPrice  = this.state.sellPrice;
+      const margin1   = curPrice > 0 ? ((curPrice - cogs) / curPrice) * 100 : 0;
+      const demand1   = projectedDemand(curPrice, this.roastModalRecipe);
       const marginColor = margin1 >= 60 ? "#4A7C4E" : margin1 >= 45 ? "#C08A00" : "#C0392B";
+
+      // Row B: at optimum price (item 6 — two-row preview)
+      const optPrice  = optimumPrice(this.roastModalRecipe);
+      const marginOpt = optPrice > 0 ? ((optPrice - cogs) / optPrice) * 100 : 0;
+      const demandOpt = projectedDemand(optPrice, this.roastModalRecipe);
 
       if (previewLines.length >= 5) {
         previewLines[0].setText(`COGS total: $${cogsTotal.toFixed(2)}  Roast: ${roastMins.toFixed(0)} min (sim)`);
-        previewLines[1].setText(`At $${this.state.sellPrice.toFixed(2)}/lb: Rev $${revenue1.toFixed(2)}  Margin ${margin1.toFixed(0)}%`);
+        previewLines[1].setText(`at current $${curPrice.toFixed(2)}: margin ${margin1.toFixed(0)}%  ~${demand1.toFixed(0)} lbs/hr`);
         previewLines[1].setStyle({ ...TEXT_STYLE_LABEL, color: marginColor });
-        previewLines[2].setText(`Demand hint: ~${demandHint.toFixed(0)} lbs/hr at your price`);
+        previewLines[2].setText(`at optimum $${optPrice.toFixed(2)}: margin ${marginOpt.toFixed(0)}%  ~${demandOpt.toFixed(0)} lbs/hr`);
+        previewLines[2].setStyle({ ...TEXT_STYLE_LABEL, color: "#4A7C4E" });
         previewLines[3].setText(`COGS/lb: $${cogs.toFixed(2)}`);
       }
 
@@ -1298,6 +1305,70 @@ export class GameScene extends Phaser.Scene {
       })
     );
 
+    // ---- Save Export / Import buttons (item 2) ----
+    // All local — CRIT-1 compliant (zero server).
+    rowY += 10;
+    this.upgradesModalGroup.add(this.add.rectangle(mX + mW / 2, rowY + 2, mW - 8, 1, P.PANEL_BORDER));
+    rowY += 8;
+
+    const exportBtn = this.add.rectangle(mX + 60, rowY + 6, 90, 14, 0x445566)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.upgradesModalGroup.add(exportBtn);
+    this.upgradesModalGroup.add(
+      this.add.text(mX + 60, rowY + 6, "EXPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    exportBtn.on("pointerdown", () => {
+      const json = serialize(this.state, this.playtimeSeconds);
+      const blob = new Blob([json], { type: "application/json" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = "driving-me-nuts-save.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+    exportBtn.on("pointerover", () => exportBtn.setAlpha(0.85));
+    exportBtn.on("pointerout",  () => exportBtn.setAlpha(1.0));
+
+    const importBtn = this.add.rectangle(mX + 170, rowY + 6, 90, 14, 0x445566)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.upgradesModalGroup.add(importBtn);
+    this.upgradesModalGroup.add(
+      this.add.text(mX + 170, rowY + 6, "IMPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    importBtn.on("pointerdown", () => {
+      const fileInput = document.createElement("input");
+      fileInput.type   = "file";
+      fileInput.accept = ".json,application/json";
+      fileInput.onchange = () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const text = ev.target?.result as string | undefined;
+          if (!text) {
+            this.showToast("Import failed: could not read file.");
+            return;
+          }
+          const result = importEnvelopeText(text, this.storage);
+          if (!result.ok || !result.state) {
+            this.showToast(result.errorMessage ?? "Import failed: unknown error.");
+          } else {
+            this.state = result.state;
+            this.closeUpgradesModal();
+            this.updateHUD();
+            this.showToast("Save imported — game state restored.");
+          }
+        };
+        reader.readAsText(file);
+      };
+      fileInput.click();
+    });
+    importBtn.on("pointerover", () => importBtn.setAlpha(0.85));
+    importBtn.on("pointerout",  () => importBtn.setAlpha(1.0));
+
     // Close button at bottom
     rowY += 14;
     const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
@@ -1567,7 +1638,10 @@ export class GameScene extends Phaser.Scene {
     const rW = 300;
     // +14px for F1 "Cash spent on production" row; +14px more when offline row present (spec §6)
     // +14px for Wave 5 liability line when debts/obligations are active
-    const rH = 224 + (r.offlineEarned > 0 ? 14 : 0) + (r.activeDebtSummary ? 14 : 0);
+    // +20px for sparkline row when ≥1 day of history exists (item 3)
+    const sparklineHistory = this.state.netHistory.slice(-7); // last 7 days
+    const hasSparkline = sparklineHistory.length >= 1;
+    const rH = 224 + (r.offlineEarned > 0 ? 14 : 0) + (r.activeDebtSummary ? 14 : 0) + (hasSparkline ? 20 : 0);
     const rX = (W - rW) / 2;
     const rY = (H - rH) / 2;
 
@@ -1643,6 +1717,29 @@ export class GameScene extends Phaser.Scene {
       })
     );
     rowY += 36;
+
+    // ---- Net history sparkline (item 3: last-7-days bar row) ----
+    // Bookkeeping concept: factual framing only, no FOMO. Green = positive net, red = negative.
+    if (hasSparkline) {
+      this.reportGroup.add(
+        this.add.text(rX + 8, rowY, "Last 7 days:", TEXT_STYLE_LABEL)
+      );
+      const maxAbs = Math.max(1, ...sparklineHistory.map(Math.abs));
+      const barMaxH = 10;
+      const barW    = 12;
+      const barGap  = 3;
+      const barBaseY = rowY + barMaxH + 2;
+      for (let i = 0; i < sparklineHistory.length; i++) {
+        const netVal = sparklineHistory[i];
+        const barH   = Math.max(2, Math.round((Math.abs(netVal) / maxAbs) * barMaxH));
+        const barColor = netVal >= 0 ? P.CASH_GREEN : P.WARNING_RED;
+        const bx = rX + 80 + i * (barW + barGap);
+        this.reportGroup.add(
+          this.add.rectangle(bx + barW / 2, barBaseY - barH / 2, barW, barH, barColor)
+        );
+      }
+      rowY += 20;
+    }
 
     // "Start next day" button (no countdown, no pressure — DARK_PATTERN_GATE B.1)
     const nextBtn = this.add.rectangle(rX + rW / 2, rY + rH - 14, 140, 18, P.AWNING)
@@ -2156,18 +2253,6 @@ export class GameScene extends Phaser.Scene {
     g.add(this.add.text(x + 18 * s, y - 34 * s, "QN", {
       fontSize: "4px", color: "#FFEE00", fontFamily: "monospace",
     }).setOrigin(0.5));
-  }
-
-  // ---------------------------------------------------------------------------
-  // Phaser scene lifecycle — teardown
-  // ---------------------------------------------------------------------------
-
-  shutdown(): void {
-    // Remove DOM listeners added in create() — prevents leaks if scene restarts.
-    document.removeEventListener("visibilitychange", this.onVisibilityChange);
-    window.removeEventListener("pagehide", this.onPageHide);
-    // Clean up any active tutorial bubble
-    this.dismissTutorial();
   }
 
   // ---------------------------------------------------------------------------
