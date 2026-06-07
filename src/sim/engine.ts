@@ -58,12 +58,18 @@ import {
   RESCUE_PAYDAY_PRINCIPAL,
   RESCUE_PAYDAY_FEE,
   RESCUE_PAYDAY_DUE_DAYS,
+  LEDGER_MAX_DAYS,
+  WEEK_RECAP_EVERY_DAYS,
+  BRAND_CAMPAIGN_LORE_THRESHOLD,
+  BRAND_CAMPAIGN_COST,
+  BRAND_CAMPAIGN_PRICE_TOLERANCE,
 } from "../data/economy.js";
 
 // default blended multiplier = classic_salted = 1.0
 const DEFAULT_DEMAND_MULT_BLENDED = RECIPE_DEMAND_MULT["classic_salted"];
 
 import { LORE_LINES, LORE_TIER_DAY_GATE } from "../data/lore.js";
+import { comebackTierFor, comebackPoolForTier, COMEBACK_TIERS } from "../data/comebacks.js";
 
 import type {
   SimState,
@@ -71,6 +77,9 @@ import type {
   DayReport,
   SimEvent,
   RescueDebt,
+  LedgerEntry,
+  WeekRecap,
+  BalanceSheet,
 } from "./types.js";
 
 import type { RecipeId } from "../data/economy.js";
@@ -103,6 +112,16 @@ function cogsPerLb(recipe: RecipeId): number {
 }
 
 /**
+ * Demand curve's reference price, shifted upward when the brand campaign is
+ * active (GDD B4: +5% price tolerance — customers accept a higher base price).
+ */
+function effectiveBasePrice(brandCampaignActive: boolean): number {
+  return brandCampaignActive
+    ? DEMAND_BASE_PRICE * (1 + BRAND_CAMPAIGN_PRICE_TOLERANCE)
+    : DEMAND_BASE_PRICE;
+}
+
+/**
  * Demand in lbs/hour at a given price, scaled by the provided demand multiplier
  * and the day-of-week factor.
  * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × demandMult × dayFactor
@@ -112,9 +131,10 @@ function cogsPerLb(recipe: RecipeId): number {
  * W2: tick() passes state.roastedDemandMultBlended as demandMult so the blended-pool
  * recipe multiplier is applied to live sales. Default 1.0 preserves backward compat.
  * W4: tick() passes dayFactorFor(state.dayNumber) so weekday patterns apply.
+ * Brand campaign: BASE_PRICE shifts up 5% when state.brandCampaignActive.
  */
 function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0, dayFactor = 1.0): number {
-  const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - DEMAND_BASE_PRICE);
+  const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - effectiveBasePrice(state.brandCampaignActive));
   // ±10% jitter (two uniform samples averaged → triangular distribution)
   const jitter = ((nextRand(state) + nextRand(state)) / 2 - 0.5) * 0.20;
   return clamp(base * (1 + jitter) * demandMult * dayFactor, 0, DEMAND_MAX_LBS_PER_HOUR);
@@ -139,26 +159,67 @@ function applyCashFloor(state: SimState): void {
 }
 
 /**
- * Pick and emit a 'gag' SimEvent using the seeded PRNG.
+ * Pick and emit 'gag' SimEvent(s) using the seeded PRNG.
  * Draws only from tiers unlocked by the current dayNumber (tier gating).
  * Selects a lore line deterministically; records it in gagsSeen.
- * Returns null only if no lines are unlocked (should never happen — early tier is always available).
+ *
+ * Comeback Lines (GDD B4): when the player's unique-lore count crosses a
+ * COMEBACK_TIERS threshold, a one-time "comeback_unlocked" event follows the
+ * gag. Once any tier is unlocked, the gag event carries a comebackId — an
+ * owner reply drawn from all unlocked tiers (UI shows it instead of the stock
+ * reply). The extra PRNG draw happens ONLY when comebackTier > 0, so the
+ * pre-unlock event sequence is identical to older saves.
+ *
+ * Returns [] only if no lines are unlocked (should never happen — early tier
+ * is always available).
  */
-function maybeGagEvent(state: SimState): SimEvent | null {
+function maybeGagEvents(state: SimState): SimEvent[] {
   // Filter to lines whose tier gate has been met by the current day.
   const pool = LORE_LINES.filter(
     (l) => state.dayNumber >= LORE_TIER_DAY_GATE[l.tier]
   );
-  if (pool.length === 0) return null;
+  if (pool.length === 0) return [];
   const idx = Math.floor(nextRand(state) * pool.length);
   const line = pool[idx];
   state.gagsSeen.add(line.id);
-  return {
+
+  const events: SimEvent[] = [];
+  const detail: Record<string, unknown> = { loreId: line.id };
+
+  // Comeback reply: pick from the pool of all unlocked tiers (tier > 0 only).
+  if (state.comebackTier > 0) {
+    const comebacks = comebackPoolForTier(state.comebackTier);
+    if (comebacks.length > 0) {
+      const cIdx = Math.floor(nextRand(state) * comebacks.length);
+      detail.comebackId = comebacks[cIdx].id;
+    }
+  }
+
+  events.push({
     kind: "gag",
     dayNumber: state.dayNumber,
     daySecond: state.dayElapsedSeconds,
-    detail: { loreId: line.id },
-  };
+    detail,
+  });
+
+  // Threshold crossing: unique-lore count may unlock a new comeback tier.
+  const newTier = comebackTierFor(state.gagsSeen.size);
+  if (newTier > state.comebackTier) {
+    state.comebackTier = newTier;
+    const tierDef = COMEBACK_TIERS[newTier - 1];
+    events.push({
+      kind: "comeback_unlocked",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: {
+        tier: newTier,
+        label: tierDef.label,
+        threshold: tierDef.threshold,
+      },
+    });
+  }
+
+  return events;
 }
 
 /** Create a blank RoastSlot. */
@@ -199,6 +260,10 @@ export function createState(seed = 1): SimState {
     lifetimeEarned: 0,
     recipesUnlocked: new Set<string>(["classic_salted"]),
     netHistory: [],
+    ledger: [],
+    comebackTier: 0,
+    brandCampaignActive: false,
+    aftermathSeen: [],
     rngState: seed >>> 0,
   };
 }
@@ -271,8 +336,7 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
       state.unitsSoldLifetime += soldLbs;
       const newBucket  = Math.floor(state.unitsSoldLifetime / GAG_EVERY_N_LBS_SOLD);
       if (newBucket > prevBucket) {
-        const gagEvent = maybeGagEvent(state);
-        if (gagEvent) events.push(gagEvent);
+        events.push(...maybeGagEvents(state));
       }
 
       events.push({
@@ -427,6 +491,24 @@ export function endOfDay(state: SimState): DayReport {
   // Processed before fixed costs so the player gets full benefit of the day's earnings.
   const rescueEvents: SimEvent[] = [];
 
+  // Ledger v1: cash paid toward debts at this close (cash-flow, not P&L).
+  let debtService = 0;
+
+  // Aftermath beats: fire ONCE per path, ever (tracked in aftermathSeen).
+  // Content lives in data/rescue_aftermath.ts; the engine emits only the path key.
+  // SCOPE RAIL: aftermath is closure-only — it never creates a new offer/debt
+  // (re-entry escalation is owner-gated per red-team RT-1).
+  const emitAftermath = (path: string): void => {
+    if (state.aftermathSeen.includes(path)) return;
+    state.aftermathSeen.push(path);
+    rescueEvents.push({
+      kind: "debt_aftermath",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: { path },
+    });
+  };
+
   // 3a. Preorder fulfillment: allocate roasted stock toward obligation
   if (state.preorderObligation) {
     const ob = state.preorderObligation;
@@ -452,6 +534,7 @@ export function endOfDay(state: SimState): DayReport {
           },
         });
         state.preorderObligation = null;
+        emitAftermath("preorder");
       } else {
         // Partial delivery — pro-rata payment adjustment (we already received cash upfront;
         // script says trust dented, not reversed; we keep the math clean:
@@ -497,6 +580,8 @@ export function endOfDay(state: SimState): DayReport {
           daySecond: state.dayElapsedSeconds,
           detail: { debtKind: debt.kind, amountPaid: debt.amountDue, message },
         });
+        debtService += debt.amountDue;
+        emitAftermath(debt.kind);
         // Do NOT push to remainingDebts — debt is cleared
       } else if (debt.kind === "payday") {
         // Payday rollover: add $7.50 fee, extend by 14 days
@@ -571,6 +656,50 @@ export function endOfDay(state: SimState): DayReport {
   // Wave 5: build active-debt summary line for the report card.
   const activeDebtSummary = buildActiveDebtSummary(state);
 
+  // ---- Ledger v1: append today's P&L row (ring-capped) --------------------
+  // state.dayNumber is still the day that just ended (incremented below).
+  const endedDay = state.dayNumber;
+  const ledgerEntry: LedgerEntry = {
+    day: endedDay,
+    revenue,
+    cogs: cogsTotal,
+    fixedCosts,
+    offlineEarned,
+    net,
+    debtService,
+    cashAfter,
+  };
+  state.ledger.push(ledgerEntry);
+  if (state.ledger.length > LEDGER_MAX_DAYS) {
+    state.ledger.splice(0, state.ledger.length - LEDGER_MAX_DAYS);
+  }
+
+  // ---- Weekly recap: every WEEK_RECAP_EVERY_DAYS days ----------------------
+  // Factual totals only — no streak framing (DARK_PATTERN_GATE A.1/A.4).
+  let weekRecap: WeekRecap | null = null;
+  if (endedDay % WEEK_RECAP_EVERY_DAYS === 0) {
+    // Rows belonging to this week (days endedDay-6 … endedDay); the ledger may
+    // hold fewer if the save predates the ledger or history was trimmed.
+    const weekRows = state.ledger.filter((e) => e.day > endedDay - WEEK_RECAP_EVERY_DAYS);
+    if (weekRows.length > 0) {
+      const totalRevenue = weekRows.reduce((sum, e) => sum + e.revenue, 0);
+      const totalNet     = weekRows.reduce((sum, e) => sum + e.net, 0);
+      const totalCogs    = weekRows.reduce((sum, e) => sum + e.cogs, 0);
+      let bestDay = weekRows[0];
+      for (const e of weekRows) {
+        if (e.net > bestDay.net) bestDay = e;
+      }
+      weekRecap = {
+        weekNumber: endedDay / WEEK_RECAP_EVERY_DAYS,
+        daysIncluded: weekRows.length,
+        totalRevenue,
+        totalNet,
+        bestDay: { day: bestDay.day, net: bestDay.net },
+        grossMarginPct: totalRevenue > 0 ? ((totalRevenue - totalCogs) / totalRevenue) * 100 : 0,
+      };
+    }
+  }
+
   // Wave 5: set rescueMode to "offer" when rescue arc is pending.
   // Clear "active" mode when all debts and obligations are resolved.
   //
@@ -616,6 +745,78 @@ export function endOfDay(state: SimState): DayReport {
     insightLine,
     activeDebtSummary,
     rescueEvents,
+    debtService,
+    weekRecap,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// balanceSheet(state) → BalanceSheet
+// Pure snapshot: assets = liabilities + equity (computed, never stored).
+// Inventory at cost (conservative): raw at base price, roasted at cost basis.
+// Derek's preorder is deferred revenue — cash received for goods not yet
+// delivered is a liability until earned (BUSINESS_CURRICULUM: profit ≠ cash).
+// ---------------------------------------------------------------------------
+
+export function balanceSheet(state: SimState): BalanceSheet {
+  const cash = state.cash;
+  const rawInventoryValue = state.rawStockLbs * RAW_PEANUT_BASE_PRICE;
+  const roastedInventoryValue = state.roastedStockLbs * state.roastedCostBasisPerLb;
+
+  const debtsOwed = state.rescueDebts.reduce((sum, d) => sum + d.amountDue, 0);
+
+  // Unearned fraction of the preorder cash (straight-line by lbs delivered).
+  let deferredRevenue = 0;
+  const ob = state.preorderObligation;
+  if (ob && ob.totalLbs > 0) {
+    const unearnedFraction = Math.max(0, 1 - ob.fulfilledLbs / ob.totalLbs);
+    deferredRevenue = ob.cashReceived * unearnedFraction;
+  }
+
+  const assetsTotal = cash + rawInventoryValue + roastedInventoryValue;
+  const liabilitiesTotal = debtsOwed + deferredRevenue;
+
+  return {
+    assets: {
+      cash,
+      rawInventoryValue,
+      roastedInventoryValue,
+      total: assetsTotal,
+    },
+    liabilities: {
+      debtsOwed,
+      deferredRevenue,
+      total: liabilitiesTotal,
+    },
+    equity: assetsTotal - liabilitiesTotal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// buyBrandCampaign(state) → SimEvent | null
+// One-time purchase of the "Legumes. Not Nuts." brand campaign (GDD B4).
+// Guards: lore threshold met, not already active, sufficient cash.
+// No timer, no expiry — the unlock waits forever once earned (no FOMO).
+// ---------------------------------------------------------------------------
+
+export function buyBrandCampaign(state: SimState): SimEvent | null {
+  if (state.brandCampaignActive) return null;                        // one-time
+  if (state.gagsSeen.size < BRAND_CAMPAIGN_LORE_THRESHOLD) return null; // not earned yet
+  if (BRAND_CAMPAIGN_COST > state.cash) return null;                 // insufficient funds
+
+  state.cash -= BRAND_CAMPAIGN_COST;
+  applyCashFloor(state);
+  state.brandCampaignActive = true;
+
+  return {
+    kind: "upgrade_purchased",
+    dayNumber: state.dayNumber,
+    daySecond: state.dayElapsedSeconds,
+    detail: {
+      upgradeType: "brand_campaign",
+      cost: BRAND_CAMPAIGN_COST,
+      priceTolerance: BRAND_CAMPAIGN_PRICE_TOLERANCE,
+    },
   };
 }
 
@@ -807,7 +1008,7 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
   // blend that would have applied. This over-estimates slightly, but the
   // maxEarnFromStock cap limits actual earnings to available stock value anyway.
   const baseDemandAtPrice = clamp(
-    DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (state.sellPrice - DEMAND_BASE_PRICE),
+    DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (state.sellPrice - effectiveBasePrice(state.brandCampaignActive)),
     0,
     DEMAND_MAX_LBS_PER_HOUR,
   );
@@ -875,10 +1076,12 @@ export function dayFactorFor(dayNumber: number): number {
  * Uses the global demand curve constants (no recipe-specific demand mult —
  * the formula is the same regardless of demand-mult scaling because the mult
  * cancels out in the first-order condition).
+ * Brand campaign: pass campaignActive so the preview reflects the shifted
+ * base price (optimum rises by half the tolerance shift).
  */
-export function optimumPrice(recipe: RecipeId): number {
+export function optimumPrice(recipe: RecipeId, campaignActive = false): number {
   const cogs = RAW_PEANUT_BASE_PRICE + RECIPES[recipe].ingredientCostPerLb;
-  const pStar = (DEMAND_BASE_LBS_PER_HOUR / DEMAND_SLOPE + DEMAND_BASE_PRICE + cogs) / 2;
+  const pStar = (DEMAND_BASE_LBS_PER_HOUR / DEMAND_SLOPE + effectiveBasePrice(campaignActive) + cogs) / 2;
   return clamp(parseFloat(pStar.toFixed(2)), PRICE_MIN, PRICE_MAX);
 }
 
@@ -893,9 +1096,10 @@ export function optimumPrice(recipe: RecipeId): number {
  * Safe to call repeatedly from UI without mutating PRNG state.
  * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × RECIPE_DEMAND_MULT[recipe]
  * Default recipe "classic_salted" preserves backward compat (mult = 1.0).
+ * Brand campaign: pass campaignActive so the HUD hint matches live demand.
  */
-export function projectedDemand(price: number, recipe: RecipeId = "classic_salted"): number {
-  const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - DEMAND_BASE_PRICE);
+export function projectedDemand(price: number, recipe: RecipeId = "classic_salted", campaignActive = false): number {
+  const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - effectiveBasePrice(campaignActive));
   return clamp(base * RECIPE_DEMAND_MULT[recipe], 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 

@@ -55,8 +55,10 @@ Each district has a distinct customer base, foot-traffic curve, permit tier, and
 **Mechanical realization:**
 
 - **Nut Facts Meter:** Each time a customer delivers the gag, a hidden "Nut Facts" meter ticks up. At thresholds (10, 20, 30, 40 gags heard — calibrated to 40-entry canon), the owner unlocks new **Comeback Lines** (dialogue variants). Early variants are tired sighs; late-game variants are dad jokes, factoids about legume cultivation, or playful "I named the truck after this exact conversation."
+  **Live source (P1):** tiers + lines in `src/data/comebacks.ts`; unlock tracking in `SimState.comebackTier`. Thresholds count UNIQUE lore entries collected (gagsSeen), the deterministic proxy for "gags heard."
 
 - **Legume Lore Collectible:** Each unique dialogue variant is a collectable "Legume Lore" entry. At mid-game (25+ collected — more than half the 40-entry set), the owner can unlock a **marketing campaign** ("Legumes Not Nuts — It's a Feature!") that flips the joke into a brand identity, granting a permanent +5% price tolerance and +15% in Boardwalk/Downtown districts.
+  **Live source (P1):** campaign constants in `src/data/economy.ts` (`BRAND_CAMPAIGN_*`); +5% implemented as a demand base-price shift; purchase via `buyBrandCampaign()`. The +15% Boardwalk/Downtown half is P2 (districts not yet live).
 
 - **Combo Bonus:** If the same customer delivers the gag in consecutive visits, a "Gag Combo" meter activates, granting +10% margin on that visit (the owner is so amused they price it higher). Combo resets if a different customer buys next, teaching: recognize regulars, foster loyalty.
 

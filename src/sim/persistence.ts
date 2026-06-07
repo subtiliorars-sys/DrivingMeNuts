@@ -15,11 +15,12 @@
  * CRIT-1: LOCAL-ONLY. No server sync without a distinct Owner Decision.
  */
 
-import type { SimState, RescueDebt, PreorderObligation } from "./types.js";
+import type { SimState, RescueDebt, PreorderObligation, LedgerEntry } from "./types.js";
 import { createState, applyOffline } from "./engine.js";
-import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS } from "../data/economy.js";
+import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS } from "../data/economy.js";
 import type { RecipeId, RoasterTier } from "../data/economy.js";
 import { RECIPES, ROASTER_EFFICIENCY } from "../data/economy.js";
+import { comebackTierFor, COMEBACK_TIERS } from "../data/comebacks.js";
 
 // ---------------------------------------------------------------------------
 // Public constants
@@ -32,7 +33,7 @@ export const SAVE_KEY = "dmn_save_v1";
 export const CORRUPT_KEY = "dmn_save_v1-corrupt";
 
 /** Bump on every breaking schema change. Migration chain lives in MIGRATIONS below. */
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 // ---------------------------------------------------------------------------
 // StorageLike interface — injectable, testable
@@ -114,6 +115,14 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
    * No schema bump needed: missing field = empty history, no migration required.
    */
   netHistory?: number[];
+  /** Schema v4: daily P&L ledger rows (ring-capped at LEDGER_MAX_DAYS). */
+  ledger?: LedgerEntry[];
+  /** Schema v4: highest comeback tier unlocked (0–4). */
+  comebackTier?: number;
+  /** Schema v4: brand campaign purchased (permanent). */
+  brandCampaignActive?: boolean;
+  /** Schema v4: rescue aftermath paths already shown (max 4 entries). */
+  aftermathSeen?: string[];
 };
 
 interface SaveMeta {
@@ -169,6 +178,33 @@ const MIGRATIONS: Record<number, Migrator> = {
         rescueMode: null,
         rescueDebts: [],
         preorderObligation: null,
+      },
+    };
+    return upgraded;
+  },
+
+  /**
+   * v3 → v4 (ledger/lore wave): add ledger, comebackTier, brandCampaignActive,
+   * aftermathSeen.
+   * - ledger [] — past days weren't recorded; an empty ledger is honest.
+   * - comebackTier is DERIVED from gagsSeen length so a player who already
+   *   collected 10+ lore entries gets their earned comebacks on first load
+   *   (no retroactive unlock toast — the tier is just set).
+   * - brandCampaignActive false, aftermathSeen [] — features didn't exist yet.
+   */
+  3: (raw) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const env = raw as any;
+    const gagsSeenCount = Array.isArray(env?.sim?.gagsSeen) ? env.sim.gagsSeen.length : 0;
+    const upgraded: SaveEnvelope = {
+      ...env,
+      schemaVersion: 4,
+      sim: {
+        ...env.sim,
+        ledger: [],
+        comebackTier: comebackTierFor(gagsSeenCount),
+        brandCampaignActive: false,
+        aftermathSeen: [],
       },
     };
     return upgraded;
@@ -301,6 +337,43 @@ function sanityCheck(env: SaveEnvelope): string | null {
       return `preorderObligation fulfilledLbs invalid: ${ob.fulfilledLbs}`;
     if (!Number.isFinite(ob.dueDayNumber) || ob.dueDayNumber < 1)
       return `preorderObligation dueDayNumber invalid: ${ob.dueDayNumber}`;
+  }
+
+  // Schema v4: ledger rows — every numeric field must be finite (an Infinity
+  // revenue row would poison week-recap totals; same crafted-import class as RT-4).
+  if (ss.ledger !== undefined) {
+    if (!Array.isArray(ss.ledger))
+      return `ledger must be an array`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const e of (ss.ledger as any[])) {
+      if (e === null || typeof e !== "object")
+        return `ledger entry invalid: ${String(e)}`;
+      for (const field of ["day", "revenue", "cogs", "fixedCosts", "offlineEarned", "net", "debtService", "cashAfter"] as const) {
+        if (!Number.isFinite(e[field]))
+          return `ledger entry ${field} invalid: ${e[field]}`;
+      }
+      if (e.day < 1) return `ledger entry day invalid: ${e.day}`;
+    }
+  }
+
+  // Schema v4: comebackTier must be an integer within the tier ladder.
+  if (ss.comebackTier !== undefined) {
+    if (!Number.isInteger(ss.comebackTier) || ss.comebackTier < 0 || ss.comebackTier > COMEBACK_TIERS.length)
+      return `comebackTier invalid: ${ss.comebackTier}`;
+  }
+
+  // Schema v4: brandCampaignActive must be a boolean when present.
+  if (ss.brandCampaignActive !== undefined && typeof ss.brandCampaignActive !== "boolean")
+    return `brandCampaignActive invalid: ${ss.brandCampaignActive}`;
+
+  // Schema v4: aftermathSeen must be an array of strings when present.
+  if (ss.aftermathSeen !== undefined) {
+    if (!Array.isArray(ss.aftermathSeen))
+      return `aftermathSeen must be an array`;
+    for (const p of ss.aftermathSeen) {
+      if (typeof p !== "string")
+        return `aftermathSeen entry invalid: ${String(p)}`;
+    }
   }
 
   return null;
@@ -440,6 +513,34 @@ export function deserialize(json: string): SimState {
     ? rawNetHistory.filter((v): v is number => typeof v === "number" && Number.isFinite(v)).slice(-14)
     : [];
 
+  // Schema v4: revive ledger (sanityCheck already verified finite fields); cap defensively.
+  const ledger: LedgerEntry[] = Array.isArray(ss.ledger)
+    ? ss.ledger.slice(-LEDGER_MAX_DAYS).map((e) => ({
+        day: Number(e.day),
+        revenue: Number(e.revenue),
+        cogs: Number(e.cogs),
+        fixedCosts: Number(e.fixedCosts),
+        offlineEarned: Number(e.offlineEarned),
+        net: Number(e.net),
+        debtService: Number(e.debtService),
+        cashAfter: Number(e.cashAfter),
+      }))
+    : [];
+
+  // Schema v4: comebackTier — if absent (defensive; migration normally sets it),
+  // derive from the revived lore count so earned comebacks aren't lost.
+  const comebackTier =
+    typeof ss.comebackTier === "number" && Number.isInteger(ss.comebackTier) && ss.comebackTier >= 0
+      ? ss.comebackTier
+      : comebackTierFor(revivedGagsSeen.size);
+
+  // Schema v4: brand campaign flag + aftermath history (defensive defaults).
+  const brandCampaignActive = ss.brandCampaignActive === true;
+  const VALID_AFTERMATH_PATHS = new Set(["loan", "credit", "payday", "preorder"]);
+  const aftermathSeen: string[] = Array.isArray(ss.aftermathSeen)
+    ? ss.aftermathSeen.filter((p): p is string => typeof p === "string" && VALID_AFTERMATH_PATHS.has(p))
+    : [];
+
   const state: SimState = {
     cash: sim.cash,
     rawStockLbs: sim.rawStockLbs,
@@ -468,6 +569,10 @@ export function deserialize(json: string): SimState {
     lifetimeEarned: Number(sim.lifetimeEarned ?? 0),
     recipesUnlocked: revivedRecipesUnlocked,
     netHistory,
+    ledger,
+    comebackTier,
+    brandCampaignActive,
+    aftermathSeen,
     rngState: sim.rngState,
   };
 

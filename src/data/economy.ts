@@ -358,3 +358,40 @@ export const RESCUE_PAYDAY_PRINCIPAL = 50;
 export const RESCUE_PAYDAY_FEE = 7.50;
 /** Path 4 — QuickNut Payday: repayment window in game-days per period. */
 export const RESCUE_PAYDAY_DUE_DAYS = 14;
+
+// ---------------------------------------------------------------------------
+// Ledger v1 — daily P&L bookkeeping  (GDD D2 end-of-day report; seed for the
+// P2 dual-ledger system referenced in GDD F)
+// ---------------------------------------------------------------------------
+
+/** Maximum LedgerEntry rows retained in SimState.ledger (ring buffer). */
+export const LEDGER_MAX_DAYS = 30;
+
+/** Weekly recap cadence: a recap is attached to every Nth day's DayReport. */
+export const WEEK_RECAP_EVERY_DAYS = 7;
+
+// ---------------------------------------------------------------------------
+// "Legumes. Not Nuts." brand campaign  (GDD B4 — the gag flipped into brand)
+//
+// Unlocks when the player has collected BRAND_CAMPAIGN_LORE_THRESHOLD unique
+// Legume Lore entries (mid-game per GDD B4: "25+ collected"). One-time
+// purchase; permanent. NOT a FOMO mechanic: no timer, no expiry, no streak —
+// the unlock waits forever once earned (DARK_PATTERN_GATE A.1/A.4 compliant).
+//
+// Effect: +5% price tolerance — customers accept a base price 5% higher, i.e.
+// the demand curve's reference price shifts from $1.20 to $1.26. This teaches
+// brand equity: identity investment raises willingness-to-pay.
+//
+// Payback honesty (stylized numbers): at the post-campaign optimum (~$1.93)
+// gross profit rises ~5% (~$11/day at full uptime) → ~3-week payback on $250.
+// (GDD B4's "+15% in Boardwalk/Downtown" is the P2 district half — deferred.)
+// ---------------------------------------------------------------------------
+
+/** Unique lore entries required before the campaign can be purchased. */
+export const BRAND_CAMPAIGN_LORE_THRESHOLD = 25;
+
+/** One-time cost of the brand campaign ($). */
+export const BRAND_CAMPAIGN_COST = 250;
+
+/** Fractional shift in the demand curve's base (reference) price. */
+export const BRAND_CAMPAIGN_PRICE_TOLERANCE = 0.05;
