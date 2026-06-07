@@ -17,7 +17,7 @@
 
 import type { SimState } from "./types.js";
 import { createState, applyOffline } from "./engine.js";
-import { OFFLINE_CAP_HOURS } from "../data/economy.js";
+import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS } from "../data/economy.js";
 import type { RecipeId, RoasterTier } from "../data/economy.js";
 import { RECIPES, ROASTER_EFFICIENCY } from "../data/economy.js";
 
@@ -196,8 +196,9 @@ function sanityCheck(env: SaveEnvelope): string | null {
     return `cash invalid: ${s.cash}`;
   if (typeof s.dayNumber !== "number" || s.dayNumber < 1)
     return `dayNumber invalid: ${s.dayNumber}`;
-  if (!Array.isArray(s.roastSlots) || s.roastSlots.length < 1)
-    return `roastSlots invalid`;
+  // W4: slots array must have between 1 and MAX_QUEUE_SLOTS entries
+  if (!Array.isArray(s.roastSlots) || s.roastSlots.length < 1 || s.roastSlots.length > MAX_QUEUE_SLOTS)
+    return `roastSlots invalid: length ${(s.roastSlots as unknown[])?.length}`;
   if (!Array.isArray(s.gagsSeen))
     return `gagsSeen must be an array (not a serialized Set {})`;
   if (typeof s.unitsSoldLifetime !== "number" || s.unitsSoldLifetime < 0)

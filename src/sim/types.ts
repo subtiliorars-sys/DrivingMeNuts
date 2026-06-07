@@ -142,7 +142,8 @@ export type SimEventKind =
   | "day_ended"
   | "offline_applied"
   | "rescue_arc_triggered"
-  | "gag";
+  | "gag"
+  | "upgrade_purchased";
   // NOTE W15: "recipe_unlocked" SimEvent was specced in RECIPE_BATCH_UI.md §3e but
   // never emitted from endOfDay(). GameScene detects new unlocks via Set-diff
   // (unlockedBefore snapshot vs post-endOfDay state.recipesUnlocked) — that is

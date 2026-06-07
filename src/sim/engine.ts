@@ -21,7 +21,11 @@ import {
   RECIPE_DEMAND_MULT,
   RECIPE_UNLOCK_THRESHOLD,
   ROASTER_EFFICIENCY,
+  ROASTER_TIER_ORDER,
+  ROASTER_UPGRADE_COST,
   STARTING_QUEUE_SLOTS,
+  MAX_QUEUE_SLOTS,
+  QUEUE_SLOT_COST,
   BATCH_MIN_LBS,
   BATCH_MAX_LBS,
   PRICE_MIN,
@@ -40,6 +44,8 @@ import {
   OFFLINE_CAP_HOURS,
   RESCUE_ARC_CASH_THRESHOLD,
   GAG_EVERY_N_LBS_SOLD,
+  DAY_FACTOR,
+  DAY_NAMES,
 } from "../data/economy.js";
 
 // default blended multiplier = classic_salted = 1.0
@@ -84,19 +90,21 @@ function cogsPerLb(recipe: RecipeId): number {
 }
 
 /**
- * Demand in lbs/hour at a given price, scaled by the provided demand multiplier.
- * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × demandMult
+ * Demand in lbs/hour at a given price, scaled by the provided demand multiplier
+ * and the day-of-week factor.
+ * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × demandMult × dayFactor
  * Clamped to [0, DEMAND_MAX_LBS_PER_HOUR].
  * Small Gaussian-ish jitter applied via PRNG so repeat ticks aren't exactly equal.
  *
  * W2: tick() passes state.roastedDemandMultBlended as demandMult so the blended-pool
  * recipe multiplier is applied to live sales. Default 1.0 preserves backward compat.
+ * W4: tick() passes dayFactorFor(state.dayNumber) so weekday patterns apply.
  */
-function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0): number {
+function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0, dayFactor = 1.0): number {
   const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - DEMAND_BASE_PRICE);
   // ±10% jitter (two uniform samples averaged → triangular distribution)
   const jitter = ((nextRand(state) + nextRand(state)) / 2 - 0.5) * 0.20;
-  return clamp(base * (1 + jitter) * demandMult, 0, DEMAND_MAX_LBS_PER_HOUR);
+  return clamp(base * (1 + jitter) * demandMult * dayFactor, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 /**
@@ -224,7 +232,8 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
   if (state.roastedStockLbs > 0) {
     // Convert lbs/hour demand to lbs/second, then scale by dt.
     // W2: pass blended demand multiplier so mixed inventory sells at weighted velocity.
-    const lbsPerSec = demandLbsPerHour(state.sellPrice, state, state.roastedDemandMultBlended) / 3_600;
+    // W4: apply day-of-week factor (visible/predictable; no FOMO framing).
+    const lbsPerSec = demandLbsPerHour(state.sellPrice, state, state.roastedDemandMultBlended, dayFactorFor(state.dayNumber)) / 3_600;
     const demandedLbs = lbsPerSec * dtSeconds;
     const soldLbs = Math.min(demandedLbs, state.roastedStockLbs);
 
@@ -403,6 +412,11 @@ export function endOfDay(state: SimState): DayReport {
 
   const cashAfter = state.cash;
 
+  // W4: pass day-factor context so insight line can reference it (factual, not FOMO).
+  // state.dayNumber has not been incremented yet here, so it is the day that just ended.
+  const todayFactor = dayFactorFor(state.dayNumber);
+  const todayName = DAY_NAMES[((state.dayNumber - 1) % 7 + 7) % 7];
+
   const insightLine = buildInsightLine({
     revenue,
     grossMarginPct,
@@ -410,6 +424,8 @@ export function endOfDay(state: SimState): DayReport {
     roastedStockLbs: state.roastedStockLbs,
     fixedCosts,
     net,
+    dayFactor: todayFactor,
+    dayName: todayName,
   });
 
   // Reset day stats and advance day counter
@@ -501,6 +517,22 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
 }
 
 // ---------------------------------------------------------------------------
+// dayFactorFor(dayNumber) → day-of-week demand multiplier
+// Pure helper; deterministic (no PRNG). Exported for HUD/report use.
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the DAY_FACTOR entry for a given 1-indexed game day.
+ * dayNumber 1 = Monday (index 0), 2 = Tuesday (index 1), etc.
+ * Wraps weekly via modulo so it works for any day count.
+ */
+export function dayFactorFor(dayNumber: number): number {
+  // dayNumber is 1-indexed; (dayNumber - 1) % 7 maps it to Mon=0 … Sun=6
+  const idx = ((dayNumber - 1) % 7 + 7) % 7; // safe modulo for any integer
+  return DAY_FACTOR[idx];
+}
+
+// ---------------------------------------------------------------------------
 // projectedDemand(price) → lbs/hour (deterministic, no jitter)
 // Pure utility for the price-stepper UI demand hint.
 // Uses the same base formula as demandLbsPerHour() but without PRNG jitter.
@@ -518,6 +550,70 @@ export function projectedDemand(price: number, recipe: RecipeId = "classic_salte
 }
 
 // ---------------------------------------------------------------------------
+// buyRoasterUpgrade(state) → SimEvent | null
+// Purchase the next roaster tier. Pure function; mutates state only on success.
+// Guards: sufficient cash, next tier exists, NaN-guard, cash floor respected.
+// ---------------------------------------------------------------------------
+
+export function buyRoasterUpgrade(state: SimState): SimEvent | null {
+  const currentIdx = ROASTER_TIER_ORDER.indexOf(state.roasterTier);
+  // NaN-guard: indexOf returns -1 if tier is somehow invalid
+  if (currentIdx < 0) return null;
+  const nextIdx = currentIdx + 1;
+  if (nextIdx >= ROASTER_TIER_ORDER.length) return null; // already at max tier
+
+  const nextTier = ROASTER_TIER_ORDER[nextIdx];
+  const cost = ROASTER_UPGRADE_COST[nextTier];
+  if (!Number.isFinite(cost) || cost <= 0) return null; // safety: no zero-cost upgrades
+
+  if (cost > state.cash) return null; // insufficient funds — no state change
+
+  state.cash -= cost;
+  applyCashFloor(state);
+  const prevTier = state.roasterTier;
+  state.roasterTier = nextTier;
+
+  return {
+    kind: "upgrade_purchased",
+    dayNumber: state.dayNumber,
+    daySecond: state.dayElapsedSeconds,
+    detail: { upgradeType: "roaster", prevTier, nextTier, cost },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// buyQueueSlot(state) → SimEvent | null
+// Purchase one additional roast queue slot. Pure function; mutates on success.
+// Guards: sufficient cash, below MAX_QUEUE_SLOTS, NaN-guard, cash floor respected.
+// ---------------------------------------------------------------------------
+
+export function buyQueueSlot(state: SimState): SimEvent | null {
+  const currentSlots = state.roastSlots.length;
+  if (currentSlots >= MAX_QUEUE_SLOTS) return null; // already at cap
+
+  // QUEUE_SLOT_COST is 0-indexed by purchase number (0 = buying slot 2, 1 = buying slot 3)
+  const purchaseIdx = currentSlots - STARTING_QUEUE_SLOTS;
+  const cost = QUEUE_SLOT_COST[purchaseIdx];
+  if (cost === undefined || !Number.isFinite(cost) || cost <= 0) return null;
+
+  if (cost > state.cash) return null; // insufficient funds — no state change
+
+  state.cash -= cost;
+  applyCashFloor(state);
+
+  // Add a new empty slot with the next sequential id
+  const newSlotId = currentSlots; // 0-indexed, so length == next id
+  state.roastSlots.push(emptySlot(newSlotId));
+
+  return {
+    kind: "upgrade_purchased",
+    dayNumber: state.dayNumber,
+    daySecond: state.dayElapsedSeconds,
+    detail: { upgradeType: "queue_slot", newSlotCount: state.roastSlots.length, cost },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Internal: generate insight line for end-of-day report card.
 // Rules: questions not shame; one per day; maps to a curriculum concept.
 // ---------------------------------------------------------------------------
@@ -529,6 +625,10 @@ interface InsightParams {
   roastedStockLbs: number;
   fixedCosts: number;
   net: number;
+  /** Day-of-week factor applied today (from DAY_FACTOR table). */
+  dayFactor: number;
+  /** Human-readable day name for insight line. */
+  dayName: string;
 }
 
 function buildInsightLine(p: InsightParams): string {
@@ -549,6 +649,14 @@ function buildInsightLine(p: InsightParams): string {
   }
   if (p.unitsSold < 5) {
     return `Only ${p.unitsSold.toFixed(1)} lbs sold. Was the truck open long enough? Make sure your queue has roasted stock ready before customers arrive.`;
+  }
+  // W4: day-factor insight — factual, never FOMO-framed.
+  // Saturday (factor 1.25) or Friday/Sunday (1.10): note it as context, not pressure.
+  if (p.dayFactor >= 1.20) {
+    return `${p.dayName} crowd — ${p.grossMarginPct.toFixed(0)}% margin, $${p.net.toFixed(2)} net. Weekend foot traffic runs ~${Math.round(p.dayFactor * 100)}% of baseline.`;
+  }
+  if (p.dayFactor >= 1.05) {
+    return `${p.dayName} boost — foot traffic at ~${Math.round(p.dayFactor * 100)}% of baseline today. ${p.grossMarginPct.toFixed(0)}% margin, $${p.net.toFixed(2)} net.`;
   }
   return `Solid day: ${p.grossMarginPct.toFixed(0)}% gross margin, $${p.net.toFixed(2)} net. Keep supply steady to maintain momentum.`;
 }
