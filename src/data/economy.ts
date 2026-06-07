@@ -217,3 +217,15 @@ export const OFFLINE_CAP_HOURS = 24;
  * Evaluated only once per day at endOfDay — NOT on every purchase or tick.
  */
 export const RESCUE_ARC_CASH_THRESHOLD = 25;
+
+// ---------------------------------------------------------------------------
+// Legume Lore gag mechanic  (Wave 2)
+// One gag fires roughly every GAG_EVERY_N_LBS_SOLD lbs of cumulative sales.
+//
+// Calibration (14-hr day at default price ~$1.50, ~20 lbs/hr):
+//   Expected daily sales ≈ 280 lbs  →  280 / 80 ≈ 3.5 gags per day.
+//   Bounds guaranteed by tests: ≥1 and ≤6 on a full default-price day.
+// ---------------------------------------------------------------------------
+
+/** Emit one 'gag' SimEvent per this many cumulative lbs sold (whole-game counter). */
+export const GAG_EVERY_N_LBS_SOLD = 80;
