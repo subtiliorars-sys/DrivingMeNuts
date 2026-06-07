@@ -17,7 +17,7 @@
 
 import type { SimState, RescueDebt, PreorderObligation, LedgerEntry } from "./types.js";
 import { createState, applyOffline, checkAchievements } from "./engine.js";
-import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS, RAW_PEANUT_BASE_PRICE } from "../data/economy.js";
+import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS, RAW_PEANUT_BASE_PRICE, WEATHER_DEFAULT_SEED } from "../data/economy.js";
 import type { RecipeId, RoasterTier } from "../data/economy.js";
 import { RECIPES, ROASTER_EFFICIENCY } from "../data/economy.js";
 import { comebackTierFor, COMEBACK_TIERS } from "../data/comebacks.js";
@@ -136,6 +136,8 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   supplierLbsPurchased?: number;
   /** RT6-1 (additive-optional): weighted-avg price paid per lb of raw stock. Absent → base price. */
   rawCostBasisPerLb?: number;
+  /** Weather foundation (additive-optional): per-save weather seed. Absent → WEATHER_DEFAULT_SEED. */
+  weatherSeed?: number;
 };
 
 interface SaveMeta {
@@ -434,6 +436,12 @@ function sanityCheck(env: SaveEnvelope): string | null {
       return `rawCostBasisPerLb invalid: ${ss.rawCostBasisPerLb}`;
   }
 
+  // Weather foundation: weatherSeed must be a finite non-negative number.
+  if (ss.weatherSeed !== undefined) {
+    if (!Number.isFinite(ss.weatherSeed) || ss.weatherSeed < 0)
+      return `weatherSeed invalid: ${ss.weatherSeed}`;
+  }
+
   return null;
 }
 
@@ -643,6 +651,12 @@ export function deserialize(json: string): SimState {
       ? (sim as SerializedSimState).rawCostBasisPerLb!
       : RAW_PEANUT_BASE_PRICE;
 
+  // Weather foundation: revive weatherSeed; default constant when absent/invalid.
+  const wSeed = (sim as SerializedSimState).weatherSeed;
+  const weatherSeed = typeof wSeed === "number" && Number.isFinite(wSeed) && wSeed >= 0
+    ? wSeed
+    : WEATHER_DEFAULT_SEED;
+
   const state: SimState = {
     cash: sim.cash,
     rawStockLbs: sim.rawStockLbs,
@@ -662,6 +676,7 @@ export function deserialize(json: string): SimState {
     sellPrice: sim.sellPrice,
     dayElapsedSeconds: sim.dayElapsedSeconds,
     dayNumber: sim.dayNumber,
+    weatherSeed,
     dayStats,
     rescueArcPending: sim.rescueArcPending,
     rescueMode: rescueModeCoerced,

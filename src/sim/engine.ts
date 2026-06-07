@@ -259,6 +259,9 @@ export function createState(seed = 1): SimState {
     sellPrice: DEFAULT_SELL_PRICE,
     dayElapsedSeconds: 0,
     dayNumber: 1,
+    // Weather calendar seed — same as the rng seed so different games get
+    // different weather; deterministic per save. (Not wired into demand yet.)
+    weatherSeed: seed >>> 0,
     dayStats: { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0, offlineEarned: 0 },
     rescueArcPending: false,
     rescueMode: null,

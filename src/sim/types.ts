@@ -78,6 +78,15 @@ export interface SimState {
   /** Day number (1-indexed). Increments each endOfDay call. */
   dayNumber: number;
 
+  // ---- Weather (foundation — GDD C3; not yet wired into demand) --------
+  /**
+   * Per-save seed for the deterministic weather calendar (economy.weatherForDay).
+   * Stable for a save, varies between saves. Additive-optional in the save
+   * (absent → WEATHER_DEFAULT_SEED). Has NO gameplay effect until weather is
+   * wired into the demand curve (deferred to an attended session).
+   */
+  weatherSeed: number;
+
   // ---- Cumulative day stats (reset at endOfDay) -----------------------
   dayStats: DayStats;
 
