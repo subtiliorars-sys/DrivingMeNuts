@@ -145,11 +145,10 @@ Upgrades are purchased with in-game earnings and compound over time. They map to
 
 When the player closes the game, the truck continues earning **passively** at a reduced rate:
 
-- **Offline earn rate:** 20% of peak on-game earn rate, capped at `$100/min offline`
+- **Offline earn rate:** 20% of peak on-game earn rate, capped at `$100/hour offline` (owner-ratified 2026-06-07)
   (soft cap prevents AFK abuse).
-  **OPEN OWNER DECISION:** The implemented constant (`OFFLINE_CAP_DOLLARS_PER_HOUR` in
-  economy.ts) is $100/hr — 60× stricter than "$100/min". Safe in direction but diverges
-  from this spec. Do not resolve until owner ratifies which value is canon.
+  **RESOLVED (owner-ratified 2026-06-07):** the implemented constant
+  (`OFFLINE_CAP_DOLLARS_PER_HOUR` in economy.ts) = $100/hr is canon; docs match code.
 - **Offline battery:** Earnings accrue for up to 24 hours offline. After 24 hours, the truck "closes for maintenance" and earnings stop.
 - **Return message:** "Truck was idle for [X] hours. Made $[amount]. Stock depleted [%]." Teaches: time value and inventory risk.
 

@@ -14,7 +14,7 @@ Every file committed to `assets/` gets a row in the table below.
 
 **Note — programmer-art rects drawn in code:** colored-rectangle stand-ins that exist only in TypeScript/Phaser draw calls need no entry here. Only committed image/audio files are tracked.
 
-**Platform AI-disclosure stance:** Whether to disclose AI-assisted or AI-generated assets in game credits, on Steam, or on itch.io is an open **Owner Decision** (see RISK_REGISTER.md row B6). Mark method honestly now; the disclosure question is deferred until before any public release.
+**Platform AI-disclosure stance:** **OWNER-RATIFIED 2026-06-07: DISCLOSE OPENLY.** This PROVENANCE.md ships with the game; store pages and in-game credits state AI-assisted where applicable. Mark method honestly on every entry.
 
 ---
 

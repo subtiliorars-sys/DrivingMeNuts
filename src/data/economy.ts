@@ -224,7 +224,7 @@ export const OFFLINE_EARN_RATE_FRACTION = 0.20;
 
 /**
  * Absolute ceiling on offline earnings per hour ($).
- * NOTE: canon docs (GDD C5) cite "$100/min" as the ceiling; this constant is
+ * NOTE: $100/hour RATIFIED by owner 2026-06-07 (GDD C5 + DARK_PATTERN_GATE B.2 updated); this constant is
  * deliberately 60× stricter ($100/hr) to limit offline catch-up at P1 scale.
  * Reconcile with canon before P2 wires the full offline system.
  */

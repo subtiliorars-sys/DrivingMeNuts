@@ -23,3 +23,6 @@ __pycache__/
 *.log
 tmp/
 scratch/
+
+# Local AI-tool drops (fleet ruling 2026-06-07)
+.cursor/

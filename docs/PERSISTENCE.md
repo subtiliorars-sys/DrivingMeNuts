@@ -229,12 +229,12 @@ Is the offline-earnings rate 20% of peak or less, capped at $100/hr, with 24-hr 
 - `OFFLINE_CAP_DOLLARS_PER_HOUR = 100` (economy.ts) — code is $100/hr
 - `OFFLINE_CAP_HOURS = 24` (economy.ts) — 24-hr cutoff: PASS
 
-However: the gate text (DARK_PATTERN_GATE §D, GDD C5) cites "$100/min" as the cap;
+RESOLVED 2026-06-07: owner ratified $100/hr; gate + GDD edited to match code.
 the implemented constant is `$100/hr` — 60× stricter. The code is SAFE in direction
 (stricter is not a dark pattern), but it diverges from the written spec.
 
 **This is an OPEN owner decision per gate §D.** Do not mark as PASS without owner
-ratification of which value ($100/min or $100/hr) is the intended canon. Once ratified,
+(Historical note: pre-ratification the docs cited $100/min.) Once ratified,
 update both the GDD and this cert, then mark PASS.
 
 **Interim ruling:** implementation proceeds with $100/hr (conservative) until owner
