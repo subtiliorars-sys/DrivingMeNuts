@@ -165,6 +165,10 @@ is the joke.
 
 ### Mascot recommendation
 
+> **OWNER RULING 2026-06-07: Legsy SELECTED as primary mascot; Vida confirmed as
+> loyalty/reputation-UI secondary.** Trademark search (USPTO TESS for both names)
+> remains open before any public build — see RISK_REGISTER B3.
+
 **Primary recommendation: Legsy.**
 
 Legsy's name carries the joke in a single word ("leg" in legume), the silhouette is
