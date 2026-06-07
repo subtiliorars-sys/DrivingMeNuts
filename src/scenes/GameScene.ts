@@ -38,12 +38,10 @@ import {
 } from "../sim/engine.js";
 import type { SimState, DayReport } from "../sim/types.js";
 import { tryLoad, trySave, resetSave } from "../sim/persistence.js";
-import { LORE_BY_ID, LORE_LINES } from "../data/lore.js";
+import { LORE_BY_ID } from "../data/lore.js";
 
-// Denominator for the HUD lore counter: use the count of currently-loaded lines
-// (early tier only in P1). Grows automatically as more tiers are added to lore.ts.
-// LORE_TOTAL_COUNT (40) is kept for future use when all tiers are present.
-const LORE_LOADED_COUNT = LORE_LINES.length;
+// LORE_LOADED_COUNT removed — denominator is now computed dynamically in updateHUD()
+// based on state.dayNumber and LORE_TIER_DAY_GATE (honest: shows unlocked pool size).
 import {
   DAY_DURATION_SECONDS,
   DEFAULT_SELL_PRICE,
@@ -53,9 +51,12 @@ import {
   BATCH_MAX_LBS,
   RAW_PEANUT_BASE_PRICE,
   RECIPES,
+  RECIPE_UNLOCK_THRESHOLD,
   bulkDiscountFor,
   SIM_TIME_SCALE,
+  type RecipeId,
 } from "../data/economy.js";
+import { LORE_LINES, LORE_TIER_DAY_GATE } from "../data/lore.js";
 
 // ---------------------------------------------------------------------------
 // Palette A constants (integers for Phaser's 0xRRGGBB format)
@@ -198,6 +199,13 @@ export class GameScene extends Phaser.Scene {
   private supplyModalOpen = false;
   private reportOpen = false;
 
+  // ---- Recipe/Batch modal state ------------------------------------------
+  private roastModalGroup?: Phaser.GameObjects.Group;
+  private roastModalOpen = false;
+  private roastModalSlotIndex = 0;
+  private roastModalRecipe: RecipeId = "classic_salted";
+  private roastModalBatchLbs = 10;
+
   // ---- Supply modal working qty -------------------------------------------
   private supplyQty = 50; // default qty for supply modal
 
@@ -332,7 +340,8 @@ export class GameScene extends Phaser.Scene {
 
     // ---- Lore counter (Wave 2: collection tease, no pressure framing) -------
     // Positioned below the top bar at the right edge; visible but unobtrusive.
-    this.txtLoreCounter = this.add.text(W - 6, 18, `Lore: 0/${LORE_LOADED_COUNT}`, {
+    // Denominator = unlocked pool size (honest; grows with dayNumber tier gates).
+    this.txtLoreCounter = this.add.text(W - 6, 18, "Lore: 0/6", {
       ...TEXT_STYLE_LABEL, color: "#C0A060",
     }).setOrigin(1, 0);
 
@@ -374,7 +383,7 @@ export class GameScene extends Phaser.Scene {
 
       const slotIndex = i;
       slotRect.on("pointerdown", () => {
-        if (!this.reportOpen && !this.supplyModalOpen) {
+        if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen) {
           this.handleSlotClick(slotIndex);
         }
       });
@@ -451,7 +460,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(W - 50, dpY + 5, "END DAY", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
-    endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen) this.triggerEndOfDay(); });
+    endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen) this.triggerEndOfDay(); });
 
     // ---- Reset Save button (spec req; tucked in bottom-left corner) --------
     // Player-initiated only — confirm dialog prevents accidents. (DARK_PATTERN_GATE §B.3)
@@ -460,7 +469,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.add.text(28, dpY + 5, "RESET", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
     resetBtn.on("pointerdown", () => {
-      if (this.reportOpen || this.supplyModalOpen) return;
+      if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen) return;
       this.showResetConfirm();
     });
 
@@ -476,7 +485,7 @@ export class GameScene extends Phaser.Scene {
     // Track wall-clock playtime (excludes offline time; used by trySave meta)
     this.playtimeSeconds += delta / 1_000;
 
-    if (this.reportOpen || this.supplyModalOpen) return;
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -525,9 +534,13 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private updateHUD(): void {
+    // Compute unlocked lore pool size (denominator for collection counter).
+    const unlockedLoreCount = LORE_LINES.filter(
+      (l) => this.state.dayNumber >= LORE_TIER_DAY_GATE[l.tier]
+    ).length;
     this.txtCash.setText(`Cash: $${this.state.cash.toFixed(2)}`);
     this.txtDay.setText(`Day ${this.state.dayNumber}`);
-    this.txtLoreCounter.setText(`Lore: ${this.state.gagsSeen.size}/${LORE_LOADED_COUNT}`);
+    this.txtLoreCounter.setText(`Lore: ${this.state.gagsSeen.size}/${unlockedLoreCount}`);
     this.txtRawStock.setText(`Raw: ${this.state.rawStockLbs.toFixed(1)} lbs`);
     this.txtRoastedStock.setText(`Roasted: ${this.state.roastedStockLbs.toFixed(1)} lbs`);
     this.txtPrice.setText(`$${this.state.sellPrice.toFixed(2)}`);
@@ -614,22 +627,295 @@ export class GameScene extends Phaser.Scene {
   private handleSlotClick(slotIndex: number): void {
     const slot = this.state.roastSlots[slotIndex];
     if (slot.status === "empty") {
-      // P1: always classic_salted, default 10 lbs
-      // Check if we have enough raw stock and cash
       if (this.state.rawStockLbs < BATCH_MIN_LBS) {
         this.showToast("No raw stock — buy peanuts first!");
         return;
       }
-      const batchLbs = Math.min(10, this.state.rawStockLbs, BATCH_MAX_LBS);
-      const ev = startRoast(this.state, slotIndex, "classic_salted", batchLbs);
-      if (!ev) {
-        this.showToast("Not enough cash for ingredients!");
-      }
+      // Open recipe/batch selection modal (P1.5 spec §2)
+      this.openRoastModal(slotIndex);
     } else if (slot.status === "ready") {
       // Dismiss the "ready" visual — stock already added to roastedStockLbs on ready event
       // No state change needed; batch sits until end of day naturally
       this.showToast(`${slot.batchLbs} lbs ready — selling automatically!`);
     }
+    this.updateHUD();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Roast modal — Recipe/Batch selection (RECIPE_BATCH_UI.md §2)
+  // ---------------------------------------------------------------------------
+
+  private openRoastModal(slotIndex: number): void {
+    if (this.roastModalOpen) return;
+    this.roastModalOpen = true;
+    this.roastModalSlotIndex = slotIndex;
+    this.roastModalRecipe = "classic_salted";
+    this.roastModalBatchLbs = Math.min(10, this.state.rawStockLbs, BATCH_MAX_LBS);
+    if (this.roastModalBatchLbs < BATCH_MIN_LBS) this.roastModalBatchLbs = BATCH_MIN_LBS;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const mW = 300, mH = 220;
+    const mX = (W - mW) / 2;
+    const mY = (H - mH) / 2;
+
+    this.roastModalGroup = this.add.group();
+
+    // Backdrop
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.55)
+      .setInteractive();
+    this.roastModalGroup.add(backdrop);
+
+    // Panel
+    const panel = this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG)
+      .setStrokeStyle(2, P.PANEL_BORDER);
+    this.roastModalGroup.add(panel);
+
+    // Header
+    this.roastModalGroup.add(
+      this.add.text(mX + 6, mY + 6, `ROAST SLOT ${slotIndex + 1}`, TEXT_STYLE_HEADER)
+    );
+
+    // Close button [×]
+    const closeBtn = this.add.rectangle(mX + mW - 12, mY + 10, 16, 14, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.roastModalGroup.add(closeBtn);
+    this.roastModalGroup.add(
+      this.add.text(mX + mW - 12, mY + 10, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    closeBtn.on("pointerdown", () => this.closeRoastModal());
+
+    // Divider
+    this.roastModalGroup.add(this.add.rectangle(mX + mW / 2, mY + 20, mW - 8, 1, P.PANEL_BORDER));
+
+    // ---- Recipe section ----
+    this.roastModalGroup.add(this.add.text(mX + 6, mY + 24, "RECIPE", TEXT_STYLE_LABEL));
+
+    const RECIPE_IDS: RecipeId[] = ["classic_salted", "honey_cinnamon", "ghost_pepper"];
+    const RECIPE_DISPLAY: Record<RecipeId, string> = {
+      classic_salted: "Classic Salted",
+      honey_cinnamon: "Honey Cinnamon",
+      ghost_pepper:   "Ghost Pepper",
+    };
+
+    // Recipe row y-positions
+    const recipeRowY: Record<RecipeId, number> = {
+      classic_salted: mY + 34,
+      honey_cinnamon: mY + 46,
+      ghost_pepper:   mY + 58,
+    };
+
+    // Radio-style indicator circles (filled when selected)
+    const radioCircles: Record<RecipeId, Phaser.GameObjects.Arc> = {} as Record<RecipeId, Phaser.GameObjects.Arc>;
+
+    const cogsForRecipe = (id: RecipeId): number =>
+      RAW_PEANUT_BASE_PRICE + RECIPES[id].ingredientCostPerLb;
+
+    // Preview text objects (updated on recipe/batch change)
+    const previewLines: Phaser.GameObjects.Text[] = [];
+
+    const refreshPreview = (): void => {
+      const cogs = cogsForRecipe(this.roastModalRecipe);
+      const revenue1 = this.state.sellPrice * this.roastModalBatchLbs;
+      const cogsTotal = cogs * this.roastModalBatchLbs;
+      const margin1 = this.state.sellPrice > 0
+        ? ((this.state.sellPrice - cogs) / this.state.sellPrice) * 100
+        : 0;
+      // Honey Cinnamon optimal price hint from spec: p* ≈ $1.95; generic: highlight current price
+      const optPrice = this.state.sellPrice;
+      const demandHint = projectedDemand(optPrice, this.roastModalRecipe);
+      const roastMins = (RECIPES[this.roastModalRecipe].roastSecondsPerLbTinPan * this.roastModalBatchLbs) / 60;
+
+      const marginColor = margin1 >= 60 ? "#4A7C4E" : margin1 >= 45 ? "#C08A00" : "#C0392B";
+
+      if (previewLines.length >= 5) {
+        previewLines[0].setText(`COGS total: $${cogsTotal.toFixed(2)}  Roast: ${roastMins.toFixed(0)} min (sim)`);
+        previewLines[1].setText(`At $${this.state.sellPrice.toFixed(2)}/lb: Rev $${revenue1.toFixed(2)}  Margin ${margin1.toFixed(0)}%`);
+        previewLines[1].setStyle({ ...TEXT_STYLE_LABEL, color: marginColor });
+        previewLines[2].setText(`Demand hint: ~${demandHint.toFixed(0)} lbs/hr at your price`);
+        previewLines[3].setText(`COGS/lb: $${cogs.toFixed(2)}`);
+      }
+
+      // Update radio circles
+      for (const id of RECIPE_IDS) {
+        const circle = radioCircles[id];
+        if (circle) {
+          if (id === this.roastModalRecipe) {
+            circle.setFillStyle(P.AWNING);
+          } else {
+            circle.setFillStyle(0xAAAAAA);
+          }
+        }
+      }
+
+      // Update batch size text
+      if (batchSizeText) batchSizeText.setText(`${this.roastModalBatchLbs} lbs`);
+    };
+
+    // Declare batchSizeText early (used in refreshPreview closure)
+    let batchSizeText: Phaser.GameObjects.Text | null = null;
+
+    for (const id of RECIPE_IDS) {
+      const ry = recipeRowY[id];
+      const unlocked = this.state.recipesUnlocked.has(id);
+      const cogs = cogsForRecipe(id);
+      const textColor = unlocked ? "#2C2416" : "#999977";
+      const threshold = RECIPE_UNLOCK_THRESHOLD[id];
+      const lockLabel = unlocked
+        ? `$${cogs.toFixed(2)}/lb`
+        : `locked — earn $${threshold.toFixed(0)} lifetime`;
+
+      // Radio indicator
+      const radio = this.add.circle(mX + 12, ry + 4, 4, 0xAAAAAA)
+        .setStrokeStyle(1, P.PANEL_BORDER);
+      this.roastModalGroup.add(radio);
+      radioCircles[id] = radio;
+
+      const recipeTxt = this.add.text(mX + 22, ry, `${RECIPE_DISPLAY[id]}  ${lockLabel}`, {
+        ...TEXT_STYLE_LABEL, color: textColor,
+      });
+      this.roastModalGroup.add(recipeTxt);
+
+      if (unlocked) {
+        // Clickable row background for selection
+        const rowHit = this.add.rectangle(mX + mW / 2, ry + 4, mW - 12, 11, 0x000000, 0)
+          .setInteractive({ cursor: "pointer" });
+        this.roastModalGroup.add(rowHit);
+        rowHit.on("pointerdown", () => {
+          this.roastModalRecipe = id;
+          refreshPreview();
+        });
+        rowHit.on("pointerover", () => rowHit.setAlpha(0.15));
+        rowHit.on("pointerout",  () => rowHit.setAlpha(0));
+      }
+    }
+
+    // Set initial radio fill for classic_salted
+    radioCircles["classic_salted"].setFillStyle(P.AWNING);
+
+    // Divider
+    const divY1 = mY + 72;
+    this.roastModalGroup.add(this.add.rectangle(mX + mW / 2, divY1, mW - 8, 1, P.PANEL_BORDER));
+
+    // ---- Batch size section ----
+    this.roastModalGroup.add(this.add.text(mX + 6, divY1 + 4, "BATCH SIZE", TEXT_STYLE_LABEL));
+
+    const maxBatch = Math.min(BATCH_MAX_LBS, Math.floor(this.state.rawStockLbs));
+    const quickPicks = [10, 25, 50].filter(n => n <= maxBatch);
+    // Always include at least min batch
+    if (quickPicks.length === 0) quickPicks.push(BATCH_MIN_LBS);
+
+    let bx = mX + 6;
+    const batchBtnY = divY1 + 16;
+
+    for (const qty of quickPicks) {
+      const btn = this.add.rectangle(bx + 16, batchBtnY + 6, 32, 14, P.AWNING)
+        .setStrokeStyle(1, P.PANEL_BORDER)
+        .setInteractive({ cursor: "pointer" });
+      this.roastModalGroup.add(btn);
+      const t = this.add.text(bx + 16, batchBtnY + 6, `${qty}lb`, {
+        fontSize: "7px", color: "#2C2416", fontFamily: "monospace",
+      }).setOrigin(0.5);
+      this.roastModalGroup.add(t);
+      btn.on("pointerdown", () => {
+        this.roastModalBatchLbs = qty;
+        refreshPreview();
+      });
+      btn.on("pointerover", () => btn.setAlpha(0.8));
+      btn.on("pointerout",  () => btn.setAlpha(1));
+      bx += 38;
+    }
+
+    // Custom qty stepper
+    const customLabel = this.add.text(bx + 4, batchBtnY, "Custom:", TEXT_STYLE_LABEL);
+    this.roastModalGroup.add(customLabel);
+    batchSizeText = this.add.text(bx + 50, batchBtnY, `${this.roastModalBatchLbs} lbs`, TEXT_STYLE_LABEL);
+    this.roastModalGroup.add(batchSizeText);
+
+    const stepDown = this.add.rectangle(bx + 50, batchBtnY + 14, 20, 12, 0xAAAAAA)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.roastModalGroup.add(stepDown);
+    this.roastModalGroup.add(
+      this.add.text(bx + 50, batchBtnY + 14, "▼", { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    stepDown.on("pointerdown", () => {
+      this.roastModalBatchLbs = Math.max(BATCH_MIN_LBS, this.roastModalBatchLbs - 5);
+      refreshPreview();
+    });
+
+    const stepUp = this.add.rectangle(bx + 76, batchBtnY + 14, 20, 12, 0xAAAAAA)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.roastModalGroup.add(stepUp);
+    this.roastModalGroup.add(
+      this.add.text(bx + 76, batchBtnY + 14, "▲", { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    stepUp.on("pointerdown", () => {
+      this.roastModalBatchLbs = Math.min(maxBatch, this.roastModalBatchLbs + 5);
+      refreshPreview();
+    });
+
+    // Divider
+    const divY2 = divY1 + 34;
+    this.roastModalGroup.add(this.add.rectangle(mX + mW / 2, divY2, mW - 8, 1, P.PANEL_BORDER));
+
+    // ---- Preview section ----
+    this.roastModalGroup.add(this.add.text(mX + 6, divY2 + 4, "PREVIEW", TEXT_STYLE_LABEL));
+
+    const py = divY2 + 14;
+    const p0 = this.add.text(mX + 6, py, "", TEXT_STYLE_LABEL);
+    const p1 = this.add.text(mX + 6, py + 11, "", TEXT_STYLE_LABEL);
+    const p2 = this.add.text(mX + 6, py + 22, "", { ...TEXT_STYLE_LABEL, color: "#4A7C4E" });
+    const p3 = this.add.text(mX + 6, py + 33, "", TEXT_STYLE_LABEL);
+    const p4 = this.add.text(mX + 6, py + 44, "", TEXT_STYLE_LABEL); // error line
+    previewLines.push(p0, p1, p2, p3, p4);
+    for (const pl of previewLines) this.roastModalGroup.add(pl);
+
+    // Initial preview render
+    refreshPreview();
+
+    // ---- Buttons ----
+    const btnY = mY + mH - 14;
+
+    const cancelBtn = this.add.rectangle(mX + 60, btnY, 90, 18, 0x999977)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.roastModalGroup.add(cancelBtn);
+    this.roastModalGroup.add(
+      this.add.text(mX + 60, btnY, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    cancelBtn.on("pointerdown", () => this.closeRoastModal());
+
+    const startBtn = this.add.rectangle(mX + 220, btnY, 120, 18, P.AWNING)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.roastModalGroup.add(startBtn);
+    this.roastModalGroup.add(
+      this.add.text(mX + 220, btnY, "START ROAST", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    startBtn.on("pointerdown", () => {
+      const ev = startRoast(this.state, this.roastModalSlotIndex, this.roastModalRecipe, this.roastModalBatchLbs);
+      if (!ev) {
+        // Show inline error in preview area — do not close modal
+        previewLines[4].setText(
+          `Not enough cash for ingredients ($${(RECIPES[this.roastModalRecipe].ingredientCostPerLb * this.roastModalBatchLbs).toFixed(2)} needed).`
+        ).setStyle({ ...TEXT_STYLE_LABEL, color: "#C0392B" });
+      } else {
+        this.closeRoastModal();
+      }
+      this.updateHUD();
+    });
+    startBtn.on("pointerover", () => startBtn.setAlpha(0.85));
+    startBtn.on("pointerout",  () => startBtn.setAlpha(1.0));
+  }
+
+  private closeRoastModal(): void {
+    if (this.roastModalGroup) {
+      this.roastModalGroup.destroy(true);
+      this.roastModalGroup = undefined;
+    }
+    this.roastModalOpen = false;
     this.updateHUD();
   }
 
@@ -787,8 +1073,33 @@ export class GameScene extends Phaser.Scene {
     if (this.reportOpen) return;
     this.reportOpen = true;
 
+    // Snapshot unlocked recipes before endOfDay so we can detect new unlocks.
+    const unlockedBefore = new Set(this.state.recipesUnlocked);
+
     // Pause the sim — reportOpen flag stops tick() calls
     const report = endOfDay(this.state);
+
+    // Show recipe-unlock toasts for any newly unlocked recipes.
+    const RECIPE_LABELS: Record<RecipeId, string> = {
+      classic_salted: "Classic Salted",
+      honey_cinnamon: "Honey Cinnamon",
+      ghost_pepper:   "Ghost Pepper",
+    };
+    const RECIPE_TIPS: Record<RecipeId, string> = {
+      classic_salted: "",
+      honey_cinnamon: "Higher COGS, higher ceiling — try it.",
+      ghost_pepper:   "Spicy niche: fewer buyers, big margin.",
+    };
+    for (const recipeId of this.state.recipesUnlocked) {
+      if (!unlockedBefore.has(recipeId)) {
+        this.time.delayedCall(300, () => {
+          this.showToast(
+            `New recipe unlocked: ${RECIPE_LABELS[recipeId as RecipeId]}! ${RECIPE_TIPS[recipeId as RecipeId]}`
+          );
+        });
+      }
+    }
+
     this.showDayReport(report);
   }
 

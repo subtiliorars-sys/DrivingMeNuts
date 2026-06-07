@@ -18,6 +18,8 @@ import {
   RAW_ORDER_MAX_LBS,
   bulkDiscountFor,
   RECIPES,
+  RECIPE_DEMAND_MULT,
+  RECIPE_UNLOCK_THRESHOLD,
   ROASTER_EFFICIENCY,
   STARTING_QUEUE_SLOTS,
   BATCH_MIN_LBS,
@@ -40,7 +42,7 @@ import {
   GAG_EVERY_N_LBS_SOLD,
 } from "../data/economy.js";
 
-import { LORE_LINES } from "../data/lore.js";
+import { LORE_LINES, LORE_TIER_DAY_GATE } from "../data/lore.js";
 
 import type {
   SimState,
@@ -79,16 +81,17 @@ function cogsPerLb(recipe: RecipeId): number {
 }
 
 /**
- * Demand in lbs/hour at a given price.
- * Formula: BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)
+ * Demand in lbs/hour at a given price, scaled by per-recipe demand multiplier.
+ * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × RECIPE_DEMAND_MULT[recipe]
  * Clamped to [0, DEMAND_MAX_LBS_PER_HOUR].
  * Small Gaussian-ish jitter applied via PRNG so repeat ticks aren't exactly equal.
+ * Default recipe "classic_salted" preserves backward compat (mult = 1.0).
  */
-function demandLbsPerHour(price: number, state: SimState): number {
+function demandLbsPerHour(price: number, state: SimState, recipe: RecipeId = "classic_salted"): number {
   const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - DEMAND_BASE_PRICE);
   // ±10% jitter (two uniform samples averaged → triangular distribution)
   const jitter = ((nextRand(state) + nextRand(state)) / 2 - 0.5) * 0.20;
-  return clamp(base * (1 + jitter), 0, DEMAND_MAX_LBS_PER_HOUR);
+  return clamp(base * (1 + jitter) * RECIPE_DEMAND_MULT[recipe], 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 /**
@@ -111,13 +114,18 @@ function applyCashFloor(state: SimState): void {
 
 /**
  * Pick and emit a 'gag' SimEvent using the seeded PRNG.
+ * Draws only from tiers unlocked by the current dayNumber (tier gating).
  * Selects a lore line deterministically; records it in gagsSeen.
- * Returns null only if LORE_LINES is empty (should never happen in production).
+ * Returns null only if no lines are unlocked (should never happen — early tier is always available).
  */
 function maybeGagEvent(state: SimState): SimEvent | null {
-  if (LORE_LINES.length === 0) return null;
-  const idx = Math.floor(nextRand(state) * LORE_LINES.length);
-  const line = LORE_LINES[idx];
+  // Filter to lines whose tier gate has been met by the current day.
+  const pool = LORE_LINES.filter(
+    (l) => state.dayNumber >= LORE_TIER_DAY_GATE[l.tier]
+  );
+  if (pool.length === 0) return null;
+  const idx = Math.floor(nextRand(state) * pool.length);
+  const line = pool[idx];
   state.gagsSeen.add(line.id);
   return {
     kind: "gag",
@@ -158,6 +166,8 @@ export function createState(seed = 1): SimState {
     rescueArcPending: false,
     unitsSoldLifetime: 0,
     gagsSeen: new Set<string>(),
+    lifetimeEarned: 0,
+    recipesUnlocked: new Set<string>(["classic_salted"]),
     rngState: seed >>> 0,
   };
 }
@@ -358,6 +368,17 @@ export function endOfDay(state: SimState): DayReport {
   // F13 fix: offline earnings are pure cash credit (no COGS); included in net post-fixed-cost
   const net = grossProfit - fixedCosts + offlineEarned;
 
+  // Accumulate lifetime earnings BEFORE resetting dayStats (spec §6d).
+  state.lifetimeEarned += revenue;
+
+  // Evaluate recipe unlock thresholds against updated lifetimeEarned.
+  // State is mutated; GameScene detects new unlocks via state.recipesUnlocked post-call.
+  for (const recipeId of (["honey_cinnamon", "ghost_pepper"] as const)) {
+    if (!state.recipesUnlocked.has(recipeId) && state.lifetimeEarned >= RECIPE_UNLOCK_THRESHOLD[recipeId]) {
+      state.recipesUnlocked.add(recipeId);
+    }
+  }
+
   const cashBefore = state.cash;
   // cash already includes all revenue credits (from tick + applyOffline) and ingredient debits
   // (from startRoast). endOfDay only needs to deduct the fixed overhead.
@@ -468,13 +489,14 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
 // ---------------------------------------------------------------------------
 
 /**
- * Deterministic demand estimate (no jitter) at a given price.
+ * Deterministic demand estimate (no jitter) at a given price and recipe.
  * Safe to call repeatedly from UI without mutating PRNG state.
- * Formula: BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)
+ * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × RECIPE_DEMAND_MULT[recipe]
+ * Default recipe "classic_salted" preserves backward compat (mult = 1.0).
  */
-export function projectedDemand(price: number): number {
+export function projectedDemand(price: number, recipe: RecipeId = "classic_salted"): number {
   const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - DEMAND_BASE_PRICE);
-  return clamp(base, 0, DEMAND_MAX_LBS_PER_HOUR);
+  return clamp(base * RECIPE_DEMAND_MULT[recipe], 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 // ---------------------------------------------------------------------------

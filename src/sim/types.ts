@@ -81,6 +81,18 @@ export interface SimState {
    */
   gagsSeen: Set<string>;
 
+  // ---- Recipe unlocks (Wave 3 / P1.5) ---------------------------------
+  /**
+   * Cumulative revenue across all days (for recipe unlock gates).
+   * Incremented in endOfDay before dayStats reset.
+   */
+  lifetimeEarned: number;
+  /**
+   * Set of recipe ids the player has unlocked.
+   * classic_salted is always present; others unlock via lifetimeEarned thresholds.
+   */
+  recipesUnlocked: Set<string>;
+
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
   rngState: number;
@@ -123,7 +135,8 @@ export type SimEventKind =
   | "day_ended"
   | "offline_applied"
   | "rescue_arc_triggered"
-  | "gag";
+  | "gag"
+  | "recipe_unlocked";
 
 export interface SimEvent {
   kind: SimEventKind;

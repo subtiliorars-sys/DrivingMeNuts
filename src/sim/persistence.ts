@@ -46,8 +46,11 @@ export interface StorageLike {
 // Save envelope (wire format)
 // ---------------------------------------------------------------------------
 
-/** SimState on the wire: Set<string> serialised as string[]. */
-type SerializedSimState = Omit<SimState, "gagsSeen"> & { gagsSeen: string[] };
+/** SimState on the wire: Set<string> fields serialised as string[]. */
+type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
+  gagsSeen: string[];
+  recipesUnlocked: string[];
+};
 
 interface SaveMeta {
   /** Cumulative wall-clock seconds the player spent on-screen (excludes offline). */
@@ -109,6 +112,10 @@ function sanityCheck(env: SaveEnvelope): string | null {
     return `gagsSeen must be an array (not a serialized Set {})`;
   if (typeof s.unitsSoldLifetime !== "number" || s.unitsSoldLifetime < 0)
     return `unitsSoldLifetime invalid: ${s.unitsSoldLifetime}`;
+  if (typeof s.lifetimeEarned !== "number" || s.lifetimeEarned < 0)
+    return `lifetimeEarned invalid: ${s.lifetimeEarned}`;
+  if (!Array.isArray(s.recipesUnlocked))
+    return `recipesUnlocked must be an array`;
   return null;
 }
 
@@ -126,6 +133,7 @@ export function serialize(state: SimState, totalPlaytimeSeconds = 0): string {
     ...state,
     // Convert Set<string> → string[] (JSON.stringify silently drops Sets)
     gagsSeen: [...state.gagsSeen],
+    recipesUnlocked: [...state.recipesUnlocked],
   };
 
   const envelope: SaveEnvelope = {
@@ -186,6 +194,17 @@ export function deserialize(json: string): SimState {
     offlineEarned: Number(sim.dayStats?.offlineEarned ?? 0),
   };
 
+  // Revive recipesUnlocked: string[] → Set<string>
+  // classic_salted always present; validate ids are valid RecipeIds (defensive).
+  const validRecipeIds = new Set<string>(["classic_salted", "honey_cinnamon", "ghost_pepper"]);
+  const revivedRecipesUnlocked = new Set<string>(
+    (Array.isArray(sim.recipesUnlocked) ? sim.recipesUnlocked : []).filter(
+      (id): id is string => typeof id === "string" && validRecipeIds.has(id)
+    )
+  );
+  // Always ensure classic_salted is present (forward-compat with older saves missing this field)
+  revivedRecipesUnlocked.add("classic_salted");
+
   const state: SimState = {
     cash: sim.cash,
     rawStockLbs: sim.rawStockLbs,
@@ -207,6 +226,8 @@ export function deserialize(json: string): SimState {
     rescueArcPending: sim.rescueArcPending,
     unitsSoldLifetime: sim.unitsSoldLifetime,
     gagsSeen: revivedGagsSeen,
+    lifetimeEarned: Number(sim.lifetimeEarned ?? 0),
+    recipesUnlocked: revivedRecipesUnlocked,
     rngState: sim.rngState,
   };
 

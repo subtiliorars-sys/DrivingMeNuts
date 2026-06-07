@@ -87,6 +87,33 @@ export const RECIPES: Readonly<Record<RecipeId, Recipe>> = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Recipe demand multipliers  (RECIPE_BATCH_UI.md §4)
+// Applied on top of base demand curve.  Different recipes serve different
+// willingness-to-pay segments; velocity × margin tradeoff is the teaching hook.
+//
+// TUNABLE: honey_cinnamon 0.75, ghost_pepper 0.40
+// ---------------------------------------------------------------------------
+
+export const RECIPE_DEMAND_MULT: Readonly<Record<RecipeId, number>> = {
+  classic_salted: 1.00,  // baseline — broadest appeal
+  honey_cinnamon: 0.75,  // 25% fewer buyers; sweet-niche segment
+  ghost_pepper:   0.40,  // 60% fewer buyers; heat-seeking niche only
+} as const;
+
+// ---------------------------------------------------------------------------
+// Recipe unlock cash thresholds  (RECIPE_BATCH_UI.md §3)
+// Based on cumulative lifetime revenue (lifetimeEarned in SimState).
+// classic_salted is available from game start (threshold = 0).
+// TUNABLE: honey_cinnamon $500, ghost_pepper $1200
+// ---------------------------------------------------------------------------
+
+export const RECIPE_UNLOCK_THRESHOLD: Readonly<Record<RecipeId, number>> = {
+  classic_salted: 0,
+  honey_cinnamon: 500,
+  ghost_pepper:   1200,
+} as const;
+
+// ---------------------------------------------------------------------------
 // Roaster tiers  (GDD C4)
 // Efficiency multiplier applied to roastSecondsPerLbTinPan:
 //   Tin Pan = 1.0x (baseline), Copper = 0.6x, Industrial = 0.2x.
