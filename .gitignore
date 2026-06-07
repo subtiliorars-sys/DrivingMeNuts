@@ -1,2 +1,25 @@
-*.agdai
-**/MAlonzo/**
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Secrets / env — never commit
+.env
+.env.*
+*.pem
+*.key
+
+# Build / deps (future game code)
+node_modules/
+dist/
+build/
+__pycache__/
+*.pyc
+.venv/
+
+# Scratch
+*.log
+tmp/
+scratch/
