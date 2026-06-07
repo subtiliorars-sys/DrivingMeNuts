@@ -86,7 +86,7 @@ To keep P1.5 scope contained and cost-zero:
 
 1. **Royalty-free SFX libraries:**
    - Freesound.org (CC0 & CC-BY licensed)
-   - Zapsplat (royalty-free, no attribution required)
+   - Zapsplat (royalty-free; free tier requires attribution — verify per-asset license at download)
    - Leshy SFX (free, open-licensed chiptune tool)
    - OpenGameArt.org (community audio, CC-licensed)
 
@@ -96,7 +96,8 @@ To keep P1.5 scope contained and cost-zero:
    - Consider: are we okay with attribution links in credits? Yes per RISK_REGISTER AI-provenance row.
 
 3. **Provenance logging (RISK_REGISTER AI-provenance safeguard):**
-   - Every audio file gets a metadata entry in `src/audio/PROVENANCE.md`:
+   - Every audio file gets a metadata entry in `assets/PROVENANCE.md`
+     (canonical log — single file, not per-directory):
      ```
      ## sfx_roast_sizzle_v1.wav
      - Source: Freesound.org
@@ -105,8 +106,13 @@ To keep P1.5 scope contained and cost-zero:
      - Link: https://freesound.org/sounds/[ID]/
      - Modifications: Pitch-shifted +2 semitones, reverb added (Phaser reverb filter)
      - Date Added: 2026-06-07
+     - Attribution required: YES — include in credits
      ```
    - This ensures audit trail and compliance with open-source licenses.
+   - **Attribution rule:** verify each source's license individually. Many CC0 sources
+     require no attribution; CC-BY requires it; Zapsplat's free tier requires attribution
+     per their terms — confirm at download time and note in PROVENANCE.md whether
+     attribution is required. Do not assume "royalty-free" means "no attribution needed."
 
 ---
 
@@ -144,7 +150,7 @@ For P1.5 build, consider bundling SFX into a sprite sheet (Phaser AudioSprite fo
 
 - [ ] Master volume slider in HUD; persists to localStorage.
 - [ ] Mute button in settings; respects mute state on reload.
-- [ ] All SFX have provenance entries in PROVENANCE.md.
+- [ ] All SFX have provenance entries in `assets/PROVENANCE.md` (attribution noted per-file).
 - [ ] Music tracks loop seamlessly (no silence, no pops at loop point).
 - [ ] Phaser Webaudio context resume works on mobile (test iOS/Android).
 - [ ] No audio nagging (no push notifications, no auto-play, no required user action tied to audio cues).

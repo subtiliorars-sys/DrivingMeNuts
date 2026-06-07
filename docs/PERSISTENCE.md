@@ -25,19 +25,30 @@ grows beyond the 5 MB `localStorage` ceiling (e.g., long event log, district his
 interface SaveEnvelope {
   schemaVersion: number;        // bumped on every breaking change; currently 1
   savedAt: number;              // Date.now() at time of save (wall-clock ms)
-  sim: SimState;                // full serialized SimState snapshot
+  sim: SerializedSimState;      // SimState with Set fields converted to arrays
   meta: SaveMeta;
 }
 
+/**
+ * Wire format for SimState. Identical to SimState except:
+ *   - gagsSeen: string[]   (JSON.stringify cannot serialize a Set — serialise as array)
+ * Load path must revive: state.gagsSeen = new Set(envelope.sim.gagsSeen)
+ */
+type SerializedSimState = Omit<SimState, "gagsSeen"> & { gagsSeen: string[] };
+
 interface SaveMeta {
   totalPlaytimeSeconds: number; // cumulative on-screen seconds (excludes offline)
-  offlineBankMs: number;        // wall-clock ms accrued offline, waiting to be applied
+  // NOTE: offlineBankMs was removed. Offline elapsed time is derived from
+  // (Date.now() - envelope.savedAt) on load; one mechanism only (§6). Do not
+  // add it back without deleting the §6 computation to avoid double-counting.
 }
 ```
 
-`SimState` is already a plain-value object (no class instances, no closures) per
-`src/sim/types.ts`, so `JSON.stringify(state)` is lossless. `RoastSlot.recipe` is a
-`RecipeId` string — round-trips safely.
+**Serialization note:** `SimState` has `gagsSeen: Set<string>`. `JSON.stringify` silently
+converts a `Set` to `{}` (empty object) — NOT lossless. The envelope must serialize
+`gagsSeen` as `string[]` (via `[...state.gagsSeen]`) and the load path must revive it:
+`new Set(envelope.sim.gagsSeen)`. `RoastSlot.recipe` is a `RecipeId` string — round-trips safely.
+All other fields are plain numbers, booleans, or string-keyed objects and are lossless.
 
 TUNABLE: `schemaVersion` = 1 at P2 ship. Bump to 2 at first breaking schema change.
 
@@ -65,7 +76,13 @@ On `createScene()` (Phaser scene `create()`):
 2. If null or parse throws: call `createState()` for a fresh game. Show apology toast
    (see §7). Log the error with `console.warn` — never silent wipe.
 3. If parsed envelope `schemaVersion` < current: run migration (see §5).
-4. Validate minimal sanity: `cash >= 0`, `dayNumber >= 1`, `roastSlots.length >= 1`.
+4. Validate minimal sanity:
+   - `cash >= 0`
+   - `dayNumber >= 1`
+   - `roastSlots.length >= 1`
+   - `Array.isArray(envelope.sim.gagsSeen)` (must be an array, not `{}` from an
+     old/corrupt save that serialized the Set incorrectly)
+   - `typeof unitsSoldLifetime === "number" && unitsSoldLifetime >= 0`
    On any failure: same fallback as step 2.
 5. Deserialize `sim` back into `SimState`. Restore `meta`.
 6. Call `applyOffline(state, elapsedHours)` — see §6.
@@ -91,6 +108,31 @@ If migration throws at any step: fall back to fresh state + apology toast (never
 
 TUNABLE: migration chain is empty at P2 ship (only v1 exists). Add entries only on
 breaking schema changes.
+
+**Round-trip test (required before P2 ships):** A save/load cycle must pass this
+invariant test:
+
+```typescript
+// src/persistence/persistence.test.ts  (P2 task — do NOT ship without this)
+it("save/load round-trip preserves gagsSeen and unitsSoldLifetime", () => {
+  const state = createState(1);
+  // Seed some gag data
+  state.gagsSeen = new Set(["LL-001", "LL-003"]);
+  state.unitsSoldLifetime = 250;
+
+  const saved = serialize(state);          // returns JSON string
+  const loaded = deserialize(saved);       // returns SimState
+
+  expect(loaded.gagsSeen).toBeInstanceOf(Set);
+  expect(loaded.gagsSeen.has("LL-001")).toBe(true);
+  expect(loaded.gagsSeen.has("LL-003")).toBe(true);
+  expect(loaded.gagsSeen.size).toBe(2);
+  expect(loaded.unitsSoldLifetime).toBe(250);
+});
+```
+
+This test is a spec requirement, not optional. If implementing persistence without this
+test is the plan, that is a blocker — add the test before merging the persistence PR.
 
 ---
 
@@ -182,14 +224,23 @@ gross margin display, which could otherwise accidentally imply the player under-
 ### Q9 — Offline Soft-Cap Guardrail (Cite: B.2)
 Is the offline-earnings rate 20% of peak or less, capped at $100/hr, with 24-hr cutoff?
 
-**PASS — YES.** `OFFLINE_EARN_RATE_FRACTION = 0.20` (economy.ts line 196).
-`OFFLINE_CAP_DOLLARS_PER_HOUR = 100` (economy.ts line 204).
-`OFFLINE_CAP_HOURS = 24` (economy.ts line 207).
-All three constants are in the single source of truth and enforced in `applyOffline`
-before cash is credited. The load path caps elapsed hours to `OFFLINE_CAP_HOURS` before
-passing to the engine.
+**DIVERGENCE — OPEN ESCALATION.** Three constants are implemented and enforced:
+- `OFFLINE_EARN_RATE_FRACTION = 0.20` (economy.ts) — fraction check: PASS
+- `OFFLINE_CAP_DOLLARS_PER_HOUR = 100` (economy.ts) — code is $100/hr
+- `OFFLINE_CAP_HOURS = 24` (economy.ts) — 24-hr cutoff: PASS
 
-**Gate result: all four questions PASS. No Owner Decision required for this design.**
+However: the gate text (DARK_PATTERN_GATE §D, GDD C5) cites "$100/min" as the cap;
+the implemented constant is `$100/hr` — 60× stricter. The code is SAFE in direction
+(stricter is not a dark pattern), but it diverges from the written spec.
+
+**This is an OPEN owner decision per gate §D.** Do not mark as PASS without owner
+ratification of which value ($100/min or $100/hr) is the intended canon. Once ratified,
+update both the GDD and this cert, then mark PASS.
+
+**Interim ruling:** implementation proceeds with $100/hr (conservative) until owner
+decides. See economy.ts note on `OFFLINE_CAP_DOLLARS_PER_HOUR`.
+
+**Gate result: Q1/Q3/Q8 PASS. Q9 OPEN (safe direction, awaiting owner ratification).**
 
 ---
 

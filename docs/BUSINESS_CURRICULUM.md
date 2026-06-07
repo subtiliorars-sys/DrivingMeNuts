@@ -135,7 +135,7 @@ Different places have different foot traffic, customer types, permit costs, and 
   - They diverge visibly. On a big roasting day with low sales, cash drops but profit shows red (loss). On a high-sales day, cash spikes faster than accounting profit (because suppliers net-15).
 - **Supplier payment schedule:** player buys peanuts "on net-14"—they appear in the truck immediately, but a bill icon appears on the calendar for 14 days out. If you buy too much on Day 1, Day 15's payment spike might exceed available cash.
 - **Winter alert:** in October, a "seasonal forecast" screen warns the player that sales will drop 40% Nov–Jan. If your cash reserve is below a threshold (e.g., $500), a red alert: "Cash flow risk: your savings won't cover Jan bills if you keep this pace."
-- **Cash crunch → rescue arc (no game-over):** Per GDD canon, dropping below $50 triggers the “Save the Truck” rescue arc (NPCs offer loans, supplier credit, or pre-order deals) — the truck is never simply repossessed and the game never ends. This teaches: cash flow crises are solvable with community and planning; they are expensive, not fatal.
+- **Cash crunch → rescue arc (no game-over):** Per GDD canon, end-of-day cash below $25 triggers the “Save the Truck” rescue arc (NPCs offer loans, supplier credit, or pre-order deals) — the truck is never simply repossessed and the game never ends. This teaches: cash flow crises are solvable with community and planning; they are expensive, not fatal.
 - **Teaching example — predatory loan rate:**
   > **Cautionary teaching example — not an endorsed path:** the payday-style loan appears in-game explicitly as a warning about predatory lending.
 

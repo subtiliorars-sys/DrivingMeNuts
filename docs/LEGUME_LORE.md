@@ -308,9 +308,9 @@ These five are held in reserve for special story moments (Act III victory, franc
 **Owner:** "Legumes. Yeah. I've opened three legume trucks, and the joke has only gotten funnier. Order with confidence."  
 *(Owner has scale; the joke is now a multi-location tradition.)*
 
-### Unlock 3: Legume Mastery (100 Variants Collected)
+### Unlock 3: Legume Mastery (All 40 Variants Collected)
 **Customer:** "I have to tell you something. Legumes."  
-**Owner:** "I've heard it 100 different ways. You just said it the 101st. Welcome to immortality. These are on me."  
+**Owner:** "I've heard it 40 different ways. You just said it the 41st. Welcome to immortality. These are on me."  
 *(Owner has achieved mastery; treats the customer as part of a grand narrative.)*
 
 ### Unlock 4: Dr. Chen's Five-Star Feature (Prestige Achievement)

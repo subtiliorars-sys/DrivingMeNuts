@@ -75,10 +75,18 @@ TUNABLE reference curves (all times in simulated seconds; 1 sim-hour = 3,600 sim
 | farmers_market | [0, 0.4], [7200, 1.8], [21600, 1.0], [50400, 0.3] |
 | office_quarter | [0, 0.2], [18000, 1.6], [25200, 0.5], [50400, 0.2] |
 | boardwalk | [0, 0.3], [39600, 1.0], [50400, 1.8] |
-| university | [0, 0.1], [54000, 0.6], [50400, 1.7] — note: evening only |
+| university | [0, 0.1], [43200, 0.3], [50400, 1.7] — note: demand only meaningful near close |
 
 TUNABLE: all multiplier values. University curve intentionally makes morning operations
 nearly valueless, teaching location selection has temporal cost.
+
+**University curve note:** The GDD (B2) describes a University demand spike of
+"9pm–midnight." The operating day ends at 8pm (sim-second 50,400 = 14 hrs × 3600).
+The 9pm–midnight peak therefore lies **outside the P2 operating window**. The P2 curve
+above models the pre-close uptick (from 6pm = sim-second 43,200 toward 8pm close) as
+the closest in-window approximation. A true late-night spike requires an extended-hours
+permit and a new operating day shape — flag as a **P3 concept ("night-market extended-
+hours permit")** and reconcile with GDD before implementing.
 
 ---
 
@@ -119,6 +127,13 @@ the player is past due (teaches: cost of non-compliance).
 `state.dayNumber`. If expired, set `expired = true`, emit `permit_expired` event, show
 a non-scary toast: "Your Boardwalk permit expired. Renew with Maya to return there."
 No punitive cash deduction on expiry — only loss of access.
+
+**Fixed-cost reconciliation:** The P1 `DAILY_FIXED_COSTS = $5.00` constant
+(`economy.ts`) bundles prorated permit cost with fuel/propane. When P2 implements
+per-district permit renewals as explicit calendar costs, the permit component should be
+removed from `FIXED_COSTS_PER_DAY` to avoid double-counting. Adjust
+`DAILY_FIXED_COSTS` (or introduce a `NON_PERMIT_DAILY_FIXED_COSTS` constant) when
+wiring P2 permit mechanics.
 
 ---
 

@@ -5,6 +5,13 @@ on:
   push:
     branches:
       - "work/**"
+      - main           # post-merge signal: confirms main stays green after PR merge
+
+# Minimal permissions: this workflow only reads code and runs tests.
+# TODO (hardening): pin actions to full SHA digests instead of @v4 tags
+#   for supply-chain security once the repo is closer to production.
+permissions:
+  contents: read
 
 jobs:
   verify:

@@ -23,7 +23,8 @@ import type { SimEvent, SimState } from "./types.js";
 
 function runFullDay(seed: number): { events: SimEvent[]; state: SimState } {
   const state = createState(seed);
-  // Inject enough roasted stock to satisfy full-day demand (~280 lbs at default price).
+  // Inject enough roasted stock to satisfy full-day demand (~238 lbs at default price $1.50,
+  // demand = 20 − 10×(1.50−1.20) = ~17 lbs/hr × 14 hr).
   // This bypasses the roast queue and starting-capital limits intentionally.
   state.roastedStockLbs = 500;
   state.roastedCostBasisPerLb = 0.60; // classic_salted COGS

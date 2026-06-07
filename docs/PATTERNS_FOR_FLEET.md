@@ -14,24 +14,38 @@ Educational games need fast iteration, deep testing, and confidence in economy m
 - Red-team mechanics without running the full game (no CLI test harness).
 
 ### Pattern: Sim Lives Separately
+
+**Real DMN repo layout:**
 ```
+src/data/        ← All economy constants (single source of truth)
+  economy.ts     ← Prices, demand curve, offline cap, fixed costs, etc.
+  lore.ts        ← Legume Lore dialogue set
+
 src/sim/         ← Pure TypeScript, Phaser-free, fully unit-testable
-  economy.ts     ← All constants and formulas
-  gameState.ts   ← Tick and state mutations
-  demand.ts      ← Pricing, demand curves, margins
-  recipes.ts     ← Recipe mechanics (COGS, roast timers)
-  playerActions/ ← Handlers: setPriceAction, buyRawAction, etc.
+  types.ts       ← SimState, DayReport, SimEvent interfaces
+  engine.ts      ← tick(), endOfDay(), buyRaw(), startRoast(), setPrice()
+  engine.test.ts
+  edge_cases.test.ts
+  integration.test.ts
+  lore.test.ts
+  smoke.test.ts
 
 src/scenes/      ← Phaser-bound UI layer
   GameScene.ts   ← Calls sim, renders results
-  UIControllers/ ← Sliders, buttons, dialogs
+  BootScene.ts   ← Asset load / scene handoff
 ```
 
+**Purity note:** `engine.ts` mutates `SimState` in place behind a small API
+(`tick`, `endOfDay`, etc.). The contract is **determinism** (same inputs → same output)
+and **Phaser-free** (no engine imports), not functional purity. Tests verify correctness
+by inspecting the state and events after each call, not by comparing return values
+from pure functions.
+
 ### Why It Works
-1. **Testable:** `vitest` can run `import { gameState } from '../sim/gameState'` without a browser. Tests are instant, deterministic, can verify formulas and edge cases in isolation.
+1. **Testable:** `vitest` can run `import { tick } from '../sim/engine'` without a browser. Tests are instant, deterministic, can verify formulas and edge cases in isolation.
 2. **Single source of truth:** All economy constants live in `src/data/economy.ts`. One edit fixes all references; no spreadsheet-to-code sync drift.
 3. **Red-team safe:** Auditors can read one file (`economy.ts`) to verify all prices, margins, and demand curves. No hidden constants in UI code.
-4. **Reusable:** TradeGame can import `src/sim/playerActions.ts` logic if both games share "set price, get demand curve" semantics. No Phaser baggage.
+4. **Reusable:** TradeGame can import `src/sim/engine.ts` logic if both games share "set price, get demand curve" semantics. No Phaser baggage.
 5. **Swarm-safe:** One agent can test demand formulas (`npm run test`) while another agent builds UI in `GameScene.ts` without blocking or colliding.
 
 ### Adoption Checklist
@@ -154,9 +168,26 @@ describe('Demand Curve Teaches Price Elasticity', () => {
 });
 ```
 
-From a real bug catch in DMN red-team:
-- **Mislabeled margin:** One demand-curve variant had demand drop by slope 6 instead of 10. The profit peak shifted from $1.90 to $1.65. A tester playing through discovered "wait, the game says $1.90 is best, but I make more at $1.65" — the GDD was wrong, and the test caught it *before* shipping.
-- **Dominant strategy:** Early roaster-upgrade cost was too cheap ($500). A player discovered "just spam roaster upgrades and idle for cash" — no gameplay, no decision-making. Raising upgrade cost to $2k forced real choices.
+**Real red-team catches from the DMN build** (not playtest anecdotes — these were
+found by red-team review of the code and spec before any player testing):
+
+1. **Mislabeled report-card margin:** An early version of the end-of-day report
+   computed gross margin as COGS-at-production divided by sales revenue, producing a
+   misleadingly low figure when production outpaced same-day sales. The correct
+   formula is COGS-of-units-SOLD (cost basis recognized at sale, not production).
+   Red-team caught this from the spec — the distinction is now explicit in `engine.ts`
+   comments and tested in `engine.test.ts`.
+
+2. **Dominant max-price strategy:** With `DEMAND_SLOPE = 6` (the first draft value),
+   the profit curve peaked at $2.57/lb — above the $2.50 UI price cap. This made "set
+   price to max, idle" the dominant strategy: no pricing decision was needed, defeating
+   the lesson. Red-team identified the problem by computing `dπ/dp = 0`. Slope was
+   retuned to `DEMAND_SLOPE = 10`, which places the profit peak at $1.90 — strictly
+   interior to the slider range, forcing a real optimization choice.
+
+Neither catch came from a "$500→$2k roaster" anecdote or player playthrough; both were
+found analytically by reviewing the demand formula against the GDD's teaching intent.
+That is the pattern: red-team tests the *economics*, not just the mechanics.
 
 ### Why It Works
 1. **Automated:** Tests can verify "profit peaks at $X" or "raising price by $0.50 always decreases daily profit by >$5" without human playtest.
@@ -186,7 +217,7 @@ Each repo has:
 Repo-specifics only; unified doctrine cascades from:
   ~/CLAUDE.md (working agreement)
   ~/agent-corps/GOVERNANCE_ROLLOUT_PLAN.md (governance tiers)
-  ~/agent-corps/CLAIRE_GLOBAL.md (canon practices)
+  ~/agent-corps/CLAUDE_GLOBAL.md (canon practices)
 
 ## What this repo is
 [1-sentence elevator pitch]

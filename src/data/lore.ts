@@ -63,7 +63,11 @@ export const LORE_LINES: readonly LoreLine[] = [
   },
 ] as const;
 
-/** Total canon variant count (all tiers). Shown in the HUD lore counter. */
+/**
+ * Total canon variant count (all tiers, future).
+ * Kept for future use when mid/late tiers load.
+ * HUD counter uses LORE_LINES.length (currently-loaded tier) instead.
+ */
 export const LORE_TOTAL_COUNT = 40;
 
 /** Lookup map: id → LoreLine. */

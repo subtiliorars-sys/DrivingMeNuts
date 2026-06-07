@@ -37,7 +37,12 @@ import {
   projectedDemand,
 } from "../sim/engine.js";
 import type { SimState, DayReport } from "../sim/types.js";
-import { LORE_BY_ID, LORE_TOTAL_COUNT } from "../data/lore.js";
+import { LORE_BY_ID, LORE_LINES } from "../data/lore.js";
+
+// Denominator for the HUD lore counter: use the count of currently-loaded lines
+// (early tier only in P1). Grows automatically as more tiers are added to lore.ts.
+// LORE_TOTAL_COUNT (40) is kept for future use when all tiers are present.
+const LORE_LOADED_COUNT = LORE_LINES.length;
 import {
   DAY_DURATION_SECONDS,
   DEFAULT_SELL_PRICE,
@@ -297,7 +302,7 @@ export class GameScene extends Phaser.Scene {
 
     // ---- Lore counter (Wave 2: collection tease, no pressure framing) -------
     // Positioned below the top bar at the right edge; visible but unobtrusive.
-    this.txtLoreCounter = this.add.text(W - 6, 18, `Lore: 0/${LORE_TOTAL_COUNT}`, {
+    this.txtLoreCounter = this.add.text(W - 6, 18, `Lore: 0/${LORE_LOADED_COUNT}`, {
       ...TEXT_STYLE_LABEL, color: "#C0A060",
     }).setOrigin(1, 0);
 
@@ -478,7 +483,7 @@ export class GameScene extends Phaser.Scene {
   private updateHUD(): void {
     this.txtCash.setText(`Cash: $${this.state.cash.toFixed(2)}`);
     this.txtDay.setText(`Day ${this.state.dayNumber}`);
-    this.txtLoreCounter.setText(`Lore: ${this.state.gagsSeen.size}/${LORE_TOTAL_COUNT}`);
+    this.txtLoreCounter.setText(`Lore: ${this.state.gagsSeen.size}/${LORE_LOADED_COUNT}`);
     this.txtRawStock.setText(`Raw: ${this.state.rawStockLbs.toFixed(1)} lbs`);
     this.txtRoastedStock.setText(`Roasted: ${this.state.roastedStockLbs.toFixed(1)} lbs`);
     this.txtPrice.setText(`$${this.state.sellPrice.toFixed(2)}`);

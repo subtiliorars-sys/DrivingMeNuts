@@ -222,8 +222,8 @@ export const RESCUE_ARC_CASH_THRESHOLD = 25;
 // Legume Lore gag mechanic  (Wave 2)
 // One gag fires roughly every GAG_EVERY_N_LBS_SOLD lbs of cumulative sales.
 //
-// Calibration (14-hr day at default price ~$1.50, ~20 lbs/hr):
-//   Expected daily sales ≈ 280 lbs  →  280 / 80 ≈ 3.5 gags per day.
+// Calibration (14-hr day at default price $1.50, demand = 20 − 10×(1.50−1.20) = ~17 lbs/hr):
+//   Expected daily sales ≈ 238 lbs  →  238 / 80 ≈ 3 gags per day.
 //   Bounds guaranteed by tests: ≥1 and ≤6 on a full default-price day.
 // ---------------------------------------------------------------------------
 

@@ -33,7 +33,7 @@
 │  RECIPE                                     │
 │  ○ Classic Salted   COGS $0.60/lb  [unlocked]│
 │  ○ Honey Cinnamon   COGS $0.70/lb  [unlocked at $500]│
-│  ○ Ghost Pepper     COGS $0.90/lb  [unlocked at $1 200]│
+│  ○ Ghost Pepper     COGS $0.90/lb  [unlocked at $1,200]│
 │─────────────────────────────────────────────│
 │  BATCH SIZE                                 │
 │  [10 lbs] [25 lbs] [50 lbs] [custom ▲▼]    │
@@ -41,10 +41,13 @@
 │  PREVIEW (selected: Honey Cinnamon, 25 lbs) │
 │  COGS total:        $17.50                  │
 │  Roast time:        30 min                  │
+│                     (sim-time: 30 min ≈ 30  │
+│                      real seconds at        │
+│                      SIM_TIME_SCALE=60)     │
 │  At $1.50/lb sell:  Revenue $37.50          │
 │                     Gross margin  53%       │
-│  At $1.90/lb sell:  Revenue $47.50          │
-│                     Gross margin  63%       │
+│  At $1.95/lb sell:  Revenue $48.75          │
+│                     Gross margin  64%       │
 │─────────────────────────────────────────────│
 │              [START ROAST]                  │
 └─────────────────────────────────────────────┘
@@ -109,8 +112,9 @@ export const RECIPE_DEMAND_MULT: Readonly<Record<RecipeId, number>> = {
 
 TUNABLE: `honey_cinnamon` multiplier 0.75; `ghost_pepper` multiplier 0.40.
 
-Rationale for values: at default sell price $1.50, classic_salted earns ~20 lbs/hr.
-Honey Cinnamon at $1.90 (its price-optimal sweet spot post-COGS) earns ~15 × 0.75 = ~11
+Rationale for values: at default sell price $1.50, classic_salted earns ~17 lbs/hr
+(demand = 20 − 10 × (1.50 − 1.20) = 17). Honey Cinnamon at $1.95 (its price-optimal
+sweet spot post-COGS: p* = (20/10 + 1.20 + 0.70) / 2 = 1.95) earns ~13 × 0.75 = ~9.75
 lbs/hr but at much higher margin — player must weigh velocity vs margin. Ghost Pepper
 at $2.50 earns ~8 × 0.40 = ~3 lbs/hr, very high margin but slow burn; teaches niche
 product positioning. These are P1-district numbers; district modifiers (P2) will layer

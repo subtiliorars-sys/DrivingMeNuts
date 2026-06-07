@@ -4,6 +4,28 @@
 
 ---
 
+> **Build status — read before class prep**
+>
+> This guide describes the FULL designed experience. The current P1 build is a subset:
+>
+> | Feature | P1 Status |
+> |---------|-----------|
+> | One district (Farmers' Market) | SHIPPED |
+> | Roast queue, pricing, demand curve | SHIPPED |
+> | Day cycle, report card | SHIPPED |
+> | Permits UI | NOT SHIPPED (planned P2) |
+> | Save / load | NOT SHIPPED — refresh restarts the game (planned P1.5, browser localStorage only) |
+> | Spoilage | NOT SHIPPED (planned P2) |
+> | Dual ledger (cash vs. profit) | NOT SHIPPED (planned P2) |
+> | Seasonality | NOT SHIPPED (planned P2) |
+> | Hint / skip systems | NOT SHIPPED (planned) |
+>
+> Where this guide describes features not yet in the P1 build, they are tagged **(planned)**.
+> Use P1 in class today for COGS, pricing, break-even, and the report card. Other concepts
+> are coming — this guide covers them for planning purposes.
+
+---
+
 ## What the Game Teaches
 
 The game maps 10 core business concepts to playable moments. A typical 40-minute class can visit 2–3 of these zones and see the mechanics in action.
@@ -12,14 +34,14 @@ The game maps 10 core business concepts to playable moments. A typical 40-minute
 |---------|---|---|
 | **COGS (Cost of Goods Sold)** | The "Roasting" screen. Player buys raw peanuts ($0.40/lb), adds salt ($0.20), and roasts. Total cost per lb: $0.60. | "Why does the game make you *see* the raw ingredients leave your money pile before you sell anything?" |
 | **Gross Margin vs. Markup** | The pricing slider (left: $0.75/lb, right: $2.50/lb). As you move it, a margin % appears (green if >60%, yellow if 45–60%, red if <45%). | "At $1.50/lb, your margin is 60%. If you drop to $1.00, it's 40%. Why does a 33% price cut hurt so much worse?" |
-| **Permits & Licensing** | Day 1 gate: spend $500 and wait 6 in-game days to get a Health & Mobile Vendor permit before operating. Renewal is required or the truck closes. | "The game doesn't let you start. Why? What does a real permit cost, and what would happen if you ignored the deadline?" |
-| **Location Strategy** | Unlock screen shows 4–5 districts (Farmers' Market, Office Quarter, Boardwalk, etc.). Each has different foot traffic, seasons, and permit costs. | "Which district looks best? Revenue per day, or profit per day? Why are they different?" |
-| **Cash Flow vs. Profit** | Dual ledger: "Cash in bank" (real money now) vs. "Profit this week" (calculated at week-end). A big roasting day can drop cash but show red profit. | "You made $200 this week but you're broke. Explain why those two things can both be true." |
+| **Permits & Licensing** | Day 1 gate: spend $500 and wait 3 in-game days to get a Health & Mobile Vendor permit before operating. Renewal is required or the truck closes. **(planned P2)** | "The game doesn't let you start. Why? What does a real permit cost, and what would happen if you ignored the deadline?" |
+| **Location Strategy** | Unlock screen shows 4–5 districts (Farmers' Market, Office Quarter, Boardwalk, etc.). Each has different foot traffic, seasons, and permit costs. **(planned P2)** | "Which district looks best? Revenue per day, or profit per day? Why are they different?" |
+| **Cash Flow vs. Profit** | Dual ledger: "Cash in bank" (real money now) vs. "Profit this week" (calculated at week-end). A big roasting day can drop cash but show red profit. **(planned P2)** | "You made $200 this week but you're broke. Explain why those two things can both be true." |
 | **Marketing & Reputation** | Customer "Legume Gag" (customers say "peanuts aren't nuts, they're legumes"). Each time you win the gag exchange, a Legume Lore entry unlocks, and that customer becomes a repeat buyer. | "Free marketing vs. paid ads: how does the game model earning customers?" |
-| **Seasonality** | Calendar shows the full year. Summer (high traffic, festivals) vs. winter (quiet, but gift-box premium pricing available). Revenue forecast by month. | "If you ignore the forecast and don't save in summer, what happens in January?" |
-| **Break-Even Analysis** | Daily goal UI shows a target: "Sell 18 lbs today to cover fixed costs." If you exceed it, the target turns green. | "What does break-even mean? Is every sale profitable?" |
-| **Unit Economics** | End-of-day report: revenue, COGS, gross profit, location costs, net profit. Weekly table shows which location/day combos were best. | "You sold at two locations. Same revenue, different profit. Why?" |
-| **Simple Bookkeeping** | Receipt journal organized by date and type (income, expense). Weekly auto-generated summary: income, COGS, fixed costs, net profit. | "Why keep a journal? What pattern would you spot if you looked at the last 4 weeks?" |
+| **Seasonality** | Calendar shows the full year. Summer (high traffic, festivals) vs. winter (quiet, but gift-box premium pricing available). Revenue forecast by month. **(planned P2)** | "If you ignore the forecast and don't save in summer, what happens in January?" |
+| **Break-Even Analysis** | Daily goal UI shows a target: "Sell 6 lbs today to cover fixed costs." (At $1.50/lb sell price, COGS $0.60/lb, gross profit $0.90/lb: $5.00 daily fixed ÷ $0.90 = 6 lbs.) If you exceed it, the target turns green. **(planned: break-even UI not in P1)** | "What does break-even mean? Is every sale profitable?" |
+| **Unit Economics** | End-of-day report: revenue, COGS, gross profit, location costs, net profit. Weekly table shows which location/day combos were best. (P1 report card shows single-district breakdown; multi-location weekly table **(planned P2)**.) | "You sold at two locations. Same revenue, different profit. Why?" |
+| **Simple Bookkeeping** | Receipt journal organized by date and type (income, expense). Weekly auto-generated summary: income, COGS, fixed costs, net profit. **(planned P2)** | "Why keep a journal? What pattern would you spot if you looked at the last 4 weeks?" |
 
 ---
 
@@ -77,7 +99,7 @@ The game maps 10 core business concepts to playable moments. A typical 40-minute
 - "Plan a year: what do you do differently in each season?"
 
 ### Break-Even Analysis
-- "The game tells you 'Sell 18 lbs today to break even.' What does that number represent?"
+- "The game tells you 'Sell 6 lbs today to break even.' What does that number represent? (At default price $1.50 and COGS $0.60, you earn $0.90 gross profit per lb. Divide $5 daily fixed costs by $0.90 and you get 6 lbs.)"
 - "If foot traffic drops 40% in winter but you still need to break even, what do you change?"
 
 ### Unit Economics
@@ -96,7 +118,7 @@ The game teaches plausible business concepts. Some real-world details are simpli
 
 ### Permits
 - **Real:** Health permits, mobile-vendor licenses, fire certificates, zone-specific permits all vary by jurisdiction (city, county, state). Renewal schedules differ. Costs range $300–$800/year. Processing times: 2–6 weeks.
-- **Game:** One "Health & Mobile Vendor License" for $500, takes 6 in-game days (represents waiting and admin work). Renewal reminder at 30 days before expiry.
+- **Game:** One "Health & Mobile Vendor License" for $500, takes 3 in-game days (represents waiting and admin work). Renewal reminder at 30 days before expiry. **(planned P2 — no permit UI in P1 build)**
 - **Why:** The game is jurisdiction-generic to avoid locking you into one city's rules. The principle is true (permits are unavoidable, recurring, scheduled costs).
 
 ### Pricing & Demand
@@ -111,7 +133,7 @@ The game teaches plausible business concepts. Some real-world details are simpli
 
 ### Spoilage & Inventory
 - **Real:** Roasted peanuts stay fresh ~60–90 days in sealed containers at room temperature. Real trucks rotate stock, watch expiration dates, compost old batches.
-- **Game:** Peanuts spoil after 60 days. You see the degrade rate (0.5%/day from day 61 onward). No real compost cost; spoilage just disappears.
+- **Game:** Peanuts spoil after 60 days. You see the degrade rate (0.5%/day from day 61 onward). No real compost cost; spoilage just disappears. **(planned P2 — no spoilage in P1 build)**
 - **Why:** The game makes inventory management *visible* without forcing you to track SKU-level expiration. It's honest about the risk; the accounting is simplified.
 
 ### Labor & Operating Hours
@@ -146,11 +168,11 @@ When students ask "Is that actually how it works?", here are canonical sources:
 - **No leaderboards:** Your scores aren't broadcast or compared to others online.
 - **No analytics:** The game doesn't track how long you play, which decisions you make, or where you get stuck. No data leaves your computer.
 - **Offline play:** The game runs entirely offline. You can close it, unplug, and play again later without an internet connection.
-- **Save files:** Your progress is saved locally on your device (a single `.json` file in the game folder). You own that file.
+- **Save files (planned P1.5):** In the current P1 build there is no save. Refreshing the browser restarts the game. Planned P1.5 will save to browser `localStorage` (local to that browser only — no file download, no server). **(planned)**
 
 **The educator-export feature mentioned in the roadmap is NOT shipped yet.** Such a feature (recording class-wide gameplay transcripts) would require privacy review per our RISK_REGISTER before it ever ships. It's gated behind a conscious owner decision. Until then, the game collects zero data.
 
-**For school networks:** If your school's IT department blocks local files or requires data audits, the game should still run (it's a web app, served locally). Ask IT to whitelist the domain or allow local storage.
+**For school networks:** The game runs entirely offline — no network access is needed after the page loads (no external assets, no analytics, no CDN calls). If your school's IT department requires audits, there is nothing to intercept: all computation is local.
 
 ---
 
@@ -168,9 +190,9 @@ When students ask "Is that actually how it works?", here are canonical sources:
 ## Accessibility Notes
 
 - **Reading level:** Game text is conversational (Middle School+). Tooltips are optional; core mechanics are visual.
-- **Color:** The margin % display (green/yellow/red) is accessible to colorblind players (icons + numbers also shown).
+- **Color:** The margin % display uses green/yellow/red color bands. Numbers are always shown alongside color, so colorblind players can read the value directly. Icon overlays for color-coded slots are **(planned)**.
 - **Pacing:** You set the pace. No time pressure, no game-over. Pause and think as long as you want.
-- **Difficulty:** No "hard mode" in P1. If a group is stuck on permits or pricing, they can always get a hint or skip to a later day.
+- **Difficulty:** No "hard mode" in P1. In-game hints and day-skip are **(planned)** — for now, teachers can pause and walk through the report card together as the natural debrief point.
 
 ---
 

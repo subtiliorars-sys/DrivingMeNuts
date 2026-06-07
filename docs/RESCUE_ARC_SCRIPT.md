@@ -1,6 +1,7 @@
 # Save the Truck — Rescue Arc Script (P2 Dialogue)
 
-> **Trigger condition:** End-of-day cash < $25 (or cash + pending sales < $25 with no imminent income).
+> **Trigger condition:** End-of-day cash < $25 (evaluated at END OF DAY only — not on
+> mid-day purchases or ticks).
 > **Canon:** This arc is **never a game-over**, never shaming, always a teaching moment. Family-friendly. Zero allergy content.
 > **Tone:** Old Joe is warm, gruff, zero condescension. The paths offer real choice, each teaching a different recovery strategy.
 
@@ -37,20 +38,22 @@
 
 **Opening dialogue:**
 
-**Old Joe:** "First thing: I got some money saved. Not much these days, but enough for a truck keeper to get through a rough patch. I'll loan you five hundred dollars. You pay it back—with five percent interest added on, charged once a season. That's straight, fair, and way better than what you'll find elsewhere."
+**Old Joe:** "First thing: I got some money saved. Not much these days, but enough for a truck keeper to get through a rough patch. I'll loan you seventy-five dollars — covers a week of your fixed costs and a fresh bag of raw peanuts to restock. You pay it back with five percent interest, charged once a season. That's straight, fair, and way better than what you'll find elsewhere."
 
 **Player asks (auto-prompt):** "How much is five percent, exactly?"
 
-**Old Joe:** "On five hundred, that's twenty-five dollars a season. You owe me five-twenty-five at the end of the season. Not every day, not every week. Once a season. I'm not gonna break your knees. I just wanna see you take the business seriously enough to repay."
+**Old Joe:** "On seventy-five, that's three dollars and seventy-five cents per season — you owe me seventy-eight seventy-five at the end of the season. Not every day, not every week. Once a season. That's about twenty percent a year if you keep the money all year — a fair handshake rate, far cheaper than a credit card and a whole lot cheaper than anything you'll see on a flyer. I just want to see you take the business seriously enough to repay."
 
 *(He slides a small paper note across the counter.)*
 
 **Old Joe's Loan Agreement (In-Game Pop-Up):**
 ```
 OLD JOE'S EMERGENCY LOAN
-Principal: $500
-Interest: 5% per in-game season
-Repayment: $525 due at the end of Season [X]
+Principal: $75
+Interest: 5% flat per in-game season
+         (≈ 20%/yr simple — fair for a handshake loan;
+          far cheaper than cards or payday)
+Repayment: $78.75 due at the end of Season [X]
 No penalties for early repayment
 No weekly reminders or nagging
 ```
@@ -63,14 +66,14 @@ No weekly reminders or nagging
 
 **What the player should learn:**
 - A loan has clear terms: you know exactly how much you owe and when.
-- 5% annual (stylized as per-season) is a *reasonable, fair* rate for a small local loan.
+- 5% flat per season (≈ 20%/yr simple) is a reasonable, fair rate for a small local loan.
 - The mentor trusts you and believes you can repay; that's earned respect, not charity.
 - Debt is solvable and transparent; shame comes from *not reading the terms*, not from needing help.
 
 **Mechanics upon acceptance:**
-- Cash: +$500 immediate (appears in ledger as "Old Joe Loan").
-- Event log: "Old Joe loaned you $500 at 5% per season."
-- A calendar reminder appears ~2 weeks before the season ends: "Old Joe's loan of $525 comes due in 14 days."
+- Cash: +$75 immediate (appears in ledger as "Old Joe Loan").
+- Event log: "Old Joe loaned you $75 at 5% per season."
+- A calendar reminder appears ~2 weeks before the season ends: "Old Joe's loan of $78.75 comes due in 14 days."
 - Player can pay anytime; early repayment removes the debt early (no hidden penalties).
 - If the player *doesn't* repay by the season end:
   - Old Joe still doesn't get angry (he's not a villain).
@@ -83,18 +86,22 @@ No weekly reminders or nagging
 
 **Opening dialogue:**
 
-**Old Joe:** "Second idea: Marta's been buying from you since the start, yeah? I ran into her at the market, and she asked me to tell you—if you need it—she's got a contact at the peanut distributor. They'll let you order now, pay later. Fifteen days net."
+**Old Joe:** "Second idea: Marta's been buying from you since the start, yeah? I ran into her at the market, and she asked me to tell you—if you need it—she's got a contact at the peanut distributor. They'll let you order now, pay later. Fourteen days net."
 
-**Player asks (auto-prompt):** "What's 'net-15'?"
+**Player asks (auto-prompt):** "What's 'net-14'?"
 
-**Old Joe:** "You get the peanuts tomorrow. The bill comes due in fifteen days. Means you got two weeks to sell enough to cover what you just bought. It's legal credit, and it's how real food-truck people keep going when cash is tight. Marta's vouching for you, though. That's... that matters."
+**Old Joe:** "You get the peanuts tomorrow. The bill comes due in fourteen days. Means you got two weeks to sell enough to cover what you just bought. It's legal credit, and it's how real food-truck people keep going when cash is tight. Marta's vouching for you, though. That's... that matters."
 
 **Marta's Option Appears (New UI Card):**
 ```
-SUPPLIER NET-15 CREDIT (via Marta's Referral)
-You can now place orders with [Supplier Name] on a 15-day payment schedule.
-Meantime: Buy $300 worth of peanuts now, pay in 15 days.
+SUPPLIER NET-14 CREDIT (via Marta's Referral)
+You can now place orders with [Supplier Name] on a 14-day payment schedule.
+Place: $50 raw peanut order now — pay in 14 days.
 Your cash stays intact. You sell and profit. Then you pay.
+
+At $0.40/lb raw, $50 buys 125 lbs. Roast and sell at $1.50/lb:
+  Revenue potential: ~$187 | COGS: ~$75 (at $0.60/lb roasted) | Gross: ~$112
+  More than enough to cover the $50 bill with runway left over.
 
 Marta's note: "You're good people. Make this count."
 ```
@@ -109,15 +116,15 @@ Marta's note: "You're good people. Make this count."
 - Supplier credit is a real financial tool that bridges cash-flow gaps.
 - It requires trust: Marta's referral means the supplier believes you'll repay.
 - Relationship = economic leverage; friendships aren't just emotional, they're structural.
-- The 15-day window teaches: you have a runway to turn inventory into profit before paying.
+- The 14-day window teaches: you have a runway to turn inventory into profit before paying.
 - Risk: if sales are slow, you face a bill with no cash to cover it—teaches forward-planning.
 
 **Mechanics upon acceptance:**
 - Cash: stays the same (you don't get cash, you get inventory).
-- Inventory: +$300 worth of raw peanuts added (bulk order discount applied).
-- Calendar: a red due-date appears 15 days out: "$300 payment due to supplier."
-- If player has $300 by day 15: can pay in full, debt cleared.
-- If player has < $300 by day 15:
+- Inventory: +$50 worth of raw peanuts added (125 lbs at $0.40/lb base price).
+- Calendar: a red due-date appears 14 days out: "$50 payment due to supplier."
+- If player has $50 by day 14: can pay in full, debt cleared.
+- If player has < $50 by day 14:
   - Supplier doesn't repossess inventory or get hostile.
   - A dialogue option unlocks: "Can I extend?" → Marta steps in again (if her relationship > 60): "I'll talk to them. You've got another week. But next time, plan ahead."
   - Interest does *not* accrue (real small-business suppliers rarely penalize loyal customers with compound interest; they want to keep the relationship).
@@ -133,17 +140,21 @@ Marta's note: "You're good people. Make this count."
 
 **Player asks (auto-prompt):** "How does that help me now?"
 
-**Old Joe:** "You offer Derek's office a hundred pounds of roasted peanuts at, say, a dollar-ten a unit. They pay upfront. That's eleven hundred dollars walking into your till today. You've got the cash to buy the raw peanuts, roast them next few days, and deliver by Friday. They get a good price. You get runway. Win-win, if you can execute it."
+**Old Joe:** "You offer Derek's office a hundred pounds of roasted peanuts at a dollar-ten a unit. They pay upfront — that's a hundred and ten dollars walking into your till today. You buy the raw peanuts, roast them over the next few days, and deliver by Friday. Your raw cost is forty dollars, roasting adds another ten — so about fifty in COGS. You keep sixty dollars profit if you execute it. They get a good price. You get runway. Win-win, if you can deliver."
 
 **Derek's Pre-Order Option Appears (New UI Card):**
 ```
 OFFICE BUILDING BULK ORDER (via Derek)
 Derek's office building: 100 lbs roasted peanuts, assorted flavors
-Customer price: $1.10/unit (lower than retail $1.50, but bulk)
-Payment: $1,100 upfront, balance due upon delivery (next 5 days)
+Customer price: $1.10/lb (below retail $1.50 — bulk discount)
+Payment: $110 paid in full upfront (delivery risk is yours — they trusted you)
 Delivery commitment: Friday, 5 pm to the office break room
 
-Your upside: $1,100 cash now. Raw COGS: ~$350. Profit: ~$750 after roasting costs.
+Your math:
+  Revenue:     $110.00  (100 lbs × $1.10)
+  Raw COGS:    – $40.00  (100 lbs × $0.40/lb)
+  Roast costs: – $10.00  (fuel + ingredients)
+  Gross profit: $60.00
 Your risk: you must roast and deliver on time, or Derek's office loses trust.
 ```
 
@@ -155,17 +166,17 @@ Your risk: you must roast and deliver on time, or Derek's office loses trust.
 
 **What the player should learn:**
 - B2B (business-to-business) sales are different from retail: bulk, committed, on a schedule.
-- Upfront cash is a huge advantage; the customer believes in you enough to pay before they get the goods.
+- Upfront cash is a huge advantage; the customer believes in you enough to pay before they get the goods. That trust is your delivery risk.
 - Profit margin is lower on a per-unit basis ($1.10 vs. $1.50 retail), but volume and guaranteed cash make it worthwhile.
 - Execution risk: you must deliver. Failing hurts your reputation harder than a single retail customer cancellation.
 - This is how food-truck businesses scale: lock in institutional buyers who give you consistent, predictable revenue.
 
 **Mechanics upon acceptance:**
-- Cash: +$1,100 immediate (appears as "Derek's Office Pre-Order Payment").
+- Cash: +$110 immediate (appears as "Derek's Office Pre-Order Payment").
 - Quest unlocks: "Fulfill Derek's Office Order" (5-day timer).
   - Player must roast 100 lbs of peanuts in the next 5 days.
   - Suggested mix: 40 lbs Classic Salted, 30 lbs Honey Cinnamon, 20 lbs Hot Spiced (variety for office break room).
-  - COGS calculator shows: you'll spend ~$350 raw + $50 propane/fuel, leaving ~$750 profit if you execute cleanly.
+  - COGS calculator shows: $40 raw + $10 fuel/ingredients = $50 COGS, leaving $60 gross profit if you execute.
 - On Day 5, end-of-day: "Time to deliver to Derek's office?"
   - If player has roasted 100+ lbs: Delivery succeeds. Quest complete. Derek's relationship +15 points. Positive note: "Derek's building loves the peanuts. They want to order again next month."
   - If player has roasted < 100 lbs: Partial delivery. Derek's relationship –10 points (disappointed, but not hostile). Quest fails. Player can still deliver what they have and catch up next week, but the trust is dented.
@@ -189,37 +200,41 @@ Your risk: you must roast and deliver on time, or Derek's office loses trust.
 "We Get You Cash FAST. No Questions. Bad Credit OK."
 ═══════════════════════════════════════════════════
 
-OFFER: Borrow $500. Repay in 2 weeks.
-FEE: $75 "service charge"
-TOTAL OWED: $575 in 14 days
+OFFER: Borrow $50. Repay in 2 weeks.
+FEE: $7.50 "service charge"
+TOTAL OWED: $57.50 in 14 days
 
-APR (Annual Percentage Rate): ~435%
+APR (Annual Percentage Rate): ~391%
+  (How: $7.50 fee on $50 for 14 days = 15% per 14-day period.
+   There are 26 such periods in a year. 15% × 26 = 390% simple APR.)
 
-[Fine print: If you can't pay in 2 weeks, you can "roll over" the loan for another $75 fee. This trap locks people in cycles.]
+[Fine print: Can't repay in 2 weeks? "Roll over" for another $7.50 fee.
+ Two rollovers by month 2: $50 borrowed + 4 fees × $7.50 = $80 owed.
+ One full year of rollovers: $7.50 × 26 periods = $195 in fees alone on
+ a $50 advance. You'd have paid back 4× what you borrowed in fees.]
 
 TERMS NOBODY READS:
 - Late fees: $25 per day
 - Default after 30 days: debt goes to collector, your credit tanks
-- Rollover fees compound: borrow $500, owe $1,000+ by month 2 if you can't pay
 ═══════════════════════════════════════════════════
 ```
 
 **Old Joe's Teaching:**
 
-**Old Joe:** "Here's the trap: the $75 fee sounds small. But if you borrow $500, the true cost is $75 for two weeks. That's *not* 5%, like my deal. That's $75 on $500 for two weeks, which works out to... *(the game shows a calculation)* ...a four-hundred-and-thirty-five percent annual rate."
+**Old Joe:** "Here's the trap: the $7.50 fee sounds small on fifty bucks. But $7.50 for two weeks on a $50 advance — that's fifteen percent every fourteen days. *(the game shows a calculation)* Do that math for a whole year — twenty-six of those two-week cycles — and you're paying three hundred ninety-one percent in annual interest."
 
 *(He lets that number sit.)*
 
-**Old Joe:** "Means if you borrowed that $500 for a whole year at that rate, you'd owe the bank two thousand dollars. You'd go bankrupt. And here's the sick part: they know you can't pay in two weeks. They *want* you to roll over, pay another $75, and restart the clock. They're making money off your desperation."
+**Old Joe:** "They know you can't pay in two weeks. They *want* you to roll over, pay another seven-fifty, and restart the clock. Two rollovers, and by month two you've paid four fees — that's $50 you borrowed, plus $30 in fees, and you still owe the original $50. By the end of a year it's close to two hundred dollars in fees on a fifty-dollar advance. They're making money off your desperation."
 
 **Player dialogue option auto-prompted:**
 - A) "So... don't use this?"
-- B) "That seems illegal."
+- B) "That seems like it should be illegal."
 - C) *(stay silent, Old Joe continues)*
 
-**Old Joe:** *(nods, no matter the choice)* "It's legal in most places, but it's designed to keep poor people poor. It's the opposite of building a business. You're not solving a cash problem; you're renting debt."
+**Old Joe:** *(nods, no matter the choice)* "It's legal in many places, but it's designed to keep people in debt. It's the opposite of building a business. You're not solving a cash problem; you're renting debt."
 
-*(He tears up the flyer slowly and drops it in the trash.)*
+*(He folds up the flyer and drops it in the trash.)*
 
 **Old Joe:** "If you ever get desperate enough to consider this, come to me first. I'm not a bank. I'm your mentor. And I want you to succeed, not drown."
 
@@ -234,10 +249,19 @@ TERMS NOBODY READS:
 - There *are* ethical alternatives (Old Joe's loan, supplier credit, B2B pre-orders); they're slower but they don't destroy you.
 - Taking on bad debt for short-term relief is the classic failure mode of small businesses.
 
+**QuickNut number chain (all derived from the same fee/term):**
+- Advance: $50
+- Fee per 14-day period: $7.50
+- Fee rate per period: $7.50 / $50 = 15% per period
+- Periods per year: 365 / 14 ≈ 26
+- Simple APR: 15% × 26 = **~391%**
+- Rollover example (2 rollovers = 4 fee payments, 56 days): $50 + 4 × $7.50 = **$80 total owed**
+- Year of rollovers (26 periods): 26 × $7.50 = **$195 in fees** on a $50 advance
+
 **Mechanics:**
 - This option is **not selectable**. The player sees the flyer and Old Joe's warning, but there is no "Choose QuickNut Capital" button.
 - However, the game does **not hide the flyer** or pretend it doesn't exist. The warning is diegetic: Old Joe shows it, explains the math, and teaches why it's bad. This is real-world education, not moralizing.
-- If a player tries to look for QuickNut Capital in a later playthru, they don't find it in-game (it's not an unlockable path), reinforcing that it was a warning, not a genuine option.
+- If a player tries to look for QuickNut Capital in a later playthrough, they don't find it in-game (it's not an unlockable path), reinforcing that it was a warning, not a genuine option.
 - The math is correct and explainable: if a player opens the flyer UI and clicks "How is this calculated?" they get a transparent breakdown of APR vs. simple interest.
 
 ---
@@ -256,7 +280,7 @@ Old Joe nods, stands, and walks toward the door.
 
 ### Re-Entry: Arc Repeats If Triggered Again
 
-If the player's cash drops below $25 again (same trigger):
+If the player's end-of-day cash drops below $25 again (same trigger):
 
 - **Old Joe shows up again**, but the dialogue varies:
   - If the player repaid their first loan: "I see you're in it again. That's part of the game. Let's talk about what changed."
@@ -266,7 +290,7 @@ If the player's cash drops below $25 again (same trigger):
 - **Path options change slightly:**
   - Old Joe's second loan offer: increased interest (7% instead of 5%, teaching: repeated borrowing is riskier).
   - Marta's credit: available again, but Marta adds a note: "I vouched for you. Don't make me regret it." (Relationship pressure, not game-over, but real.)
-  - Derek's pre-order: Derek himself appears. "Look, I'm willing to help, but only if we up the size of the order and you prove you can scale. Five hundred pounds, same price, same timeline." (Harder challenge, but bigger cash infusion: $5,500.)
+  - Derek's pre-order: Derek himself appears. "Look, I'm willing to help, but only if we up the size of the order and you prove you can scale. Two hundred pounds, same price, same timeline." Cash infusion: $220. (Harder challenge, bigger cash infusion, but within realistic P2 scope — ≤ $250.)
 
 - **Never shaming, never hard-locking.** The arc repeats as many times as needed. The game assumes the player is learning, not failing.
 
@@ -283,7 +307,5 @@ If the player's cash drops below $25 again (same trigger):
 4. **Explicit numbers.** Every term is stated clearly. No hidden rates, no ambiguous due dates. This models good business communication and teaches the player to read contracts.
 
 ---
-
-**Final line count: ~160 lines (including all dialogue, mechanics notes, teaching beats).**
 
 **Canon lock:** This arc is non-optional if triggered, non-punishing if repeated, and family-friendly. It teaches real finance, never shames the player, and positions mentorship (Old Joe) and relationships (Marta, Derek) as the path out of crisis.
