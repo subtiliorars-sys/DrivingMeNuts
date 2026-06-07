@@ -6,6 +6,10 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added — milestone celebration juice (stacks on Polish & Pedagogy)
+- **Celebration overlay** for earned moments — the first achievement of a day and each comeback-tier unlock get a brief, non-blocking banner with a confetti burst (scale-pop in, auto-dismiss). Never gates input, never pauses the sim, no countdown/pressure (DARK_PATTERN_GATE-clean).
+- **Respects reduced motion** (from the accessibility wave): static banner, no particle burst, no scale-pop when reduced-motion is on. UI-only — no sim/economy/persistence changes. 348 unit + 5 boot green.
+
 ### Added — Polish & Pedagogy (accessibility + in-game learning layer)
 - **Settings panel** (⚙ MENU button) consolidating Sound + accessibility toggles + Glossary, replacing the lone mute button.
 - **Accessibility:** **Reduced-motion** toggle (gates ambient smoke pulsing, NPC pacing, and the coin-pop float — steady visuals instead) and **colour-blind cues** (the colour-coded margin signal also carries a word — "healthy/tight/low" — per WCAG 1.4.1, never colour alone). Prefs persist to localStorage under their own keys (not the save schema; no schema bump, outside CRIT-1).

@@ -236,6 +236,10 @@ export class GameScene extends Phaser.Scene {
   // ---- Coin pops (sale feedback) -----------------------------------------
   private coinPops: CoinPop[] = [];
 
+  // ---- Milestone celebration overlay (one at a time; non-blocking) -------
+  private celebrationGroup?: Phaser.GameObjects.Group;
+  private celebrationTimer?: Phaser.Time.TimerEvent;
+
   // ---- Ambient NPC data --------------------------------------------------
   private npcs: NpcData[] = [];
 
@@ -738,10 +742,10 @@ export class GameScene extends Phaser.Scene {
         this.showGagBubble(ev.detail.loreId as string, ev.detail.comebackId as string | undefined);
       }
       if (ev.kind === "comeback_unlocked") {
-        // Earned progression toast — factual, celebratory, no pressure.
+        // Earned progression — a celebratory flourish (factual, no pressure).
         const label = ev.detail.label as string;
         const threshold = ev.detail.threshold as number;
-        this.showToast(`Comeback lines unlocked: "${label}" (${threshold} lore entries collected)`);
+        this.showCelebration(`New comebacks: "${label}"`, `${threshold} lore entries collected`);
       }
       if (ev.kind === "batch_ready") {
         playBatchReady();
@@ -2248,14 +2252,20 @@ export class GameScene extends Phaser.Scene {
       // state.pendingAftermath (RT5-1) — no scene-local collection needed here.
     }
 
-    // Wave 6: achievement-unlock toasts (earned milestones — celebratory, no pressure).
+    // Wave 6: achievement unlocks (earned milestones — celebratory, no pressure).
+    // The first unlock of the day gets the celebration flourish; any extra
+    // unlocks the same day fall back to toasts so banners don't strobe.
     let achDelay = 700;
-    for (const ev of report.achievementEvents) {
+    report.achievementEvents.forEach((ev, i) => {
       const name = ev.detail.name as string;
       const desc = ev.detail.desc as string;
-      this.time.delayedCall(achDelay, () => this.showToast(`★ Achievement: ${name} — ${desc}`));
+      if (i === 0) {
+        this.time.delayedCall(achDelay, () => this.showCelebration(`★ ${name}`, desc));
+      } else {
+        this.time.delayedCall(achDelay, () => this.showToast(`★ Achievement: ${name} — ${desc}`));
+      }
       achDelay += 400;
-    }
+    });
 
     // Show recipe-unlock toasts for any newly unlocked recipes.
     const RECIPE_LABELS: Record<RecipeId, string> = {
@@ -2617,6 +2627,81 @@ export class GameScene extends Phaser.Scene {
       this.coinPops[idx].circle.destroy();
       this.coinPops[idx].label.destroy();
       this.coinPops.splice(idx, 1);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Milestone celebration overlay — a brief, non-blocking flourish for EARNED
+  // moments (achievement / comeback-tier unlocks). Never gates input, never
+  // pauses the sim. Honors reduced motion: a static banner with no particle
+  // burst and no scale-pop (DARK_PATTERN_GATE — celebratory, not pressuring;
+  // no "act now", no timer the player must beat).
+  // ---------------------------------------------------------------------------
+
+  private showCelebration(title: string, subtitle = ""): void {
+    // One at a time — a new milestone replaces any banner still showing.
+    this.dismissCelebration();
+
+    const W = this.scale.width;
+    const cx = W / 2;
+    const cy = 64;
+    const bw = Math.max(170, title.length * 6 + 36);
+    const bh = subtitle ? 36 : 24;
+
+    const g = this.add.group();
+    this.celebrationGroup = g;
+
+    const panel = this.add.rectangle(cx, cy, bw, bh, P.PANEL_BG, 0.96).setStrokeStyle(2, P.AWNING);
+    const t1 = this.add.text(cx, subtitle ? cy - 7 : cy, title,
+      { fontSize: "11px", color: "#2C2416", fontFamily: "monospace", fontStyle: "bold", align: "center" }
+    ).setOrigin(0.5);
+    g.add(panel);
+    g.add(t1);
+    if (subtitle) {
+      g.add(this.add.text(cx, cy + 9, subtitle,
+        { fontSize: "7px", color: "#5A3A1A", fontFamily: "monospace", align: "center", wordWrap: { width: bw - 12 } }
+      ).setOrigin(0.5));
+    }
+
+    // A pleasant blip (respects the mute pref via the audio module).
+    playCoinPop();
+
+    if (!isReducedMotion()) {
+      // Scale-pop the banner in.
+      for (const obj of g.getChildren()) {
+        const go = obj as Phaser.GameObjects.Components.Transform & Phaser.GameObjects.GameObject;
+        go.setScale(0.6);
+        this.tweens.add({ targets: go, scale: 1, ease: "Back.easeOut", duration: 280 });
+      }
+      // Confetti burst — a handful of pixel chips flying out and fading.
+      const colors = [P.COIN_GOLD, P.AWNING, P.CASH_GREEN];
+      for (let i = 0; i < 12; i++) {
+        const chip = this.add.rectangle(cx, cy, 4, 4, colors[i % colors.length]);
+        g.add(chip);
+        this.tweens.add({
+          targets: chip,
+          x: cx + Phaser.Math.Between(-90, 90),
+          y: cy + Phaser.Math.Between(-30, 50),
+          alpha: 0,
+          angle: Phaser.Math.Between(-180, 180),
+          ease: "Quad.easeOut",
+          duration: Phaser.Math.Between(700, 1000),
+        });
+      }
+    }
+
+    // Auto-dismiss (no countdown shown — it just clears).
+    this.celebrationTimer = this.time.delayedCall(isReducedMotion() ? 2000 : 2600, () => this.dismissCelebration());
+  }
+
+  private dismissCelebration(): void {
+    if (this.celebrationTimer) {
+      this.celebrationTimer.destroy();
+      this.celebrationTimer = undefined;
+    }
+    if (this.celebrationGroup) {
+      this.celebrationGroup.destroy(true);
+      this.celebrationGroup = undefined;
     }
   }
 
