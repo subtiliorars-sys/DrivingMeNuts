@@ -154,7 +154,7 @@ export function createState(seed = 1): SimState {
     sellPrice: DEFAULT_SELL_PRICE,
     dayElapsedSeconds: 0,
     dayNumber: 1,
-    dayStats: { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0 },
+    dayStats: { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0, offlineEarned: 0 },
     rescueArcPending: false,
     unitsSoldLifetime: 0,
     gagsSeen: new Set<string>(),
@@ -348,17 +348,18 @@ export function setPrice(state: SimState, price: number): SimEvent {
 // ---------------------------------------------------------------------------
 
 export function endOfDay(state: SimState): DayReport {
-  const { revenue, cogsTotal, unitsSold, cashSpentOnProduction } = state.dayStats;
+  const { revenue, cogsTotal, unitsSold, cashSpentOnProduction, offlineEarned } = state.dayStats;
   // F1: cogsTotal is now COGS of units SOLD (recognized at sale, not production)
   const grossProfit = revenue - cogsTotal;
   const grossMarginPct = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
   // F8: average realized price = revenue / units sold
   const avgRealizedPrice = unitsSold > 0 ? revenue / unitsSold : 0;
   const fixedCosts = DAILY_FIXED_COSTS;
-  const net = grossProfit - fixedCosts;
+  // F13 fix: offline earnings are pure cash credit (no COGS); included in net post-fixed-cost
+  const net = grossProfit - fixedCosts + offlineEarned;
 
   const cashBefore = state.cash;
-  // cash already includes all revenue credits (from tick) and ingredient debits
+  // cash already includes all revenue credits (from tick + applyOffline) and ingredient debits
   // (from startRoast). endOfDay only needs to deduct the fixed overhead.
   state.cash = Math.max(0, cashBefore - fixedCosts);
 
@@ -377,7 +378,7 @@ export function endOfDay(state: SimState): DayReport {
   });
 
   // Reset day stats and advance day counter
-  state.dayStats = { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0 };
+  state.dayStats = { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0, offlineEarned: 0 };
   state.dayElapsedSeconds = 0;
   state.dayNumber += 1;
 
@@ -399,6 +400,7 @@ export function endOfDay(state: SimState): DayReport {
     grossMarginPct,
     cashSpentOnProduction,
     fixedCosts,
+    offlineEarned,
     net,
     cashBefore,
     cashAfter,
@@ -441,7 +443,9 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
 
   state.roastedStockLbs = Math.max(0, state.roastedStockLbs - stockConsumedLbs);
   state.cash += actualEarned;
-  state.dayStats.revenue += actualEarned;
+  // F13 fix: write to offlineEarned only — never blend into dayStats.revenue.
+  // This keeps on-screen revenue clean so the gross-margin lesson isn't distorted.
+  state.dayStats.offlineEarned += actualEarned;
 
   return {
     kind: "offline_applied",

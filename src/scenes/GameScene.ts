@@ -37,6 +37,7 @@ import {
   projectedDemand,
 } from "../sim/engine.js";
 import type { SimState, DayReport } from "../sim/types.js";
+import { tryLoad, trySave, resetSave } from "../sim/persistence.js";
 import { LORE_BY_ID, LORE_LINES } from "../data/lore.js";
 
 // Denominator for the HUD lore counter: use the count of currently-loaded lines
@@ -209,6 +210,19 @@ export class GameScene extends Phaser.Scene {
   // ---- Active gag speech bubble (at most one at a time) -------------------
   private gagBubble?: GagBubble;
 
+  // ---- Persistence ---------------------------------------------------------
+  /** Cumulative wall-clock seconds while this scene has been visible. */
+  private playtimeSeconds = 0;
+  /** Bound reference so the same function can be removed in shutdown(). */
+  private readonly onVisibilityChange: () => void = () => {
+    if (document.visibilityState === "hidden") {
+      this.saveGame();
+    }
+  };
+  private readonly onPageHide: () => void = () => {
+    this.saveGame();
+  };
+
   constructor() {
     super({ key: "GameScene" });
   }
@@ -221,7 +235,23 @@ export class GameScene extends Phaser.Scene {
     const W = this.scale.width;   // 480
     const H = this.scale.height;  // 270
 
-    this.state = createState(1);
+    // ---- Load save (§4 load path) ----------------------------------------
+    const loadResult = tryLoad(window.localStorage);
+    this.state = loadResult.state;
+
+    if (loadResult.errorMessage) {
+      // Corruption toast — warm, non-blaming (spec §7)
+      this.time.delayedCall(400, () => this.showToast(loadResult.errorMessage!));
+    }
+    if (loadResult.offlineMessage) {
+      // Offline earnings toast — gain-framed (DARK_PATTERN_GATE §A.8 / spec §8 Q8)
+      this.time.delayedCall(600, () => this.showToast(loadResult.offlineMessage!));
+    }
+
+    // ---- Register save-on-hide listeners (spec §3) -----------------------
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
+    window.addEventListener("pagehide", this.onPageHide);
+
 
     // ---- Backdrop (District: Farmers' Market) — P1_SPRITE_SPEC #10 --------
     // Sky: top 130 px, #FFFFCC
@@ -423,6 +453,17 @@ export class GameScene extends Phaser.Scene {
     this.add.text(W - 50, dpY + 5, "END DAY", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
     endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen) this.triggerEndOfDay(); });
 
+    // ---- Reset Save button (spec req; tucked in bottom-left corner) --------
+    // Player-initiated only — confirm dialog prevents accidents. (DARK_PATTERN_GATE §B.3)
+    const resetBtn = this.add.rectangle(28, dpY + 5, 48, 14, 0x664444)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.add.text(28, dpY + 5, "RESET", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
+    resetBtn.on("pointerdown", () => {
+      if (this.reportOpen || this.supplyModalOpen) return;
+      this.showResetConfirm();
+    });
+
     // Initial HUD render
     this.updateHUD();
   }
@@ -432,6 +473,9 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   update(_time: number, delta: number): void {
+    // Track wall-clock playtime (excludes offline time; used by trySave meta)
+    this.playtimeSeconds += delta / 1_000;
+
     if (this.reportOpen || this.supplyModalOpen) return;
 
     // Convert Phaser ms delta to simulated seconds.
@@ -751,7 +795,9 @@ export class GameScene extends Phaser.Scene {
   private showDayReport(r: DayReport): void {
     const W = this.scale.width;
     const H = this.scale.height;
-    const rW = 300, rH = 224; // +14px for F1 "Cash spent on production" row
+    const rW = 300;
+    // +14px for F1 "Cash spent on production" row; +14px more when offline row present (spec §6)
+    const rH = 224 + (r.offlineEarned > 0 ? 14 : 0);
     const rX = (W - rW) / 2;
     const rY = (H - rH) / 2;
 
@@ -788,6 +834,10 @@ export class GameScene extends Phaser.Scene {
       // F1: separate cash-flow lesson line — production outflow vs. recognized COGS
       [`Cash spent on production today:`, `–$${r.cashSpentOnProduction.toFixed(2)}`, TEXT_STYLE_RED],
       [`Fixed Costs  (permit + fuel):`, `–$${r.fixedCosts.toFixed(2)}`, TEXT_STYLE_RED],
+      // F13 fix: offline earnings shown as a distinct positive line (spec §6 / DARK_PATTERN_GATE Q8)
+      ...(r.offlineEarned > 0
+        ? [[`Offline rest earnings:`, `+$${r.offlineEarned.toFixed(2)}`, TEXT_STYLE_GREEN] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
+        : []),
       [`Net Profit:`, `$${r.net.toFixed(2)}`, r.net >= 0 ? TEXT_STYLE_GREEN : TEXT_STYLE_RED],
     ];
 
@@ -839,7 +889,14 @@ export class GameScene extends Phaser.Scene {
       this.reportGroup = undefined;
     }
     this.reportOpen = false;
+    // Save after report is dismissed — state is fully consistent post-endOfDay (spec §3)
+    this.saveGame();
     this.updateHUD();
+  }
+
+  /** Persist current state to localStorage. Called at safe save points only (never mid-tick). */
+  private saveGame(): void {
+    trySave(window.localStorage, this.state, this.playtimeSeconds);
   }
 
   // ---------------------------------------------------------------------------
@@ -1009,5 +1066,63 @@ export class GameScene extends Phaser.Scene {
     if (b.customerLine.active) b.customerLine.destroy();
     if (b.ownerLine.active)    b.ownerLine.destroy();
     this.gagBubble = undefined;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phaser scene lifecycle — teardown
+  // ---------------------------------------------------------------------------
+
+  shutdown(): void {
+    // Remove DOM listeners added in create() — prevents leaks if scene restarts.
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    window.removeEventListener("pagehide", this.onPageHide);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reset Save — player-initiated with confirmation (spec req; gate-compliant §B.3)
+  // ---------------------------------------------------------------------------
+
+  private showResetConfirm(): void {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const mW = 240, mH = 80;
+    const mX = (W - mW) / 2;
+    const mY = (H - mH) / 2;
+
+    const group = this.add.group();
+
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.5)
+      .setInteractive();
+    group.add(backdrop);
+
+    const panel = this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG)
+      .setStrokeStyle(2, P.PANEL_BORDER);
+    group.add(panel);
+
+    group.add(this.add.text(mX + mW / 2, mY + 10, "Reset save?", TEXT_STYLE_HEADER).setOrigin(0.5, 0));
+    group.add(this.add.text(mX + mW / 2, mY + 28, "This wipes all progress and starts fresh.", {
+      ...TEXT_STYLE_LABEL, wordWrap: { width: mW - 16 },
+    }).setOrigin(0.5, 0));
+
+    const cancelBtn = this.add.rectangle(mX + 70, mY + mH - 14, 100, 18, 0x999977)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    group.add(cancelBtn);
+    group.add(this.add.text(mX + 70, mY + mH - 14, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5));
+    cancelBtn.on("pointerdown", () => { group.destroy(true); });
+
+    const confirmBtn = this.add.rectangle(mX + 184, mY + mH - 14, 96, 18, P.WARNING_RED)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    group.add(confirmBtn);
+    group.add(this.add.text(mX + 184, mY + mH - 14, "YES, RESET", { fontSize: "9px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    confirmBtn.on("pointerdown", () => {
+      group.destroy(true);
+      resetSave(window.localStorage);
+      this.state = createState(1);
+      this.playtimeSeconds = 0;
+      this.showToast("Save reset — starting fresh.");
+      this.updateHUD();
+    });
   }
 }

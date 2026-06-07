@@ -15,5 +15,11 @@
     "types": []
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/phaser_probe*.test.ts",
+    "src/boot-smoke-setup.ts",
+    "src/__phaser-shim.ts"
+  ]
 }

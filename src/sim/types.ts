@@ -27,10 +27,12 @@ export interface RoastSlot {
 // ---------------------------------------------------------------------------
 
 export interface DayStats {
-  revenue: number;              // $ total sales this day
+  revenue: number;              // $ total sales this day (on-screen only; excludes offline)
   cogsTotal: number;            // $ COGS of units SOLD this day (recognized at sale)
   unitsSold: number;            // lbs sold this day
   cashSpentOnProduction: number;// $ cash outflow for roasting today (recognized at production)
+  /** $ earned while the truck was offline resting (not blended into revenue — F13 fix). */
+  offlineEarned: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,14 +94,16 @@ export interface SimState {
 export interface DayReport {
   dayNumber: number;
   unitsSold: number;            // lbs
-  revenue: number;              // $
+  revenue: number;              // $ on-screen sales only (excludes offlineEarned)
   avgRealizedPrice: number;     // $ per lb = revenue / unitsSold (0 if no sales)
   cogs: number;                 // $ COGS of units SOLD (recognized at sale, not production)
   grossProfit: number;          // revenue - cogs
   grossMarginPct: number;       // grossProfit / revenue * 100  (0 if no revenue)
   cashSpentOnProduction: number;// $ cash outflow for roasting today (cash-flow lesson)
   fixedCosts: number;           // $
-  net: number;                  // grossProfit - fixedCosts
+  /** $ the truck earned during offline rest (separate line; not in grossProfit). */
+  offlineEarned: number;
+  net: number;                  // grossProfit - fixedCosts + offlineEarned
   cashBefore: number;           // cash at start of day
   cashAfter: number;            // cash after applying net
   /** One insight line for the HUD report card (question, not shame). */
