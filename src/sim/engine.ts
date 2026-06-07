@@ -66,6 +66,8 @@ import {
   BRAND_CAMPAIGN_LORE_THRESHOLD,
   BRAND_CAMPAIGN_COST,
   BRAND_CAMPAIGN_PRICE_TOLERANCE,
+  AUTO_SELL_DISCOUNT,
+  AUTO_SELL_COST,
   supplierDiscountFor,
   supplierLevelFor,
 } from "../data/economy.js";
@@ -271,6 +273,7 @@ export function createState(seed = 1): SimState {
     ledger: [],
     comebackTier: 0,
     brandCampaignActive: false,
+    autoSellEnabled: false,
     aftermathSeen: [],
     pendingAftermath: [],
     achievementsUnlocked: [],
@@ -541,30 +544,11 @@ export function setPrice(state: SimState, price: number): SimEvent {
 // ---------------------------------------------------------------------------
 
 export function endOfDay(state: SimState): DayReport {
-  const { revenue, cogsTotal, unitsSold, cashSpentOnProduction, offlineEarned } = state.dayStats;
-  // F1: cogsTotal is now COGS of units SOLD (recognized at sale, not production)
-  const grossProfit = revenue - cogsTotal;
-  const grossMarginPct = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
-  // F8: average realized price = revenue / units sold
-  const avgRealizedPrice = unitsSold > 0 ? revenue / unitsSold : 0;
-  const fixedCosts = DAILY_FIXED_COSTS;
-  // F13 fix: offline earnings are pure cash credit (no COGS); included in net post-fixed-cost
-  const net = grossProfit - fixedCosts + offlineEarned;
-
-  // Accumulate lifetime earnings BEFORE resetting dayStats (spec §6d).
-  state.lifetimeEarned += revenue;
-
-  // Append today's net to the rolling 14-day history (sparkline source).
-  state.netHistory.push(net);
-  if (state.netHistory.length > 14) state.netHistory.shift();
-
-  // Evaluate recipe unlock thresholds against updated lifetimeEarned.
-  // State is mutated; GameScene detects new unlocks via state.recipesUnlocked post-call.
-  for (const recipeId of (["honey_cinnamon", "ghost_pepper"] as const)) {
-    if (!state.recipesUnlocked.has(recipeId) && state.lifetimeEarned >= RECIPE_UNLOCK_THRESHOLD[recipeId]) {
-      state.recipesUnlocked.add(recipeId);
-    }
-  }
+  // NOTE (auto-sell wave): the P&L (revenue/COGS/grossProfit/net), lifetime
+  // earnings, the net-history push, and recipe unlocks are computed BELOW —
+  // after preorder fulfillment AND the auto-sell-off-peak step — so auto-sold
+  // leftover stock is reflected in the day's figures and never pre-empts the
+  // roasted stock owed to a Derek pre-order.
 
   // ---- Wave 5: rescue arc — preorder fulfillment + debt auto-repayment ----
   // Processed before fixed costs so the player gets full benefit of the day's earnings.
@@ -732,6 +716,53 @@ export function endOfDay(state: SimState): DayReport {
 
   // ---- End Wave 5 rescue-arc processing ----
 
+  // ---- Auto-sell off-peak (GDD C4 upgrade) ----
+  // If enabled, liquidate roasted stock left AFTER the day's sales and AFTER
+  // fulfilling Derek's pre-order, at AUTO_SELL_DISCOUNT off the sell price.
+  // Recognized as same-day revenue at the discount price; COGS at the roasted
+  // cost basis (RT6-1 consistent). Default-off → unchanged behaviour (leftover
+  // roasted stock carries to the next day).
+  let autoSellLbs = 0;
+  let autoSellRevenue = 0;
+  if (state.autoSellEnabled && state.roastedStockLbs > 0) {
+    autoSellLbs = state.roastedStockLbs;
+    const price = state.sellPrice * (1 - AUTO_SELL_DISCOUNT);
+    autoSellRevenue = autoSellLbs * price;
+    const autoSellCogs = autoSellLbs * state.roastedCostBasisPerLb;
+    state.cash += autoSellRevenue;
+    state.dayStats.revenue += autoSellRevenue;
+    state.dayStats.cogsTotal += autoSellCogs;
+    state.dayStats.unitsSold += autoSellLbs;
+    state.unitsSoldLifetime += autoSellLbs;
+    state.roastedStockLbs = 0;
+  }
+
+  // ---- P&L (computed AFTER rescue + auto-sell so both are reflected) ----
+  const { revenue, cogsTotal, unitsSold, cashSpentOnProduction, offlineEarned } = state.dayStats;
+  // F1: cogsTotal is COGS of units SOLD (recognized at sale, not production)
+  const grossProfit = revenue - cogsTotal;
+  const grossMarginPct = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
+  // F8: average realized price = revenue / units sold
+  const avgRealizedPrice = unitsSold > 0 ? revenue / unitsSold : 0;
+  const fixedCosts = DAILY_FIXED_COSTS;
+  // F13: offline earnings are pure cash credit (no COGS); included in net post-fixed-cost
+  const net = grossProfit - fixedCosts + offlineEarned;
+
+  // Accumulate lifetime earnings BEFORE resetting dayStats (spec §6d).
+  state.lifetimeEarned += revenue;
+
+  // Append today's net to the rolling 14-day history (sparkline source).
+  state.netHistory.push(net);
+  if (state.netHistory.length > 14) state.netHistory.shift();
+
+  // Evaluate recipe unlock thresholds against updated lifetimeEarned.
+  // State is mutated; GameScene detects new unlocks via state.recipesUnlocked post-call.
+  for (const recipeId of (["honey_cinnamon", "ghost_pepper"] as const)) {
+    if (!state.recipesUnlocked.has(recipeId) && state.lifetimeEarned >= RECIPE_UNLOCK_THRESHOLD[recipeId]) {
+      state.recipesUnlocked.add(recipeId);
+    }
+  }
+
   const cashBefore = state.cash;
   // cash already includes all revenue credits (from tick + applyOffline) and ingredient debits
   // (from startRoast). endOfDay only needs to deduct the fixed overhead.
@@ -859,6 +890,34 @@ export function endOfDay(state: SimState): DayReport {
     debtService,
     weekRecap,
     achievementEvents,
+    autoSellLbs,
+    autoSellRevenue,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// buyAutoSell(state) → SimEvent | null
+// One-time purchase of the auto-sell off-peak upgrade (GDD C4).
+// Guards: not already owned, sufficient cash. Pure; mutates only on success.
+// ---------------------------------------------------------------------------
+
+export function buyAutoSell(state: SimState): SimEvent | null {
+  if (state.autoSellEnabled) return null;          // one-time
+  if (AUTO_SELL_COST > state.cash) return null;    // insufficient funds
+
+  state.cash -= AUTO_SELL_COST;
+  applyCashFloor(state);
+  state.autoSellEnabled = true;
+
+  return {
+    kind: "upgrade_purchased",
+    dayNumber: state.dayNumber,
+    daySecond: state.dayElapsedSeconds,
+    detail: {
+      upgradeType: "auto_sell",
+      cost: AUTO_SELL_COST,
+      discount: AUTO_SELL_DISCOUNT,
+    },
   };
 }
 

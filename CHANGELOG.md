@@ -6,6 +6,10 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added — auto-sell off-peak upgrade (GDD C4; owner-approved, $1,500)
+- One-time **$1,500** upgrade: at end of day, leftover roasted stock is liquidated at **10% off** — AFTER the day's sales and AFTER fulfilling any Derek pre-order (never pre-empts the order). Recognized as same-day revenue, COGS at the roasted cost basis (RT6-1-consistent). Teaches clearance pricing / reducing waste / freeing working capital. **Default-off** — saves without it are unchanged (leftover stock still carries over).
+- `endOfDay` P&L computation reordered to run *after* the rescue + auto-sell steps so auto-sold stock is in the day's figures (all 348 prior tests still green — default-off behaviour identical). Upgrades-modal buy row + a day-report "↳ auto-sold leftover" clarifier. Additive-optional persistence (`autoSellEnabled`, no schema bump). 7 new tests; 355 unit + 5 boot green.
+
 ### Added — milestone celebration juice (stacks on Polish & Pedagogy)
 - **Celebration overlay** for earned moments — the first achievement of a day and each comeback-tier unlock get a brief, non-blocking banner with a confetti burst (scale-pop in, auto-dismiss). Never gates input, never pauses the sim, no countdown/pressure (DARK_PATTERN_GATE-clean).
 - **Respects reduced motion** (from the accessibility wave): static banner, no particle burst, no scale-pop when reduced-motion is on. UI-only — no sim/economy/persistence changes. 348 unit + 5 boot green.

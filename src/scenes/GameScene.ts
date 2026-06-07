@@ -41,6 +41,7 @@ import {
   chooseRescuePath,
   balanceSheet,
   buyBrandCampaign,
+  buyAutoSell,
   type RescuePath,
 } from "../sim/engine.js";
 import { ACHIEVEMENTS, ACHIEVEMENT_TOTAL } from "../data/achievements.js";
@@ -95,6 +96,7 @@ import {
   DAY_FACTOR,
   BRAND_CAMPAIGN_LORE_THRESHOLD,
   BRAND_CAMPAIGN_COST,
+  AUTO_SELL_COST,
   supplierLevelFor,
   supplierDiscountFor,
   SUPPLIER_LEVEL_THRESHOLDS,
@@ -1229,7 +1231,7 @@ export class GameScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
-    const mW = 320, mH = 246;
+    const mW = 320, mH = 268; // grown for the auto-sell row
     const mX = (W - mW) / 2;
     const mY = (H - mH) / 2;
 
@@ -1453,8 +1455,46 @@ export class GameScene extends Phaser.Scene {
     }
     rowY += 14;
 
+    // ---- Auto-sell off-peak (GDD C4) — compact single row, cash-gated ----
+    this.upgradesModalGroup.add(this.add.rectangle(mX + mW / 2, rowY + 2, mW - 8, 1, P.PANEL_BORDER));
+    rowY += 8;
+    if (this.state.autoSellEnabled) {
+      this.upgradesModalGroup.add(
+        this.add.text(mX + 6, rowY, `  ▶ Auto-sell off-peak — leftover roasted sells −10% nightly (less waste).`, { ...TEXT_STYLE_LABEL, color: "#4A7C4E" })
+      );
+    } else {
+      this.upgradesModalGroup.add(
+        this.add.text(mX + 6, rowY, `    Auto-sell leftover roasted (−10% at day's end) — less waste, frees cash`, TEXT_STYLE_LABEL)
+      );
+      const canAfford = this.state.cash >= AUTO_SELL_COST;
+      const btnColor = canAfford ? P.AWNING : 0x999977;
+      const asBtn = this.add.rectangle(mX + mW - 46, rowY + 4, 72, 13, btnColor)
+        .setStrokeStyle(1, P.PANEL_BORDER)
+        .setInteractive({ cursor: canAfford ? "pointer" : "default" });
+      this.upgradesModalGroup.add(asBtn);
+      const asLabel = canAfford ? `BUY $${AUTO_SELL_COST}` : `earn $${(AUTO_SELL_COST - this.state.cash).toFixed(0)} more`;
+      this.upgradesModalGroup.add(
+        this.add.text(mX + mW - 46, rowY + 4, asLabel, {
+          fontSize: "7px", color: canAfford ? "#2C2416" : "#666644", fontFamily: "monospace",
+        }).setOrigin(0.5)
+      );
+      if (canAfford) {
+        asBtn.on("pointerdown", () => {
+          const ev = buyAutoSell(this.state);
+          if (ev) {
+            playButtonTick();
+            this.closeUpgradesModal();
+            this.showToast(`Auto-sell on — leftover roasted now sells at 10% off at day's end. Less waste, more working capital.`);
+          }
+        });
+        asBtn.on("pointerover", () => asBtn.setAlpha(0.85));
+        asBtn.on("pointerout",  () => asBtn.setAlpha(1.0));
+      }
+    }
+    rowY += 14;
+
     // ---- Day-factor legend (small, informational, no pressure) ----
-    rowY += 4;
+    rowY += 2;
     this.upgradesModalGroup.add(this.add.rectangle(mX + mW / 2, rowY + 2, mW - 8, 1, P.PANEL_BORDER));
     rowY += 6;
     this.upgradesModalGroup.add(
@@ -2302,7 +2342,7 @@ export class GameScene extends Phaser.Scene {
     const hasSparkline = sparklineHistory.length >= 1;
     // +14px for debt-service row (cash-flow vs P&L lesson); +34px for the weekly recap block
     const rH = 224 + (r.offlineEarned > 0 ? 14 : 0) + (r.activeDebtSummary ? 14 : 0) + (hasSparkline ? 20 : 0)
-      + (r.debtService > 0 ? 14 : 0) + (r.weekRecap ? 34 : 0);
+      + (r.debtService > 0 ? 14 : 0) + (r.weekRecap ? 34 : 0) + (r.autoSellLbs > 0 ? 14 : 0);
     const rX = (W - rW) / 2;
     const rY = (H - rH) / 2;
 
@@ -2339,6 +2379,10 @@ export class GameScene extends Phaser.Scene {
       : RAW_PEANUT_BASE_PRICE + RECIPES.classic_salted.ingredientCostPerLb).toFixed(2);
     const rows: Array<[string, string, Phaser.Types.GameObjects.Text.TextStyle]> = [
       [`Revenue  (${r.unitsSold.toFixed(1)} lbs @ $${r.avgRealizedPrice.toFixed(2)} avg):`, `$${r.revenue.toFixed(2)}`, TEXT_STYLE_BODY],
+      // Auto-sell off-peak clarifier (revenue already counted above; this just shows the split).
+      ...(r.autoSellLbs > 0
+        ? [[`  ↳ auto-sold leftover (10% off):`, `${r.autoSellLbs.toFixed(1)} lbs · $${r.autoSellRevenue.toFixed(2)}`, TEXT_STYLE_LABEL] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
+        : []),
       [`COGS     (@ $${cogsLbDisplay}/lb):`, `–$${r.cogs.toFixed(2)}`, TEXT_STYLE_RED],
       [`Gross Profit:`, `$${r.grossProfit.toFixed(2)}  (${r.grossMarginPct.toFixed(0)}%)`, r.grossMarginPct >= 60 ? TEXT_STYLE_GREEN : TEXT_STYLE_RED],
       // F1: separate cash-flow lesson line — production outflow vs. recognized COGS
