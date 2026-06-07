@@ -4,6 +4,8 @@
  * IMPORTANT: These are stylized in-game values; real-world reference =
  * docs/BUSINESS_CURRICULUM.md. Numbers are internally consistent:
  *   - Classic Salted COGS $0.60/lb, default sell $1.50/lb → 60% gross margin.
+ *     (The in-game 60% margin is the stylized teaching figure; BUSINESS_CURRICULUM §2
+ *      cites 65–72% as the real-world food-truck benchmark.)
  *   - A "mispriced" day at $0.70/lb (below COGS) visibly loses money.
  *   - Daily fixed costs of $5.00 require ~13 lbs/day sold at default price to break even.
  *
@@ -181,5 +183,6 @@ export const OFFLINE_CAP_HOURS = 24;
 // Rescue arc trigger  (GDD F — no bankruptcy, no game-over)
 // ---------------------------------------------------------------------------
 
+// GDD F: rescue arc triggers BEFORE insolvency (<$50) — proactive cash-flow lesson, never a game-over
 /** If cash falls to or below this value, state.rescueArcPending is set to true. */
-export const RESCUE_ARC_CASH_THRESHOLD = 0;
+export const RESCUE_ARC_CASH_THRESHOLD = 50;

@@ -106,11 +106,17 @@ function bulkDiscountFor(lbs: number): number {
   return 0;
 }
 
-/** Ensure cash never goes below 0; set rescueArcPending if it hits 0. */
+/**
+ * Ensure cash never goes below 0; set rescueArcPending when cash drops below
+ * RESCUE_ARC_CASH_THRESHOLD (proactive warning — triggers before insolvency).
+ * Cash floor is always 0; the threshold is a warning level, not a cash floor.
+ */
 function applyCashFloor(state: SimState): void {
-  if (state.cash <= RESCUE_ARC_CASH_THRESHOLD) {
-    state.cash = 0;
+  if (state.cash < RESCUE_ARC_CASH_THRESHOLD) {
     state.rescueArcPending = true;
+  }
+  if (state.cash < 0) {
+    state.cash = 0;
   }
 }
 
@@ -317,8 +323,7 @@ export function endOfDay(state: SimState): DayReport {
   // Actually: cash already includes all revenue credits and ingredient debits.
   // endOfDay only needs to deduct the fixed overhead.
   state.cash = Math.max(0, cashBefore - fixedCosts);
-  if (state.cash <= RESCUE_ARC_CASH_THRESHOLD) {
-    state.cash = 0;
+  if (state.cash < RESCUE_ARC_CASH_THRESHOLD) {
     state.rescueArcPending = true;
   }
 

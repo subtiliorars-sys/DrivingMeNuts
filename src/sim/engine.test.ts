@@ -6,7 +6,7 @@
  *   2. Margin math           — worked example matching economy.ts numbers
  *   3. Price elasticity      — higher price → fewer units; revenue peaks in-bounds
  *   4. Offline cap           — earnings stop at cap; never negative; correct framing
- *   5. No-bankruptcy         — cash floor at 0, rescueArcPending flag, never < 0
+ *   5. No-bankruptcy         — cash floor at 0, rescueArcPending flag (< $50 threshold), never < 0
  *   6. Spoilage              — TODO (GDD has it; deferred to P2 — see engine.ts SCOPE NOTES)
  */
 
@@ -31,6 +31,7 @@ import {
   PRICE_MAX,
   STARTING_CASH,
   STARTING_RAW_STOCK_LBS,
+  RESCUE_ARC_CASH_THRESHOLD,
 } from "../data/economy.js";
 
 // ---------------------------------------------------------------------------
@@ -263,16 +264,28 @@ describe("no-bankruptcy invariant", () => {
     expect(state.cash).toBeGreaterThanOrEqual(0);
   });
 
-  it("rescueArcPending is set when cash hits zero", () => {
+  it("rescueArcPending is set when cash falls below RESCUE_ARC_CASH_THRESHOLD", () => {
     const state = createState(1);
-    state.cash = 0;
-    // endOfDay deducts DAILY_FIXED_COSTS — cash is already 0, so flag triggers
+    state.cash = RESCUE_ARC_CASH_THRESHOLD - 0.01; // just below threshold
+    // endOfDay deducts DAILY_FIXED_COSTS — cash stays below threshold, flag triggers
     endOfDay(state);
     expect(state.rescueArcPending).toBe(true);
-    expect(state.cash).toBe(0);
+    expect(state.cash).toBeGreaterThanOrEqual(0); // cash is floored at 0, not at threshold
   });
 
-  it("cash stays at 0 after end-of-day on an empty day", () => {
+  it("rescueArcPending is set proactively before cash hits zero", () => {
+    // Rescue arc triggers at < $50, not just at $0 (proactive cash-flow lesson)
+    const state = createState(1);
+    state.cash = 30.00; // below $50 threshold, above $0
+    state.dayStats.revenue   = 0;
+    state.dayStats.cogsTotal = 0;
+    state.dayStats.unitsSold = 0;
+    endOfDay(state);
+    expect(state.rescueArcPending).toBe(true);
+    expect(state.cash).toBeGreaterThanOrEqual(0);
+  });
+
+  it("cash stays at 0 after end-of-day on an empty day with insufficient cash", () => {
     const state = createState(1);
     state.cash = 3.00;  // less than DAILY_FIXED_COSTS ($5)
     state.dayStats.revenue   = 0;

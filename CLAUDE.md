@@ -20,8 +20,7 @@ food truck that teaches real small-business concepts. Public twin =
   Re-tier to A+B the moment the game collects any player data.
 - No deploy automation here yet; if any is added, copy `.githooks/` + the git-guards
   CLAUDE.md block from MeniscusMaximus first.
-- License: MIT, holder "the DrivingMeNuts project" — owner deliberately unnamed;
-  never add a personal name.
+- License: proprietary / all rights reserved, owner deliberately unnamed (canon ruling 2026-06-07) — never add a personal name.
 
 ## Working notes
 - Branch per task (`work/<topic>`); stage only files you created/changed.
