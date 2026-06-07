@@ -27,9 +27,10 @@ export interface RoastSlot {
 // ---------------------------------------------------------------------------
 
 export interface DayStats {
-  revenue: number;        // $ total sales this day
-  cogsTotal: number;      // $ total COGS for goods sold this day
-  unitsSold: number;      // lbs sold this day
+  revenue: number;              // $ total sales this day
+  cogsTotal: number;            // $ COGS of units SOLD this day (recognized at sale)
+  unitsSold: number;            // lbs sold this day
+  cashSpentOnProduction: number;// $ cash outflow for roasting today (recognized at production)
 }
 
 // ---------------------------------------------------------------------------
@@ -42,6 +43,8 @@ export interface SimState {
   cash: number;                 // current cash on hand ($); never < 0
   rawStockLbs: number;          // lbs of raw peanuts in inventory
   roastedStockLbs: number;      // lbs of roasted peanuts ready to sell
+  /** Weighted-average COGS per lb of current roasted stock (for COGS-at-sale). */
+  roastedCostBasisPerLb: number;
 
   // ---- Roast queue ----------------------------------------------------
   roastSlots: RoastSlot[];      // length = current number of unlocked slots
@@ -61,7 +64,10 @@ export interface SimState {
   dayStats: DayStats;
 
   // ---- Rescue arc flag ------------------------------------------------
-  /** Set true when cash hits 0. Never resets automatically (owner resets it). */
+  /**
+   * Set true at end-of-day when cash is below RESCUE_ARC_CASH_THRESHOLD;
+   * cleared at end-of-day when cash is >= threshold. Evaluated only at endOfDay.
+   */
   rescueArcPending: boolean;
 
   // ---- PRNG state (seeded, deterministic) -----------------------------
@@ -76,15 +82,17 @@ export interface SimState {
 
 export interface DayReport {
   dayNumber: number;
-  unitsSold: number;       // lbs
-  revenue: number;         // $
-  cogs: number;            // $
-  grossProfit: number;     // revenue - cogs
-  grossMarginPct: number;  // grossProfit / revenue * 100  (NaN → 0 if no revenue)
-  fixedCosts: number;      // $
-  net: number;             // grossProfit - fixedCosts
-  cashBefore: number;      // cash at start of day
-  cashAfter: number;       // cash after applying net
+  unitsSold: number;            // lbs
+  revenue: number;              // $
+  avgRealizedPrice: number;     // $ per lb = revenue / unitsSold (0 if no sales)
+  cogs: number;                 // $ COGS of units SOLD (recognized at sale, not production)
+  grossProfit: number;          // revenue - cogs
+  grossMarginPct: number;       // grossProfit / revenue * 100  (0 if no revenue)
+  cashSpentOnProduction: number;// $ cash outflow for roasting today (cash-flow lesson)
+  fixedCosts: number;           // $
+  net: number;                  // grossProfit - fixedCosts
+  cashBefore: number;           // cash at start of day
+  cashAfter: number;            // cash after applying net
   /** One insight line for the HUD report card (question, not shame). */
   insightLine: string;
 }

@@ -184,21 +184,26 @@ describe("price elasticity", () => {
     }
   });
 
-  it("revenue peaks somewhere between PRICE_MIN and PRICE_MAX", () => {
-    // Sweep prices and confirm the maximum revenue is inside bounds, not at either extreme.
-    const prices = [0.75, 0.90, 1.05, 1.20, 1.35, 1.50, 1.65, 1.80, 2.00, 2.25, 2.50];
-    const revenues = prices.map((p) => {
+  it("profit peak is interior (p*=$1.90 earns more than PRICE_MIN or PRICE_MAX)", () => {
+    // F2: demand = BASE − SLOPE × (p − base); COGS = $0.60.
+    // dπ/dp = 0 → p* = (BASE/SLOPE + base + COGS) / 2 = (20/10 + 1.20 + 0.60) / 2 = 1.90
+    // Assert: profit at $1.90 > profit at $0.75 AND > profit at $2.50 (strict interior max).
+    // (dayStats.cogsTotal tracks COGS at sale via cost basis, so profit = revenue − cogsTotal)
+
+    function simulateHourProfit(price: number): number {
       const state = createState(1);
       state.roastedStockLbs = 10_000;
-      setPrice(state, p);
+      setPrice(state, price);
       for (let t = 0; t < 3600; t++) tick(state, 1);
-      return state.dayStats.revenue;
-    });
+      return state.dayStats.revenue - state.dayStats.cogsTotal;
+    }
 
-    const maxRevIdx = revenues.indexOf(Math.max(...revenues));
-    // Max revenue should not be at the extreme ends (index 0 or last)
-    expect(maxRevIdx).toBeGreaterThan(0);
-    expect(maxRevIdx).toBeLessThan(prices.length - 1);
+    const profitAtPeak  = simulateHourProfit(1.90);
+    const profitAtFloor = simulateHourProfit(PRICE_MIN);
+    const profitAtCeil  = simulateHourProfit(PRICE_MAX);
+
+    expect(profitAtPeak).toBeGreaterThan(profitAtFloor);
+    expect(profitAtPeak).toBeGreaterThan(profitAtCeil);
   });
 });
 
@@ -266,17 +271,17 @@ describe("no-bankruptcy invariant", () => {
 
   it("rescueArcPending is set when cash falls below RESCUE_ARC_CASH_THRESHOLD", () => {
     const state = createState(1);
-    state.cash = RESCUE_ARC_CASH_THRESHOLD - 0.01; // just below threshold
-    // endOfDay deducts DAILY_FIXED_COSTS — cash stays below threshold, flag triggers
+    state.cash = RESCUE_ARC_CASH_THRESHOLD - 0.01; // start below threshold
+    // endOfDay deducts DAILY_FIXED_COSTS — end-of-day cash is below threshold, flag triggers
     endOfDay(state);
     expect(state.rescueArcPending).toBe(true);
     expect(state.cash).toBeGreaterThanOrEqual(0); // cash is floored at 0, not at threshold
   });
 
   it("rescueArcPending is set proactively before cash hits zero", () => {
-    // Rescue arc triggers at < $50, not just at $0 (proactive cash-flow lesson)
+    // F4: rescue arc triggers at end-of-day cash < RESCUE_ARC_CASH_THRESHOLD ($25)
     const state = createState(1);
-    state.cash = 30.00; // below $50 threshold, above $0
+    state.cash = 25.00; // after fixed costs: max(0, 25 - 5) = $20 < $25 threshold
     state.dayStats.revenue   = 0;
     state.dayStats.cogsTotal = 0;
     state.dayStats.unitsSold = 0;

@@ -7,7 +7,8 @@
  *     (The in-game 60% margin is the stylized teaching figure; BUSINESS_CURRICULUM §2
  *      cites 65–72% as the real-world food-truck benchmark.)
  *   - A "mispriced" day at $0.70/lb (below COGS) visibly loses money.
- *   - Daily fixed costs of $5.00 require ~13 lbs/day sold at default price to break even.
+ *   - Daily fixed costs of $5.00 require ceil($5.00 / $0.90) = 6 lbs/day sold at
+ *     default price to break even.  (gross profit/lb at $1.50 = $1.50 – $0.60 = $0.90)
  *
  * Do NOT hardcode prices, rates, or multipliers elsewhere; import from here.
  */
@@ -40,6 +41,17 @@ export const BULK_DISCOUNT_TIERS: readonly BulkTier[] = [
   { minLbs: 100, discount: 0.05 },
   { minLbs: 0,   discount: 0.00 },
 ] as const;
+
+/**
+ * Return the bulk discount fraction (e.g. 0.05) for a purchase of `lbs` lbs.
+ * Exported so GameScene can derive prices from one place (no reimplementation).
+ */
+export function bulkDiscountFor(lbs: number): number {
+  for (const tier of BULK_DISCOUNT_TIERS) {
+    if (lbs >= tier.minLbs) return tier.discount;
+  }
+  return 0;
+}
 
 // ---------------------------------------------------------------------------
 // Recipes — P1 ships with Classic Salted only (one district, one recipe).
@@ -113,9 +125,14 @@ export const DEFAULT_SELL_PRICE = 1.50;
 
 // ---------------------------------------------------------------------------
 // Demand curve — Farmers' Market, Classic Salted  (GDD C3, Appendix)
-// Demand = BASE_DEMAND_LBS_PER_HOUR * (1 - PRICE_ELASTICITY * (price - BASE_PRICE))
-// At default price: demand = 20 lbs/hr exactly.
+// Demand (lbs/hr) = BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)
+// At base price ($1.20):  demand = 20 lbs/hr exactly.
 // Demand is clamped to [0, MAX_DEMAND_LBS_PER_HOUR].
+//
+// Profit maximisation (gross profit, ignoring fixed costs):
+//   π(p) = (p − COGS) × demand(p) = (p − 0.60) × (20 − 10 × (p − 1.20))
+//   dπ/dp = 0  →  p* = (20/10 + 1.20 + 0.60) / 2 = 1.90
+//   p* = $1.90 is strictly interior: PRICE_MIN ($0.75) < $1.90 < PRICE_MAX ($2.50).
 // ---------------------------------------------------------------------------
 
 /** Base (reference) price for demand curve calibration. */
@@ -125,12 +142,10 @@ export const DEMAND_BASE_PRICE = 1.20;
 export const DEMAND_BASE_LBS_PER_HOUR = 20;
 
 /**
- * Elasticity factor: how many lbs/hr demand changes per $1 above/below base price.
- * Calibrated so raising from $1.20 to $2.00 drops demand by ~8 lbs/hr (≈ –5/hr/$).
- * GDD example: $2.00 → ~15 units/hr (–5 from base 20). That's –5/0.80 ≈ 6.25/$/hr.
- * We use 6.0 for clean numbers.
+ * Slope: how many lbs/hr demand falls per $1 increase in price above base price.
+ * SLOPE = 10 gives interior profit peak at p* = $1.90 (see derivation above).
  */
-export const DEMAND_ELASTICITY = 6.0;
+export const DEMAND_SLOPE = 10;
 
 /** Maximum possible demand regardless of price (floor of demand curve). */
 export const DEMAND_MAX_LBS_PER_HOUR = 40;
@@ -144,11 +159,18 @@ export const DEMAND_MAX_LBS_PER_HOUR = 40;
 /** Length of one operating day in simulated seconds (14 hrs × 3600 = 50 400). */
 export const DAY_DURATION_SECONDS = 14 * 3_600;
 
+/**
+ * How many simulated seconds pass per real second in GameScene.
+ * 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
+ * Tests run at scale 1 (1:1) for determinism; GameScene multiplies delta by this.
+ */
+export const SIM_TIME_SCALE = 60;
+
 // ---------------------------------------------------------------------------
 // Daily fixed costs  (BUSINESS_CURRICULUM §8 break-even reference)
 // $5.00/day covers prorated permit + fuel/propane at P1 scale.
 // At default price ($1.50) and COGS ($0.60), gross profit/lb = $0.90.
-// Break-even: ceil($5.00 / $0.90) = 6 lbs/day. Very achievable — good for onboarding.
+// Break-even: ceil($5.00 / $0.90) = 6 lbs/day sold. Very achievable — good for onboarding.
 // ---------------------------------------------------------------------------
 
 export const DAILY_FIXED_COSTS = 5.00;
@@ -173,7 +195,12 @@ export const STARTING_RAW_STOCK_LBS = 20;
 /** Fraction of peak hourly earnings credited during offline time. */
 export const OFFLINE_EARN_RATE_FRACTION = 0.20;
 
-/** Absolute ceiling on offline earnings per hour ($). */
+/**
+ * Absolute ceiling on offline earnings per hour ($).
+ * NOTE: canon docs (GDD C5) cite "$100/min" as the ceiling; this constant is
+ * deliberately 60× stricter ($100/hr) to limit offline catch-up at P1 scale.
+ * Reconcile with canon before P2 wires the full offline system.
+ */
 export const OFFLINE_CAP_DOLLARS_PER_HOUR = 100;
 
 /** Maximum hours offline that generate earnings (after this, truck rests). */
@@ -183,6 +210,10 @@ export const OFFLINE_CAP_HOURS = 24;
 // Rescue arc trigger  (GDD F — no bankruptcy, no game-over)
 // ---------------------------------------------------------------------------
 
-// GDD F: rescue arc triggers BEFORE insolvency (<$50) — proactive cash-flow lesson, never a game-over
-/** If cash falls to or below this value, state.rescueArcPending is set to true. */
-export const RESCUE_ARC_CASH_THRESHOLD = 50;
+/**
+ * End-of-day cash threshold for the rescue arc.
+ * If cash at the END OF DAY is below this value, rescueArcPending is set true;
+ * if end-of-day cash is >= this value, the flag clears (proactive but not hair-trigger).
+ * Evaluated only once per day at endOfDay — NOT on every purchase or tick.
+ */
+export const RESCUE_ARC_CASH_THRESHOLD = 25;

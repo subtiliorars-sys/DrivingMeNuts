@@ -73,8 +73,10 @@ describe("scripted day integration", () => {
     expect(state.rawStockLbs).toBe(20);          // 30 – 10
     expect(state.cash).toBeCloseTo(44.00, 5);    // 46 – 2
 
-    // COGS booked on production: 10 × $0.60 = $6.00
-    expect(state.dayStats.cogsTotal).toBeCloseTo(6.00, 5);
+    // F1: cash outflow booked on production: 10 × $0.60 = $6.00 tracked in cashSpentOnProduction
+    // cogsTotal accumulates at SALE (not production), so it is 0 here
+    expect(state.dayStats.cashSpentOnProduction).toBeCloseTo(6.00, 5);
+    expect(state.dayStats.cogsTotal).toBeCloseTo(0, 5);
 
     // Roast slot is active
     const slot = state.roastSlots[0];
@@ -116,8 +118,10 @@ describe("scripted day integration", () => {
     // Revenue matches what was tracked in dayStats
     expect(report.revenue).toBeGreaterThan(0);
 
-    // COGS = production COGS (booked at startRoast for sold units)
-    expect(report.cogs).toBeCloseTo(6.00, 5);
+    // F1: COGS is recognized at sale (= unitsSold × costBasis); varies with jitter.
+    // The structural invariant is grossProfit = revenue - cogs.
+    expect(report.cogs).toBeGreaterThan(0);
+    expect(report.cogs).toBeLessThanOrEqual(6.00 + 0.001); // can't exceed production COGS
 
     // grossProfit = revenue – cogs
     expect(report.grossProfit).toBeCloseTo(report.revenue - report.cogs, 5);

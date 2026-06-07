@@ -16,7 +16,7 @@ import {
   RAW_PEANUT_BASE_PRICE,
   RAW_ORDER_MIN_LBS,
   RAW_ORDER_MAX_LBS,
-  BULK_DISCOUNT_TIERS,
+  bulkDiscountFor,
   RECIPES,
   ROASTER_EFFICIENCY,
   STARTING_QUEUE_SLOTS,
@@ -27,7 +27,7 @@ import {
   DEFAULT_SELL_PRICE,
   DEMAND_BASE_PRICE,
   DEMAND_BASE_LBS_PER_HOUR,
-  DEMAND_ELASTICITY,
+  DEMAND_SLOPE,
   DEMAND_MAX_LBS_PER_HOUR,
   DAY_DURATION_SECONDS,
   DAILY_FIXED_COSTS,
@@ -77,14 +77,12 @@ function cogsPerLb(recipe: RecipeId): number {
 
 /**
  * Demand in lbs/hour at a given price.
- * Formula (GDD Appendix): Base_Demand × (1 – Elasticity × (Price – Base_Price))
+ * Formula: BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)
  * Clamped to [0, DEMAND_MAX_LBS_PER_HOUR].
  * Small Gaussian-ish jitter applied via PRNG so repeat ticks aren't exactly equal.
  */
 function demandLbsPerHour(price: number, state: SimState): number {
-  const base =
-    DEMAND_BASE_LBS_PER_HOUR *
-    (1 - DEMAND_ELASTICITY * ((price - DEMAND_BASE_PRICE) / DEMAND_BASE_LBS_PER_HOUR));
+  const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - DEMAND_BASE_PRICE);
   // ±10% jitter (two uniform samples averaged → triangular distribution)
   const jitter = ((nextRand(state) + nextRand(state)) / 2 - 0.5) * 0.20;
   return clamp(base * (1 + jitter), 0, DEMAND_MAX_LBS_PER_HOUR);
@@ -98,23 +96,11 @@ function roastDurationSeconds(recipe: RecipeId, lbs: number, state: SimState): n
   return RECIPES[recipe].roastSecondsPerLbTinPan * lbs * efficiency;
 }
 
-/** Apply the bulk discount tier for a purchase of `lbs` lbs. */
-function bulkDiscountFor(lbs: number): number {
-  for (const tier of BULK_DISCOUNT_TIERS) {
-    if (lbs >= tier.minLbs) return tier.discount;
-  }
-  return 0;
-}
-
 /**
- * Ensure cash never goes below 0; set rescueArcPending when cash drops below
- * RESCUE_ARC_CASH_THRESHOLD (proactive warning — triggers before insolvency).
- * Cash floor is always 0; the threshold is a warning level, not a cash floor.
+ * Ensure cash never goes below 0.
+ * The rescue arc flag is NOT updated here — it is evaluated only at endOfDay.
  */
 function applyCashFloor(state: SimState): void {
-  if (state.cash < RESCUE_ARC_CASH_THRESHOLD) {
-    state.rescueArcPending = true;
-  }
   if (state.cash < 0) {
     state.cash = 0;
   }
@@ -141,12 +127,13 @@ export function createState(seed = 1): SimState {
     cash: STARTING_CASH,
     rawStockLbs: STARTING_RAW_STOCK_LBS,
     roastedStockLbs: 0,
+    roastedCostBasisPerLb: 0,
     roastSlots: slots,
     roasterTier: "tin_pan",
     sellPrice: DEFAULT_SELL_PRICE,
     dayElapsedSeconds: 0,
     dayNumber: 1,
-    dayStats: { revenue: 0, cogsTotal: 0, unitsSold: 0 },
+    dayStats: { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0 },
     rescueArcPending: false,
     rngState: seed >>> 0,
   };
@@ -160,7 +147,8 @@ export function createState(seed = 1): SimState {
 
 export function tick(state: SimState, dtSeconds: number): SimEvent[] {
   const events: SimEvent[] = [];
-  if (dtSeconds <= 0) return events;
+  // F9: reject non-finite dt
+  if (!Number.isFinite(dtSeconds) || dtSeconds <= 0) return events;
 
   // 1. Advance roast queue
   for (const slot of state.roastSlots) {
@@ -168,7 +156,15 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
     slot.secondsRemaining = Math.max(0, slot.secondsRemaining - dtSeconds);
     if (slot.secondsRemaining === 0) {
       slot.status = "ready";
-      state.roastedStockLbs += slot.batchLbs;
+      // F1: update weighted-average cost basis when new roasted stock arrives.
+      const oldLbs  = state.roastedStockLbs;
+      const newLbs  = slot.batchLbs;
+      const batchBasis = slot.recipe ? cogsPerLb(slot.recipe) : 0;
+      const totalLbs = oldLbs + newLbs;
+      state.roastedCostBasisPerLb = totalLbs > 0
+        ? (oldLbs * state.roastedCostBasisPerLb + newLbs * batchBasis) / totalLbs
+        : batchBasis;
+      state.roastedStockLbs = totalLbs;
       events.push({
         kind: "batch_ready",
         dayNumber: state.dayNumber,
@@ -187,12 +183,13 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
 
     if (soldLbs > 0) {
       const revenue = soldLbs * state.sellPrice;
-      // COGS is tracked at endOfDay using classic_salted assumption for P1.
-      // The sold stock was already roasted (its COGS was the ingredient cost).
-      // We track revenue and unitsSold here; COGS booked at endOfDay.
+      // F1: COGS recognized at sale using the cost basis of roasted inventory.
+      const cogsSold = soldLbs * state.roastedCostBasisPerLb;
       state.roastedStockLbs = Math.max(0, state.roastedStockLbs - soldLbs);
+      // Cost basis stays the same (average cost method — selling doesn't change the per-lb basis)
       state.cash += revenue;
       state.dayStats.revenue += revenue;
+      state.dayStats.cogsTotal += cogsSold;
       state.dayStats.unitsSold += soldLbs;
 
       events.push({
@@ -220,6 +217,10 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
 // ---------------------------------------------------------------------------
 
 export function buyRaw(state: SimState, lbs: number): SimEvent | null {
+  // F9: reject non-finite input
+  if (!Number.isFinite(lbs)) return null;
+  // F10: reject orders below the minimum (no silent rounding up)
+  if (lbs < RAW_ORDER_MIN_LBS) return null;
   const qty = clamp(Math.floor(lbs), RAW_ORDER_MIN_LBS, RAW_ORDER_MAX_LBS);
   const discount = bulkDiscountFor(qty);
   const pricePerLb = RAW_PEANUT_BASE_PRICE * (1 - discount);
@@ -251,6 +252,9 @@ export function startRoast(
   recipe: RecipeId,
   lbs: number,
 ): SimEvent | null {
+  // F9: reject non-finite input
+  if (!Number.isFinite(lbs)) return null;
+
   const slot = state.roastSlots[slotIndex];
   if (!slot || slot.status !== "empty") return null;
 
@@ -260,12 +264,12 @@ export function startRoast(
   const ingredientCost = RECIPES[recipe].ingredientCostPerLb * batchLbs;
   if (ingredientCost > state.cash) return null;
 
-  // Deduct raw stock and ingredient costs immediately (COGS on production, not on sale,
-  // so the HUD can track working capital accurately — matches BUSINESS_CURRICULUM §1).
+  // Deduct raw stock and ingredient costs immediately (cash outflow at production).
+  // F1: cash-flow lesson — production spend is tracked in cashSpentOnProduction;
+  // COGS is recognized in dayStats.cogsTotal only when units are SOLD (in tick).
   state.rawStockLbs -= batchLbs;
   state.cash -= ingredientCost;
-  // Track COGS against this day's stats so endOfDay can report it.
-  state.dayStats.cogsTotal += cogsPerLb(recipe) * batchLbs;
+  state.dayStats.cashSpentOnProduction += cogsPerLb(recipe) * batchLbs;
 
   applyCashFloor(state);
 
@@ -290,7 +294,9 @@ export function startRoast(
 // ---------------------------------------------------------------------------
 
 export function setPrice(state: SimState, price: number): SimEvent {
-  const clamped = clamp(price, PRICE_MIN, PRICE_MAX);
+  // F9: reject non-finite — leave price unchanged, still return an event
+  const safe = Number.isFinite(price) ? price : state.sellPrice;
+  const clamped = clamp(safe, PRICE_MIN, PRICE_MAX);
   const previous = state.sellPrice;
   state.sellPrice = clamped;
 
@@ -309,9 +315,12 @@ export function setPrice(state: SimState, price: number): SimEvent {
 // ---------------------------------------------------------------------------
 
 export function endOfDay(state: SimState): DayReport {
-  const { revenue, cogsTotal, unitsSold } = state.dayStats;
+  const { revenue, cogsTotal, unitsSold, cashSpentOnProduction } = state.dayStats;
+  // F1: cogsTotal is now COGS of units SOLD (recognized at sale, not production)
   const grossProfit = revenue - cogsTotal;
   const grossMarginPct = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
+  // F8: average realized price = revenue / units sold
+  const avgRealizedPrice = unitsSold > 0 ? revenue / unitsSold : 0;
   const fixedCosts = DAILY_FIXED_COSTS;
   const net = grossProfit - fixedCosts;
 
@@ -319,9 +328,9 @@ export function endOfDay(state: SimState): DayReport {
   // cash already includes all revenue credits (from tick) and ingredient debits
   // (from startRoast). endOfDay only needs to deduct the fixed overhead.
   state.cash = Math.max(0, cashBefore - fixedCosts);
-  if (state.cash < RESCUE_ARC_CASH_THRESHOLD) {
-    state.rescueArcPending = true;
-  }
+
+  // F4: rescue arc evaluated only at end-of-day; clears when cash recovers
+  state.rescueArcPending = state.cash < RESCUE_ARC_CASH_THRESHOLD;
 
   const cashAfter = state.cash;
 
@@ -335,7 +344,7 @@ export function endOfDay(state: SimState): DayReport {
   });
 
   // Reset day stats and advance day counter
-  state.dayStats = { revenue: 0, cogsTotal: 0, unitsSold: 0 };
+  state.dayStats = { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0 };
   state.dayElapsedSeconds = 0;
   state.dayNumber += 1;
 
@@ -351,9 +360,11 @@ export function endOfDay(state: SimState): DayReport {
     dayNumber: state.dayNumber - 1, // report is for the day just ended
     unitsSold,
     revenue,
+    avgRealizedPrice,
     cogs: cogsTotal,
     grossProfit,
     grossMarginPct,
+    cashSpentOnProduction,
     fixedCosts,
     net,
     cashBefore,
@@ -369,13 +380,18 @@ export function endOfDay(state: SimState): DayReport {
 // ---------------------------------------------------------------------------
 
 export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
-  const cappedHours = clamp(elapsedHours, 0, OFFLINE_CAP_HOURS);
+  // F9: reject non-finite input
+  const safeHours = Number.isFinite(elapsedHours) ? elapsedHours : 0;
+  const cappedHours = clamp(safeHours, 0, OFFLINE_CAP_HOURS);
 
   // Peak hourly earn rate: estimate from current price × base demand at that price.
   // We use a deterministic approximation (no jitter) so tests are predictable.
-  const baseDemandAtPrice =
-    DEMAND_BASE_LBS_PER_HOUR *
-    clamp(1 - DEMAND_ELASTICITY * ((state.sellPrice - DEMAND_BASE_PRICE) / DEMAND_BASE_LBS_PER_HOUR), 0, 1);
+  // F2: use new linear demand formula
+  const baseDemandAtPrice = clamp(
+    DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (state.sellPrice - DEMAND_BASE_PRICE),
+    0,
+    DEMAND_MAX_LBS_PER_HOUR,
+  );
   const peakHourlyEarnings = baseDemandAtPrice * state.sellPrice;
 
   const offlineRate = peakHourlyEarnings * OFFLINE_EARN_RATE_FRACTION;
@@ -417,11 +433,10 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
 /**
  * Deterministic demand estimate (no jitter) at a given price.
  * Safe to call repeatedly from UI without mutating PRNG state.
+ * Formula: BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)
  */
 export function projectedDemand(price: number): number {
-  const base =
-    DEMAND_BASE_LBS_PER_HOUR *
-    (1 - DEMAND_ELASTICITY * ((price - DEMAND_BASE_PRICE) / DEMAND_BASE_LBS_PER_HOUR));
+  const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - DEMAND_BASE_PRICE);
   return clamp(base, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 

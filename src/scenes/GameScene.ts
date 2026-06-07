@@ -45,8 +45,9 @@ import {
   BATCH_MIN_LBS,
   BATCH_MAX_LBS,
   RAW_PEANUT_BASE_PRICE,
-  BULK_DISCOUNT_TIERS,
   RECIPES,
+  bulkDiscountFor,
+  SIM_TIME_SCALE,
 } from "../data/economy.js";
 
 // ---------------------------------------------------------------------------
@@ -167,8 +168,13 @@ export class GameScene extends Phaser.Scene {
   // ---- Smoke animation counter -------------------------------------------
   private smokeTimer = 0;
 
+  // ---- Coin-pop accumulator (F5: batch per ≥$0.50, not per tick) ----------
+  private coinPopAccum = 0;
+  private readonly COIN_POP_THRESHOLD = 0.50;
+
   // ---- Modal state --------------------------------------------------------
   private modalGroup?: Phaser.GameObjects.Group;
+  private supplyModalRefreshEvent?: Phaser.Time.TimerEvent;  // F11: track to remove cleanly
   private reportGroup?: Phaser.GameObjects.Group;
   private supplyModalOpen = false;
   private reportOpen = false;
@@ -398,18 +404,23 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (this.reportOpen || this.supplyModalOpen) return;
 
-    // Convert Phaser ms delta to game-time seconds.
-    // Time scale: 1 real second = 1 simulated second (P1; tunable later via scale factor).
-    const dtSeconds = delta / 1_000;
+    // Convert Phaser ms delta to simulated seconds.
+    // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
+    const dtSeconds = (delta / 1_000) * SIM_TIME_SCALE;
 
     const prevDayElapsed = this.state.dayElapsedSeconds;
     const events = tick(this.state, dtSeconds);
 
     // Handle events for coin pops and day-end trigger
+    // F5: accumulate revenue; spawn one pop per COIN_POP_THRESHOLD earned
     for (const ev of events) {
       if (ev.kind === "sale") {
-        this.spawnCoinPop(ev.detail.revenue as number);
+        this.coinPopAccum += ev.detail.revenue as number;
       }
+    }
+    if (this.coinPopAccum >= this.COIN_POP_THRESHOLD) {
+      this.spawnCoinPop(this.coinPopAccum);
+      this.coinPopAccum = 0;
     }
 
     // Day ended (clock just passed DAY_DURATION_SECONDS)
@@ -445,9 +456,10 @@ export class GameScene extends Phaser.Scene {
 
     // Demand hint at current price
     const demandLbsHr = projectedDemand(this.state.sellPrice);
-    const cogsPerLb = 0.60; // classic_salted P1 only
+    // F7: derive COGS from economy constants, not a hardcoded literal
+    const cogsPerLbClassic = RAW_PEANUT_BASE_PRICE + RECIPES.classic_salted.ingredientCostPerLb;
     const marginPct = this.state.sellPrice > 0
-      ? ((this.state.sellPrice - cogsPerLb) / this.state.sellPrice) * 100
+      ? ((this.state.sellPrice - cogsPerLbClassic) / this.state.sellPrice) * 100
       : 0;
     const marginColor = marginPct >= 60 ? "#4A7C4E" : marginPct >= 45 ? "#C08A00" : "#C0392B";
     this.txtDemandHint.setText(
@@ -478,9 +490,10 @@ export class GameScene extends Phaser.Scene {
         barBg.setVisible(false);
       } else if (slot.status === "roasting") {
         rect.setFillStyle(P.SLOT_ROAST);
-        const minLeft = Math.ceil(slot.secondsRemaining / 60);
+        // F3: secondsRemaining is in sim-time; divide by SIM_TIME_SCALE for real-time display
+        const realSecsLeft = Math.ceil(slot.secondsRemaining / SIM_TIME_SCALE);
         const progress = 1 - slot.secondsRemaining / Math.max(1, slot.totalSeconds);
-        label.setText(`Slot ${i + 1}: ${slot.batchLbs}lb roasting… ${minLeft}m left`).setStyle(TEXT_STYLE_LABEL);
+        label.setText(`Slot ${i + 1}: ${slot.batchLbs}lb roasting… ${realSecsLeft}s left`).setStyle(TEXT_STYLE_LABEL);
         barBg.setVisible(true);
         bar.setVisible(true);
         // Bar width 0–66 px
@@ -573,11 +586,14 @@ export class GameScene extends Phaser.Scene {
     const hdr = this.add.text(mX + 6, mY + 6, "BUY RAW PEANUTS", TEXT_STYLE_HEADER);
     this.modalGroup.add(hdr);
 
-    // Bulk discount table (static)
+    // F7: bulk discount table derived from economy constants (no hardcoded prices)
+    const p0 = RAW_PEANUT_BASE_PRICE;
+    const p5 = p0 * (1 - bulkDiscountFor(100));
+    const p12 = p0 * (1 - bulkDiscountFor(500));
     const tableLines = [
-      "  1–99 lbs:  $0.40/lb  (no discount)",
-      " 100–499:   $0.38/lb  (–5%)",
-      " 500+:       $0.35/lb  (–12%)",
+      `  1–99 lbs:  $${p0.toFixed(2)}/lb  (no discount)`,
+      ` 100–499:   $${p5.toFixed(2)}/lb  (–5%)`,
+      ` 500+:       $${p12.toFixed(2)}/lb  (–12%)`,
     ];
     let ty = mY + 22;
     for (const line of tableLines) {
@@ -630,10 +646,9 @@ export class GameScene extends Phaser.Scene {
     };
     rebuildPreview();
 
-    // Hook qty buttons to also rebuild cash line
-    // (reuse the makeQtyBtn pattern — re-wire pointerdown to include cashLine update)
-    // We'll update previewText + cashLine via a refresh each frame while modal is open
-    this.time.addEvent({ delay: 100, repeat: -1, callback: rebuildPreview });
+    // F11: track this specific timer event so closeSupplyModal can remove only it
+    // (not all events, which would kill unrelated toast timers)
+    this.supplyModalRefreshEvent = this.time.addEvent({ delay: 100, repeat: -1, callback: rebuildPreview });
 
     // Buttons
     const cancelBtn = this.add.rectangle(mX + 60, mY + mH - 14, 90, 18, 0x999977)
@@ -668,20 +683,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   private calcSupplyCost(qty: number): number {
-    let discount = 0;
-    for (const tier of BULK_DISCOUNT_TIERS) {
-      if (qty >= tier.minLbs) { discount = tier.discount; break; }
-    }
-    return qty * RAW_PEANUT_BASE_PRICE * (1 - discount);
+    // F7: use exported bulkDiscountFor — single source of truth
+    return qty * RAW_PEANUT_BASE_PRICE * (1 - bulkDiscountFor(qty));
   }
 
   private closeSupplyModal(): void {
+    // F11: remove only the modal's own refresh timer, not all events (toast timers would die)
+    if (this.supplyModalRefreshEvent) {
+      this.supplyModalRefreshEvent.destroy();
+      this.supplyModalRefreshEvent = undefined;
+    }
     if (this.modalGroup) {
       this.modalGroup.destroy(true);
       this.modalGroup = undefined;
     }
     this.supplyModalOpen = false;
-    this.time.removeAllEvents();
     this.updateHUD();
   }
 
@@ -701,7 +717,7 @@ export class GameScene extends Phaser.Scene {
   private showDayReport(r: DayReport): void {
     const W = this.scale.width;
     const H = this.scale.height;
-    const rW = 300, rH = 210;
+    const rW = 300, rH = 224; // +14px for F1 "Cash spent on production" row
     const rX = (W - rW) / 2;
     const rY = (H - rH) / 2;
 
@@ -729,10 +745,14 @@ export class GameScene extends Phaser.Scene {
     this.reportGroup.add(this.add.text(rX + 8, rY + 27, `Location: Farmers' Market  |  Units sold: ${r.unitsSold.toFixed(1)} lbs`, TEXT_STYLE_LABEL));
 
     // Revenue & COGS box
+    // F7: derive COGS/lb from economy constants; F8: show avg realized price (revenue/unitsSold)
+    const cogsLbDisplay = (RAW_PEANUT_BASE_PRICE + RECIPES.classic_salted.ingredientCostPerLb).toFixed(2);
     const rows: Array<[string, string, Phaser.Types.GameObjects.Text.TextStyle]> = [
-      [`Revenue  (${r.unitsSold.toFixed(1)} lbs @ $${this.state.sellPrice.toFixed(2)}):`, `$${r.revenue.toFixed(2)}`, TEXT_STYLE_BODY],
-      [`COGS     (@ $${RECIPES.classic_salted.ingredientCostPerLb + RAW_PEANUT_BASE_PRICE}/lb):`, `–$${r.cogs.toFixed(2)}`, TEXT_STYLE_RED],
+      [`Revenue  (${r.unitsSold.toFixed(1)} lbs @ $${r.avgRealizedPrice.toFixed(2)} avg):`, `$${r.revenue.toFixed(2)}`, TEXT_STYLE_BODY],
+      [`COGS     (@ $${cogsLbDisplay}/lb):`, `–$${r.cogs.toFixed(2)}`, TEXT_STYLE_RED],
       [`Gross Profit:`, `$${r.grossProfit.toFixed(2)}  (${r.grossMarginPct.toFixed(0)}%)`, r.grossMarginPct >= 60 ? TEXT_STYLE_GREEN : TEXT_STYLE_RED],
+      // F1: separate cash-flow lesson line — production outflow vs. recognized COGS
+      [`Cash spent on production today:`, `–$${r.cashSpentOnProduction.toFixed(2)}`, TEXT_STYLE_RED],
       [`Fixed Costs  (permit + fuel):`, `–$${r.fixedCosts.toFixed(2)}`, TEXT_STYLE_RED],
       [`Net Profit:`, `$${r.net.toFixed(2)}`, r.net >= 0 ? TEXT_STYLE_GREEN : TEXT_STYLE_RED],
     ];

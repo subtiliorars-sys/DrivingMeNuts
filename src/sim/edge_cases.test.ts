@@ -349,3 +349,88 @@ describe("endOfDay — called twice", () => {
     expect(report2.insightLine).toMatch(/roast queue|roasted stock/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 8. NaN / non-finite input guards (F9)
+// ---------------------------------------------------------------------------
+
+describe("NaN / non-finite input guards", () => {
+  it("tick() with NaN dt is a no-op", () => {
+    const state = createState(1);
+    state.roastedStockLbs = 100;
+    const cashBefore = state.cash;
+    const timeBefore = state.dayElapsedSeconds;
+    const events = tick(state, NaN);
+    expect(events).toHaveLength(0);
+    expect(state.cash).toBe(cashBefore);
+    expect(state.dayElapsedSeconds).toBe(timeBefore);
+  });
+
+  it("tick() with Infinity dt is a no-op", () => {
+    const state = createState(1);
+    state.roastedStockLbs = 100;
+    const cashBefore = state.cash;
+    const events = tick(state, Infinity);
+    expect(events).toHaveLength(0);
+    expect(state.cash).toBe(cashBefore);
+  });
+
+  it("buyRaw() with NaN lbs returns null without mutating state", () => {
+    const state = createState(1);
+    const cashBefore = state.cash;
+    const rawBefore = state.rawStockLbs;
+    const ev = buyRaw(state, NaN);
+    expect(ev).toBeNull();
+    expect(state.cash).toBe(cashBefore);
+    expect(state.rawStockLbs).toBe(rawBefore);
+  });
+
+  it("setPrice() with NaN leaves price unchanged", () => {
+    const state = createState(1);
+    const prevPrice = state.sellPrice;
+    setPrice(state, NaN);
+    expect(state.sellPrice).toBe(prevPrice);
+  });
+
+  it("startRoast() with NaN lbs returns null without mutating state", () => {
+    const state = createState(1);
+    state.rawStockLbs = 20;
+    const rawBefore = state.rawStockLbs;
+    const cashBefore = state.cash;
+    const ev = startRoast(state, 0, "classic_salted", NaN);
+    expect(ev).toBeNull();
+    expect(state.rawStockLbs).toBe(rawBefore);
+    expect(state.cash).toBe(cashBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. buyRaw rejects orders below minimum (F10)
+// ---------------------------------------------------------------------------
+
+describe("buyRaw — rejects orders below minimum", () => {
+  it("order of exactly 1 lb (below RAW_ORDER_MIN_LBS) is rejected", () => {
+    const state = createState(1);
+    state.cash = STARTING_CASH;
+    const rawBefore = state.rawStockLbs;
+    const cashBefore = state.cash;
+    const ev = buyRaw(state, 1); // RAW_ORDER_MIN_LBS = 10
+    expect(ev).toBeNull();
+    expect(state.rawStockLbs).toBe(rawBefore);
+    expect(state.cash).toBe(cashBefore);
+  });
+
+  it("order of exactly RAW_ORDER_MIN_LBS - 1 is rejected", () => {
+    const state = createState(1);
+    state.cash = STARTING_CASH;
+    const ev = buyRaw(state, RAW_ORDER_MIN_LBS - 1);
+    expect(ev).toBeNull();
+  });
+
+  it("order of exactly RAW_ORDER_MIN_LBS is accepted", () => {
+    const state = createState(1);
+    state.cash = STARTING_CASH;
+    const ev = buyRaw(state, RAW_ORDER_MIN_LBS);
+    expect(ev).not.toBeNull();
+  });
+});
