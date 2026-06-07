@@ -39,6 +39,17 @@ import {
 import type { SimState, DayReport } from "../sim/types.js";
 import { tryLoad, trySave, resetSave } from "../sim/persistence.js";
 import { LORE_BY_ID } from "../data/lore.js";
+import { drawLegsy } from "./legsy.js";
+import {
+  audioInit,
+  toggleMute,
+  isMuted,
+  playCoinPop,
+  playBatchReady,
+  playDayEnd,
+  playButtonTick,
+  MUTE_KEY,
+} from "./audio.js";
 
 // LORE_LOADED_COUNT removed — denominator is now computed dynamically in updateHUD()
 // based on state.dayNumber and LORE_TIER_DAY_GATE (honest: shows unlocked pool size).
@@ -218,6 +229,27 @@ export class GameScene extends Phaser.Scene {
   // ---- Active gag speech bubble (at most one at a time) -------------------
   private gagBubble?: GagBubble;
 
+  // ---- Tutorial state (Wave 3) --------------------------------------------
+  // Three-step first-run tutorial (only when no save exists).
+  // State is gated by "dmn_tutorial_seen" in localStorage (parallel key —
+  // does not touch the save envelope so existing persistence tests are safe).
+  // Each step advances on the relevant action or on tap-to-skip.
+  // Steps: 0=buy peanuts, 1=start roast, 2=watch report. After step 2 the
+  // tutorial is marked seen and never shown again. DARK_PATTERN_GATE A.6
+  // compliant: no nagging repeats, never blocks input.
+  private tutorialStep = -1;        // -1 = not active (already seen or has save)
+  private tutorialGroup?: Phaser.GameObjects.Group;
+
+  /** localStorage key for tutorial-seen flag (separate from save envelope). */
+  private readonly TUTORIAL_KEY = "dmn_tutorial_seen";
+
+  // ---- Mute button (Wave 3) -----------------------------------------------
+  private muteBtn?: Phaser.GameObjects.Rectangle;
+  private muteBtnLabel?: Phaser.GameObjects.Text;
+
+  // ---- Supply button reference (for tutorial pointer) ---------------------
+  private buyBtnRef?: Phaser.GameObjects.Rectangle;
+
   // ---- Persistence ---------------------------------------------------------
   /** Cumulative wall-clock seconds while this scene has been visible. */
   private playtimeSeconds = 0;
@@ -291,6 +323,10 @@ export class GameScene extends Phaser.Scene {
     // Wheels: #333333, circles 10 px radius
     this.add.circle(truckX - 32, truckY + 8, 10, P.WHEELS);
     this.add.circle(truckX + 32, truckY + 8, 10, P.WHEELS);
+
+    // Legsy painted on the truck side panel (programmer-art; code-drawn).
+    // Scale 0.6 keeps it inside the panel (~19×29 px visible on the side).
+    drawLegsy(this, truckX + 16, truckY - 1, 0.6);
 
     // ---- Smoke wisps (P1_SPRITE_SPEC #2) — circles above truck ------------
     // 3 wisps; opacity / position animated in update()
@@ -384,6 +420,7 @@ export class GameScene extends Phaser.Scene {
       const slotIndex = i;
       slotRect.on("pointerdown", () => {
         if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen) {
+          this.advanceTutorialOnAction(1); // step 1: "start a roast"
           this.handleSlotClick(slotIndex);
         }
       });
@@ -415,7 +452,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(pX + 16, pY + 35, "–", { fontSize: "10px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
-    btnMinus.on("pointerdown", () => { if (!this.reportOpen) this.adjustPrice(-this.PRICE_STEP); });
+    btnMinus.on("pointerdown", () => { if (!this.reportOpen) { playButtonTick(); this.adjustPrice(-this.PRICE_STEP); } });
     btnMinus.on("pointerover", () => btnMinus.setAlpha(0.8));
     btnMinus.on("pointerout",  () => btnMinus.setAlpha(1.0));
 
@@ -424,7 +461,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(pX + 46, pY + 35, "+", { fontSize: "10px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
-    btnPlus.on("pointerdown", () => { if (!this.reportOpen) this.adjustPrice(+this.PRICE_STEP); });
+    btnPlus.on("pointerdown", () => { if (!this.reportOpen) { playButtonTick(); this.adjustPrice(+this.PRICE_STEP); } });
     btnPlus.on("pointerover", () => btnPlus.setAlpha(0.8));
     btnPlus.on("pointerout",  () => btnPlus.setAlpha(1.0));
 
@@ -442,10 +479,16 @@ export class GameScene extends Phaser.Scene {
     const buyBtn = this.add.rectangle(buyBtnX + 68, buyBtnY + 10, 137, 20, P.AWNING)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
+    this.buyBtnRef = buyBtn; // held for tutorial pointer targeting
     this.add.text(buyBtnX + 68, buyBtnY + 10, "BUY RAW PEANUTS", {
       fontSize: "8px", color: "#2C2416", fontFamily: "monospace",
     }).setOrigin(0.5);
-    buyBtn.on("pointerdown", () => { if (!this.reportOpen) this.openSupplyModal(); });
+    buyBtn.on("pointerdown", () => {
+      if (!this.reportOpen) {
+        this.advanceTutorialOnAction(0); // step 0: "buy raw peanuts"
+        this.openSupplyModal();
+      }
+    });
     buyBtn.on("pointerover", () => buyBtn.setAlpha(0.85));
     buyBtn.on("pointerout",  () => buyBtn.setAlpha(1.0));
 
@@ -475,6 +518,45 @@ export class GameScene extends Phaser.Scene {
 
     // Initial HUD render
     this.updateHUD();
+
+    // ---- Mute button (Wave 3 — persisted preference) ----------------------
+    // Placed in the bottom-right corner of the HUD bar (next to END DAY).
+    // Mute preference is read from localStorage via audio module.
+    const dpY2 = H - 18;
+    const muteX = W - 96; // between END DAY and the right edge
+    this.muteBtn = this.add.rectangle(muteX, dpY2 + 5, 30, 14, 0x445566)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.muteBtnLabel = this.add.text(muteX, dpY2 + 5,
+      isMuted() ? "UN-MUTE" : "MUTE",
+      { fontSize: "6px", color: "#F5DEB3", fontFamily: "monospace" }
+    ).setOrigin(0.5);
+    this.muteBtn.on("pointerdown", () => {
+      audioInit(window.localStorage);
+      const nowMuted = toggleMute(window.localStorage);
+      if (this.muteBtnLabel) {
+        this.muteBtnLabel.setText(nowMuted ? "UN-MUTE" : "MUTE");
+      }
+    });
+    this.muteBtn.on("pointerover", () => this.muteBtn?.setAlpha(0.85));
+    this.muteBtn.on("pointerout",  () => this.muteBtn?.setAlpha(1.0));
+
+    // Initialise audio prefs from storage (won't play anything — just reads mute flag)
+    // Actual AudioContext creation is deferred to first pointer-down (browser policy).
+    const savedMute = window.localStorage.getItem(MUTE_KEY);
+    if (savedMute !== null && this.muteBtnLabel) {
+      // Reflect persisted state (audioInit not yet called, but we can read the key)
+      const persisted = savedMute === "1";
+      this.muteBtnLabel.setText(persisted ? "UN-MUTE" : "MUTE");
+    }
+
+    // ---- First-run tutorial init (Wave 3) ---------------------------------
+    // Only show tutorial if no save existed at load time (fresh player).
+    // Uses a parallel localStorage key so save schema is untouched.
+    if (!loadResult.ok && window.localStorage.getItem(this.TUTORIAL_KEY) === null) {
+      // Short delay so the backdrop finishes rendering before the first bubble
+      this.time.delayedCall(400, () => this.showTutorialStep(0));
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -503,9 +585,13 @@ export class GameScene extends Phaser.Scene {
       if (ev.kind === "gag") {
         this.showGagBubble(ev.detail.loreId as string);
       }
+      if (ev.kind === "batch_ready") {
+        playBatchReady();
+      }
     }
     if (this.coinPopAccum >= this.COIN_POP_THRESHOLD) {
       this.spawnCoinPop(this.coinPopAccum);
+      playCoinPop();
       this.coinPopAccum = 0;
     }
 
@@ -1073,6 +1159,13 @@ export class GameScene extends Phaser.Scene {
     if (this.reportOpen) return;
     this.reportOpen = true;
 
+    // Audio: day-end sting (synthesized, SOUND_DESIGN.md diegetic)
+    playDayEnd();
+
+    // Tutorial: step 2 ("Watch the report tonight") completes when the
+    // report opens; mark as complete to fulfil the third tutorial beat.
+    this.advanceTutorialOnAction(2);
+
     // Snapshot unlocked recipes before endOfDay so we can detect new unlocks.
     const unlockedBefore = new Set(this.state.recipesUnlocked);
 
@@ -1387,6 +1480,8 @@ export class GameScene extends Phaser.Scene {
     // Remove DOM listeners added in create() — prevents leaks if scene restarts.
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
     window.removeEventListener("pagehide", this.onPageHide);
+    // Clean up any active tutorial bubble
+    this.dismissTutorial();
   }
 
   // ---------------------------------------------------------------------------
@@ -1430,10 +1525,156 @@ export class GameScene extends Phaser.Scene {
     confirmBtn.on("pointerdown", () => {
       group.destroy(true);
       resetSave(window.localStorage);
+      // Also clear tutorial-seen so the new player gets the tutorial again
+      window.localStorage.removeItem(this.TUTORIAL_KEY);
       this.state = createState(1);
       this.playtimeSeconds = 0;
+      this.tutorialStep = -1; // reset tutorial tracking
       this.showToast("Save reset — starting fresh.");
       this.updateHUD();
+      // Show tutorial step 0 after reset
+      this.time.delayedCall(600, () => this.showTutorialStep(0));
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // First-run tutorial (Wave 3)
+  //
+  // Three dismissible speech-bubble steps; Legsy as guide.
+  // Never blocks input. Gate-compliant: no nagging repeats (DARK_PATTERN_GATE A.6).
+  // Steps fire only when tutorialStep >= 0 (set on fresh start only).
+  // Each step can be dismissed by clicking its "skip" area or by performing
+  // the associated action (advanceTutorialOnAction).
+  // State persisted in `dmn_tutorial_seen` key after step 2 completes.
+  // ---------------------------------------------------------------------------
+
+  private showTutorialStep(step: number): void {
+    if (this.tutorialStep === -2) return; // permanently done
+    this.dismissTutorial();
+
+    this.tutorialStep = step;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+
+    // Step definitions: message, point-at hint (x,y), arrow direction
+    type StepDef = { msg: string; hintX: number; hintY: number };
+    const steps: StepDef[] = [
+      {
+        msg: "Buy raw peanuts\nto get started! →",
+        hintX: this.buyBtnRef ? this.buyBtnRef.x : W - 100,
+        hintY: this.buyBtnRef ? this.buyBtnRef.y - 30 : H * 0.55,
+      },
+      {
+        msg: "Start a roast!\nTap an empty slot. →",
+        hintX: 90,
+        hintY: 55,
+      },
+      {
+        msg: "Watch the report\ntonight — that's where\nthe real lesson is!",
+        hintX: W - 60,
+        hintY: H - 38,
+      },
+    ];
+
+    if (step >= steps.length) {
+      this.markTutorialDone();
+      return;
+    }
+
+    const def = steps[step];
+    const bubbleW = 180;
+    const bubbleH = 54;
+
+    // Bubble position: bottom-centre of screen, slightly left
+    const bX = W / 2 - bubbleW / 2;
+    const bY = H * 0.62;
+
+    this.tutorialGroup = this.add.group();
+
+    // --- Legsy guide icon in bubble ---
+    const legsyParts = drawLegsy(this, bX + 16, bY + bubbleH - 4, 0.45);
+    for (const p of legsyParts) this.tutorialGroup.add(p as Phaser.GameObjects.GameObject);
+
+    // --- Bubble background ---
+    const bg = this.add.rectangle(
+      bX + bubbleW / 2, bY + bubbleH / 2,
+      bubbleW, bubbleH,
+      P.PANEL_BG,
+    ).setStrokeStyle(2, P.PANEL_BORDER).setAlpha(0.97);
+    this.tutorialGroup.add(bg);
+
+    // Arrow pointer toward target
+    const arrowX = def.hintX < W / 2 ? bX + 10 : bX + bubbleW - 10;
+    const arrowY = bY - 6;
+    const tail = this.add.triangle(
+      arrowX, arrowY,
+      -6, 0, 6, 0, 0, -10,
+      P.PANEL_BORDER,
+    );
+    this.tutorialGroup.add(tail);
+
+    // Step counter label
+    this.tutorialGroup.add(
+      this.add.text(bX + 30, bY + 4, `(${step + 1}/3)`, {
+        fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+      })
+    );
+
+    // Message text
+    const txt = this.add.text(bX + 30, bY + 14, def.msg, {
+      fontSize: "7px", color: "#2C2416", fontFamily: "monospace",
+      wordWrap: { width: bubbleW - 36 },
+    });
+    this.tutorialGroup.add(txt);
+
+    // Tap-to-skip label
+    const skipTxt = this.add.text(bX + bubbleW - 4, bY + bubbleH - 8, "[tap to skip]", {
+      fontSize: "5px", color: "#8B6F47", fontFamily: "monospace",
+    }).setOrigin(1, 0);
+    this.tutorialGroup.add(skipTxt);
+
+    // Invisible overlay for tap-to-skip (entire bubble is tappable)
+    const skipHit = this.add.rectangle(
+      bX + bubbleW / 2, bY + bubbleH / 2,
+      bubbleW, bubbleH,
+      0x000000, 0,
+    ).setInteractive({ cursor: "pointer" });
+    this.tutorialGroup.add(skipHit);
+    skipHit.on("pointerdown", () => {
+      // Skip to next step
+      this.advanceTutorialOnAction(this.tutorialStep);
+    });
+  }
+
+  /**
+   * If the tutorial is currently on `requiredStep`, advance to the next step
+   * (or finish if on the last step).  Called from action handlers.
+   */
+  private advanceTutorialOnAction(requiredStep: number): void {
+    if (this.tutorialStep !== requiredStep) return;
+
+    const nextStep = requiredStep + 1;
+    const TOTAL_STEPS = 3;
+
+    if (nextStep >= TOTAL_STEPS) {
+      this.markTutorialDone();
+    } else {
+      // Short delay before showing next bubble so the action's own UI appears first
+      this.time.delayedCall(300, () => this.showTutorialStep(nextStep));
+    }
+  }
+
+  private markTutorialDone(): void {
+    this.tutorialStep = -2; // sentinel: permanently done this session
+    this.dismissTutorial();
+    window.localStorage.setItem(this.TUTORIAL_KEY, "1");
+  }
+
+  private dismissTutorial(): void {
+    if (this.tutorialGroup) {
+      this.tutorialGroup.destroy(true);
+      this.tutorialGroup = undefined;
+    }
   }
 }
