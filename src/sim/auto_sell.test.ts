@@ -115,6 +115,27 @@ describe("auto-sell at endOfDay", () => {
   });
 });
 
+describe("auto-sell gag accounting (RT fix)", () => {
+  it("crossing a gag bucket via auto-sell records the lore (not silently lost)", () => {
+    // GAG_EVERY_N_LBS_SOLD = 80. Auto-selling 100 lbs crosses one bucket.
+    const s = withStock(8, 100, 0.60, 1.50);
+    s.autoSellEnabled = true;
+    expect(s.gagsSeen.size).toBe(0);
+    endOfDay(s);
+    // The crossed bucket recorded a lore entry (collection progressed) rather
+    // than eating a future customer gag.
+    expect(s.gagsSeen.size).toBeGreaterThanOrEqual(1);
+    expect(s.unitsSoldLifetime).toBe(100);
+  });
+
+  it("auto-selling under one bucket records no spurious lore", () => {
+    const s = withStock(9, 40, 0.60, 1.50); // < 80
+    s.autoSellEnabled = true;
+    endOfDay(s);
+    expect(s.gagsSeen.size).toBe(0);
+  });
+});
+
 describe("auto-sell persistence", () => {
   it("round-trips autoSellEnabled; legacy save defaults to false", () => {
     const s = createState(7);

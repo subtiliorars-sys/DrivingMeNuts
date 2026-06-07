@@ -733,8 +733,19 @@ export function endOfDay(state: SimState): DayReport {
     state.dayStats.revenue += autoSellRevenue;
     state.dayStats.cogsTotal += autoSellCogs;
     state.dayStats.unitsSold += autoSellLbs;
-    state.unitsSoldLifetime += autoSellLbs;
     state.roastedStockLbs = 0;
+
+    // RT (auto-sell): advancing unitsSoldLifetime crosses GAG buckets. Without
+    // recording them, the next real customer sale would skip the gag that bucket
+    // would have triggered (silently losing canon lore). Auto-sell is automated
+    // overnight clearance (no customer at the window), so we don't pop a speech
+    // bubble — but we DO record the lore for any bucket crossed, so collection /
+    // comeback-tier progress is never lost. Returned events are intentionally
+    // discarded (no end-of-day bubble; the tier, if it unlocks, is still stored).
+    const prevBucket = Math.floor(state.unitsSoldLifetime / GAG_EVERY_N_LBS_SOLD);
+    state.unitsSoldLifetime += autoSellLbs;
+    const newBucket = Math.floor(state.unitsSoldLifetime / GAG_EVERY_N_LBS_SOLD);
+    for (let b = prevBucket; b < newBucket; b++) maybeGagEvents(state);
   }
 
   // ---- P&L (computed AFTER rescue + auto-sell so both are reflected) ----
