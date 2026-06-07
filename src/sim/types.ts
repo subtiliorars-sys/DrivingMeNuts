@@ -97,6 +97,15 @@ export interface SimState {
   rescueMode: "offer" | "active" | null;
 
   /**
+   * Re-entry escalation (RESCUE_ARC_SCRIPT §Re-Entry): how many times the player
+   * has TAKEN a rescue path (loan/credit/preorder/payday; decline doesn't count).
+   * 0 on the first crisis → base terms. ≥1 → escalated terms (7% loan, 200lb/
+   * $220 Derek pre-order, Marta relationship note). Additive-optional in the
+   * save (absent → 0), so no schema bump.
+   */
+  rescueEntryCount: number;
+
+  /**
    * Active debts from rescue paths (loan, credit, payday).
    * Multiple debts can stack (e.g. payday rolls over).
    */

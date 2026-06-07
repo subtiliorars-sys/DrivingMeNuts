@@ -55,6 +55,9 @@ import {
   RESCUE_PREORDER_LBS,
   RESCUE_PREORDER_CASH,
   RESCUE_PREORDER_DUE_DAYS,
+  RESCUE_LOAN_FEE_RATE_REPEAT,
+  RESCUE_PREORDER_LBS_REPEAT,
+  RESCUE_PREORDER_CASH_REPEAT,
   RESCUE_PAYDAY_PRINCIPAL,
   RESCUE_PAYDAY_FEE,
   RESCUE_PAYDAY_DUE_DAYS,
@@ -257,6 +260,7 @@ export function createState(seed = 1): SimState {
     dayStats: { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0, offlineEarned: 0 },
     rescueArcPending: false,
     rescueMode: null,
+    rescueEntryCount: 0,
     rescueDebts: [],
     preorderObligation: null,
     unitsSoldLifetime: 0,
@@ -784,9 +788,12 @@ export function endOfDay(state: SimState): DayReport {
   // RED-TEAM RT-1 (wave4): never re-offer while a rescue line is still ACTIVE.
   // Without this gate, a player whose cash stays below the trigger could stack a
   // new +$75 loan every day while old loans auto-extend fee-free — an infinite
-  // cash pump that inverts the lesson. Script §Re-Entry *does* allow repeat
-  // crises, but only with escalation (7% second loan, Marta hesitation) that v1
-  // does not implement yet; until that ships, one concurrent crisis line is canon.
+  // cash pump that inverts the lesson. This gate REMAINS the load-bearing
+  // protection: an offer only reappears once the prior crisis is fully resolved
+  // (rescueMode returns to null below). Re-entry escalation (owner-approved
+  // 2026-06-07) now ships — repeat crises get HARSHER terms (chooseRescuePath:
+  // 7% loan, 200lb/$220 Derek), which makes repeat borrowing costlier, not a
+  // pump. The gate + escalation together satisfy Script §Re-Entry.
   if (state.rescueArcPending && state.rescueMode !== "active") {
     state.rescueMode = "offer";
   } else if (state.rescueMode === "active" && state.rescueDebts.length === 0 && state.preorderObligation === null) {
@@ -946,10 +953,16 @@ export function chooseRescuePath(state: SimState, path: RescuePath): SimEvent {
     };
   }
 
+  // Re-entry escalation (RESCUE_ARC_SCRIPT §Re-Entry): repeat crises get harsher
+  // terms. isRepeat reads the count BEFORE this entry increments it below.
+  const isRepeat = state.rescueEntryCount >= 1;
+
   if (path === "loan") {
     const principal = RESCUE_LOAN_PRINCIPAL;
-    const fee = principal * RESCUE_LOAN_FEE_RATE;
-    const amountDue = principal + fee; // $78.75
+    // Repeat borrowing is costlier: 7% vs 5% (teaches escalating risk of debt).
+    const feeRate = isRepeat ? RESCUE_LOAN_FEE_RATE_REPEAT : RESCUE_LOAN_FEE_RATE;
+    const fee = principal * feeRate;
+    const amountDue = principal + fee; // first: $78.75; repeat: $80.25
     const debt: RescueDebt = {
       kind: "loan",
       principal,
@@ -963,11 +976,12 @@ export function chooseRescuePath(state: SimState, path: RescuePath): SimEvent {
     state.rescueDebts.push(debt);
     state.rescueMode = "active";
     state.rescueArcPending = false;
+    state.rescueEntryCount += 1;
     return {
       kind: "rescue_path_chosen",
       dayNumber: state.dayNumber,
       daySecond: state.dayElapsedSeconds,
-      detail: { path, cashChange: principal, amountDue, dueDayNumber: debt.dueDayNumber },
+      detail: { path, cashChange: principal, amountDue, dueDayNumber: debt.dueDayNumber, isRepeat, feeRate },
     };
   }
 
@@ -985,11 +999,14 @@ export function chooseRescuePath(state: SimState, path: RescuePath): SimEvent {
     state.rescueDebts.push(debt);
     state.rescueMode = "active";
     state.rescueArcPending = false;
+    state.rescueEntryCount += 1;
+    // Marta's credit terms are UNCHANGED on repeat — escalation is the
+    // relationship note in the modal dialogue ("I vouched for you"), not numbers.
     return {
       kind: "rescue_path_chosen",
       dayNumber: state.dayNumber,
       daySecond: state.dayElapsedSeconds,
-      detail: { path, rawLbsAdded: RESCUE_CREDIT_RAW_LBS, amountDue: RESCUE_CREDIT_AMOUNT_DUE, dueDayNumber: debt.dueDayNumber },
+      detail: { path, rawLbsAdded: RESCUE_CREDIT_RAW_LBS, amountDue: RESCUE_CREDIT_AMOUNT_DUE, dueDayNumber: debt.dueDayNumber, isRepeat },
     };
   }
 
@@ -1003,26 +1020,30 @@ export function chooseRescuePath(state: SimState, path: RescuePath): SimEvent {
         detail: { path, reason: "preorder_already_active" },
       };
     }
-    state.cash += RESCUE_PREORDER_CASH;
+    // Repeat: Derek scales the order up (bigger infusion, bigger delivery risk).
+    const totalLbs = isRepeat ? RESCUE_PREORDER_LBS_REPEAT : RESCUE_PREORDER_LBS;
+    const cashUp   = isRepeat ? RESCUE_PREORDER_CASH_REPEAT : RESCUE_PREORDER_CASH;
+    state.cash += cashUp;
     applyCashFloor(state);
     state.preorderObligation = {
-      totalLbs: RESCUE_PREORDER_LBS,
+      totalLbs,
       fulfilledLbs: 0,
       dueDayNumber: state.dayNumber + RESCUE_PREORDER_DUE_DAYS,
-      cashReceived: RESCUE_PREORDER_CASH,
+      cashReceived: cashUp,
       createdOnDay: state.dayNumber,
     };
     state.rescueMode = "active";
     state.rescueArcPending = false;
+    state.rescueEntryCount += 1;
     return {
       kind: "rescue_path_chosen",
       dayNumber: state.dayNumber,
       daySecond: state.dayElapsedSeconds,
-      detail: { path, cashChange: RESCUE_PREORDER_CASH, totalLbs: RESCUE_PREORDER_LBS, dueDayNumber: state.preorderObligation.dueDayNumber },
+      detail: { path, cashChange: cashUp, totalLbs, dueDayNumber: state.preorderObligation.dueDayNumber, isRepeat },
     };
   }
 
-  // path === "payday"
+  // path === "payday" — UNCHANGED on repeat (already the cautionary option).
   const principal = RESCUE_PAYDAY_PRINCIPAL;
   const amountDue = principal + RESCUE_PAYDAY_FEE; // $57.50
   const debt: RescueDebt = {
@@ -1038,11 +1059,12 @@ export function chooseRescuePath(state: SimState, path: RescuePath): SimEvent {
   state.rescueDebts.push(debt);
   state.rescueMode = "active";
   state.rescueArcPending = false;
+  state.rescueEntryCount += 1;
   return {
     kind: "rescue_path_chosen",
     dayNumber: state.dayNumber,
     daySecond: state.dayElapsedSeconds,
-    detail: { path, cashChange: principal, amountDue, dueDayNumber: debt.dueDayNumber, aprPct: 391 },
+    detail: { path, cashChange: principal, amountDue, dueDayNumber: debt.dueDayNumber, aprPct: 391, isRepeat },
   };
 }
 

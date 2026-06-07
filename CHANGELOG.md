@@ -6,6 +6,10 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added — rescue re-entry escalation (owner-approved 2026-06-07; the RT-1 deferral)
+- The rescue arc now **escalates on repeat**. The one-concurrent-crisis gate from RT-1 still holds (a new offer only appears once the prior crisis is fully resolved — no debt-stacking pump), but a *repeat* crisis gets harsher terms: Old Joe's loan fee **5% → 7%**, Derek's pre-order scales **100 lbs/$110 → 200 lbs/$220** (bigger infusion + delivery challenge, ≤ $250 P2 cap). Marta's credit and QuickNut are unchanged (Marta gets a relationship note in dialogue; QuickNut is already the cautionary option). Old Joe's dialogue varies ("I see you're in it again…") — never shaming.
+- New `SimState.rescueEntryCount` (additive-optional, no schema bump) tracks paths taken; escalation makes repeat borrowing **costlier, never a pump**. 7 new tests (RT-1 regression included). 333 unit + 5 boot green.
+
 ### Consolidation (wave 7, PR #9 — stacks on PR #8; no new scope)
 - **Cross-system integration test** (`src/sim/wave7_integration.test.ts`): a 7-day trading loop exercising buy→roast→sell→close with a mid-week save/load round-trip, asserting ledger P&L identity, weekly-recap timing, supplier leveling, achievement unlocks, and RT6-1 no-phantom-equity all compose end-to-end.
 - **RISK_REGISTER standing-trigger review** for waves 5–6 (triggers #4 data + #6/A4 dark-pattern): Tier A retained (local-only, no PII, no egress); dark-pattern gate passed for recap/achievements/campaign; A2 accuracy hardened by RT6-1. SME 93-claim walk remains owner-gated.

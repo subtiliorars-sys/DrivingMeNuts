@@ -294,6 +294,15 @@ If the player's end-of-day cash drops below $25 again (same trigger):
 
 - **Never shaming, never hard-locking.** The arc repeats as many times as needed. The game assumes the player is learning, not failing.
 
+> **Live status (2026-06-07, owner-approved — RT-1 deferral resolved):** SHIPPED.
+> Engine: `chooseRescuePath` escalates on `SimState.rescueEntryCount ≥ 1` — loan
+> fee 5%→7% (`RESCUE_LOAN_FEE_RATE_REPEAT`), Derek 100lb/$110→200lb/$220
+> (`RESCUE_PREORDER_*_REPEAT`); Marta/QuickNut terms unchanged. The RT-1
+> one-concurrent-crisis gate (no offer while a crisis is active) REMAINS the
+> load-bearing anti-pump protection — escalation only makes repeat borrowing
+> costlier. UI: Old Joe's dialogue + card terms vary on re-entry. Tests:
+> `src/sim/reentry.test.ts` (incl. an RT-1 no-stacking regression).
+
 ---
 
 ## Tone Notes for Dialogue Writing

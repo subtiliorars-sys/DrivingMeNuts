@@ -110,6 +110,8 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   rescueDebts?: RescueDebt[];
   /** Wave 5 (schema v3): preorder obligation. Optional for forward-compat. */
   preorderObligation?: PreorderObligation | null;
+  /** Re-entry escalation (additive-optional): rescue paths taken so far. Absent → 0. */
+  rescueEntryCount?: number;
   /**
    * Wave 4 polish: last-14-days net history for sparkline.
    * Optional/additive — absent on older saves; defaults to [] on load.
@@ -410,6 +412,12 @@ function sanityCheck(env: SaveEnvelope): string | null {
       return `supplierLbsPurchased invalid: ${ss.supplierLbsPurchased}`;
   }
 
+  // Re-entry escalation: rescueEntryCount must be a finite non-negative number.
+  if (ss.rescueEntryCount !== undefined) {
+    if (!Number.isFinite(ss.rescueEntryCount) || ss.rescueEntryCount < 0)
+      return `rescueEntryCount invalid: ${ss.rescueEntryCount}`;
+  }
+
   // RT6-1: rawCostBasisPerLb must be finite, non-negative, and not above the
   // undiscounted base price (a discount can only LOWER it; a higher value would
   // be a crafted save trying to inflate inventory valuation / phantom equity).
@@ -519,6 +527,12 @@ export function deserialize(json: string): SimState {
   // Wave 5: revive rescue arc fields (default to safe values if absent — migration may not have run)
   const ss = sim as SerializedSimState;
   const rescueMode = (ss.rescueMode === "offer" || ss.rescueMode === "active") ? ss.rescueMode : null;
+  // Re-entry escalation: revive the entry counter; default 0 (legacy saves never
+  // tracked it — a fresh count is honest, and only escalates after a future entry).
+  const rescueEntryCount =
+    typeof ss.rescueEntryCount === "number" && Number.isFinite(ss.rescueEntryCount) && ss.rescueEntryCount >= 0
+      ? Math.floor(ss.rescueEntryCount)
+      : 0;
 
   const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday"]);
   const rescueDebts: RescueDebt[] = Array.isArray(ss.rescueDebts)
@@ -631,6 +645,7 @@ export function deserialize(json: string): SimState {
     dayStats,
     rescueArcPending: sim.rescueArcPending,
     rescueMode,
+    rescueEntryCount,
     rescueDebts,
     preorderObligation,
     unitsSoldLifetime: sim.unitsSoldLifetime,
