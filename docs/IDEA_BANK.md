@@ -32,3 +32,12 @@ wave 4).
 - Family-friendly: huff-and-puff comedy stays kind (no mocking of breathlessness/asthma).
 
 **Status:** logged, unscheduled. Candidate promotion target: P2 NPC roster (GDD B3).
+
+---
+
+## Pointer: deferred systems specs (2026-06-07)
+Implementation-ready specs for the deferred P1+ economy/accessibility items —
+weather demand modifier, GDD C4 upgrades (auto-sell, fridge, marketing tiers),
+large-text accessibility — now live in **docs/SYSTEMS_BACKLOG.md** (integration
+points, test-update plans, dark-pattern/A2 gates, persistence shapes). Two Owner
+Decisions parked in ~/fleet/questions.md (auto-sell cost; marketing-tier A4).
