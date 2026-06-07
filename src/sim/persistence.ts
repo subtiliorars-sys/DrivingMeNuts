@@ -318,7 +318,7 @@ function sanityCheck(env: SaveEnvelope): string | null {
   if (ss.rescueDebts !== undefined) {
     if (!Array.isArray(ss.rescueDebts))
       return `rescueDebts must be an array`;
-    const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday"]);
+    const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday", "preorder_default"]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const d of (ss.rescueDebts as any[])) {
       // RT-4: entry must be a non-null object, else d.kind below would THROW a
@@ -534,7 +534,7 @@ export function deserialize(json: string): SimState {
       ? Math.floor(ss.rescueEntryCount)
       : 0;
 
-  const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday"]);
+  const VALID_DEBT_KINDS = new Set(["loan", "credit", "payday", "preorder_default"]);
   const rescueDebts: RescueDebt[] = Array.isArray(ss.rescueDebts)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? (ss.rescueDebts as any[])

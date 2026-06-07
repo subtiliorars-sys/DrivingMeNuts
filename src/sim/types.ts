@@ -282,7 +282,11 @@ export interface BalanceSheet {
 // ---------------------------------------------------------------------------
 
 /** Which rescue path originated this debt. */
-export type RescueDebtKind = "loan" | "credit" | "payday";
+// "preorder_default" is created when a Derek pre-order is delivered short: the
+// UNEARNED portion of the cash already received becomes a debt owed back (closes
+// the no-clawback cash-pump red-team RT-1b found, while honoring the script's
+// "no hard cash yank" intent — you owe it, you don't get it ripped from your till).
+export type RescueDebtKind = "loan" | "credit" | "payday" | "preorder_default";
 
 /**
  * A single debt record created by a rescue path.

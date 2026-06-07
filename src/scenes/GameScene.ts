@@ -92,6 +92,7 @@ import {
   RESCUE_LOAN_PRINCIPAL,
   RESCUE_LOAN_FEE_RATE,
   RESCUE_LOAN_FEE_RATE_REPEAT,
+  RESCUE_LOAN_DUE_DAYS,
   RESCUE_PREORDER_LBS,
   RESCUE_PREORDER_CASH,
   RESCUE_PREORDER_LBS_REPEAT,
@@ -876,6 +877,8 @@ export class GameScene extends Phaser.Scene {
       } else if (debt.kind === "payday") {
         const rNote = debt.rollovers > 0 ? ` [×${debt.rollovers}]` : "";
         parts.push(`QuickNut: $${debt.amountDue.toFixed(2)} due d${debt.dueDayNumber}${rNote}`);
+      } else if (debt.kind === "preorder_default") {
+        parts.push(`Owe Derek $${debt.amountDue.toFixed(2)} — ${daysLeft}d left`);
       }
     }
     if (this.state.preorderObligation) {
@@ -2579,9 +2582,13 @@ export class GameScene extends Phaser.Scene {
     // dialogue. The one-concurrent-crisis gate guarantees we only reach here
     // after the prior crisis fully resolved, so this is never a debt-stacking pump.
     const isRepeat = this.state.rescueEntryCount >= 1;
-    const loanOwe = (RESCUE_LOAN_PRINCIPAL * (1 + (isRepeat ? RESCUE_LOAN_FEE_RATE_REPEAT : RESCUE_LOAN_FEE_RATE))).toFixed(2);
-    const loanPct = ((isRepeat ? RESCUE_LOAN_FEE_RATE_REPEAT : RESCUE_LOAN_FEE_RATE) * 100).toFixed(0);
-    const loanApr = Math.round((isRepeat ? RESCUE_LOAN_FEE_RATE_REPEAT : RESCUE_LOAN_FEE_RATE) * 100 * 4); // ~4 seasons/yr
+    const loanRate = isRepeat ? RESCUE_LOAN_FEE_RATE_REPEAT : RESCUE_LOAN_FEE_RATE;
+    const loanOwe = (RESCUE_LOAN_PRINCIPAL * (1 + loanRate)).toFixed(2);
+    const loanPct = (loanRate * 100).toFixed(0);
+    // RT-1b/F3 (A2 accuracy): annualize the flat fee on the ACTUAL 14-day term —
+    // the same simple-APR basis QuickNut's 391% uses — so the friendly loan isn't
+    // shown ~6x cheaper than it is. ~130% (5%) / ~182% (7%); still << QuickNut.
+    const loanApr = Math.round(loanRate * (365 / RESCUE_LOAN_DUE_DAYS) * 100);
     const preLbs  = isRepeat ? RESCUE_PREORDER_LBS_REPEAT : RESCUE_PREORDER_LBS;
     const preCash = isRepeat ? RESCUE_PREORDER_CASH_REPEAT : RESCUE_PREORDER_CASH;
     const preCogs = Math.round(preLbs * 0.50);   // ~$0.50/lb roasted-cost rule of thumb
@@ -2655,8 +2662,8 @@ export class GameScene extends Phaser.Scene {
           "+$75 cash now",
           `Owe: $${loanOwe}`,
           "Due: 14 days",
-          `${loanPct}% flat/season`,
-          `(≈${loanApr}%/yr)`,
+          `${loanPct}% flat fee`,
+          `(≈${loanApr}%/yr APR)`,
           "",
           ...(isRepeat
             ? ["Steeper this time", "— repeat debt", "costs more."]

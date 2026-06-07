@@ -618,10 +618,26 @@ export function endOfDay(state: SimState): DayReport {
         state.preorderObligation = null;
         emitAftermath("preorder");
       } else {
-        // Partial delivery — pro-rata payment adjustment (we already received cash upfront;
-        // script says trust dented, not reversed; we keep the math clean:
-        // the cash was already credited, no clawback — delivery failure costs reputation only)
+        // Partial/zero delivery. RED-TEAM RT-1b: the upfront cash for the
+        // UNDELIVERED portion was never earned — leaving it free-and-clear made
+        // the preorder a net-positive cash pump (take $220, never deliver, keep
+        // it; re-trigger; repeat). We do NOT hard-yank cash (honors the script's
+        // "no clawback, trust dented not reversed"): instead the unearned amount
+        // becomes a DEBT owed back to Derek — repaid from future cash like any
+        // rescue debt, gently extended if short. Net wealth change from a
+        // defaulted order is now ~0, never positive.
         const pct = ob.fulfilledLbs / ob.totalLbs;
+        const unearned = ob.cashReceived * (1 - pct);
+        if (unearned > 0) {
+          state.rescueDebts.push({
+            kind: "preorder_default",
+            principal: unearned,
+            amountDue: unearned,
+            dueDayNumber: state.dayNumber + RESCUE_LOAN_DUE_DAYS,
+            createdOnDay: state.dayNumber,
+            rollovers: 0,
+          });
+        }
         rescueEvents.push({
           kind: "preorder_partial",
           dayNumber: state.dayNumber,
@@ -630,7 +646,8 @@ export function endOfDay(state: SimState): DayReport {
             fulfilledLbs: ob.fulfilledLbs,
             totalLbs: ob.totalLbs,
             pctDelivered: pct,
-            message: `Partial delivery: ${ob.fulfilledLbs.toFixed(0)} of ${ob.totalLbs} lbs. Derek is disappointed.`,
+            unearnedOwed: unearned,
+            message: `Delivered ${ob.fulfilledLbs.toFixed(0)} of ${ob.totalLbs} lbs. You owe Derek back $${unearned.toFixed(2)} for what didn't ship.`,
           },
         });
         state.preorderObligation = null;
@@ -653,6 +670,8 @@ export function endOfDay(state: SimState): DayReport {
             : `QuickNut repaid $${debt.amountDue.toFixed(2)}.`;
         } else if (debt.kind === "loan") {
           message = `Old Joe's loan repaid. $${debt.amountDue.toFixed(2)} paid.`;
+        } else if (debt.kind === "preorder_default") {
+          message = `Settled up with Derek — $${debt.amountDue.toFixed(2)} for the order that fell short.`;
         } else {
           message = `Supplier credit paid. $${debt.amountDue.toFixed(2)} paid.`;
         }
@@ -663,7 +682,9 @@ export function endOfDay(state: SimState): DayReport {
           detail: { debtKind: debt.kind, amountPaid: debt.amountDue, message },
         });
         debtService += debt.amountDue;
-        emitAftermath(debt.kind);
+        // Aftermath closure beats exist only for loan/credit/payday/preorder
+        // (full delivery). A defaulted-then-repaid order has no success beat.
+        if (debt.kind !== "preorder_default") emitAftermath(debt.kind);
         // Do NOT push to remainingDebts — debt is cleared
       } else if (debt.kind === "payday") {
         // Payday rollover: add $7.50 fee, extend by 14 days
@@ -696,6 +717,8 @@ export function endOfDay(state: SimState): DayReport {
             amountDue: debt.amountDue,
             message: debt.kind === "loan"
               ? `Old Joe extends the loan — $${debt.amountDue.toFixed(2)} now due day ${debt.dueDayNumber}.`
+              : debt.kind === "preorder_default"
+              ? `Derek gives you more time — $${debt.amountDue.toFixed(2)} now due day ${debt.dueDayNumber}.`
               : `Supplier extends credit — $${debt.amountDue.toFixed(2)} now due day ${debt.dueDayNumber}.`,
           },
         });
@@ -1084,6 +1107,8 @@ function buildActiveDebtSummary(state: SimState): string | null {
     } else if (debt.kind === "payday") {
       const rolloverNote = debt.rollovers > 0 ? ` [${debt.rollovers}x rolled]` : "";
       parts.push(`QuickNut: $${debt.amountDue.toFixed(2)} due day ${debt.dueDayNumber}${rolloverNote}`);
+    } else if (debt.kind === "preorder_default") {
+      parts.push(`Owe Derek $${debt.amountDue.toFixed(2)} (short order) — ${daysLeft} days left`);
     }
   }
 

@@ -39,15 +39,23 @@ function intoOffer(state: SimState): void {
 
 /** Fully resolve all active debts/obligations so the arc can re-trigger. */
 function resolveAllDebts(state: SimState): void {
-  state.cash = 100_000;
-  // advance to the latest due day and close — debts auto-repay, mode clears
-  const maxDue = Math.max(
-    ...state.rescueDebts.map((d) => d.dueDayNumber),
-    state.preorderObligation?.dueDayNumber ?? 0,
-    state.dayNumber,
-  );
-  state.dayNumber = maxDue;
-  endOfDay(state);
+  // Loop a few closes: deliver any preorder IN FULL (so it doesn't default into
+  // a debt), and auto-repay debts at their due day, until the sheet is clean.
+  for (let i = 0; i < 6 && (state.rescueDebts.length > 0 || state.preorderObligation || state.rescueMode); i++) {
+    state.cash = 100_000;
+    if (state.preorderObligation) {
+      // Stock enough roasted to fulfill the order in full on this close.
+      state.roastedStockLbs = state.preorderObligation.totalLbs;
+      state.roastedCostBasisPerLb = 0.60;
+    }
+    const maxDue = Math.max(
+      ...state.rescueDebts.map((d) => d.dueDayNumber),
+      state.preorderObligation?.dueDayNumber ?? 0,
+      state.dayNumber,
+    );
+    state.dayNumber = maxDue;
+    endOfDay(state);
+  }
   expect(state.rescueDebts).toHaveLength(0);
   expect(state.preorderObligation).toBeNull();
   expect(state.rescueMode).toBeNull();
@@ -148,6 +156,74 @@ describe("re-entry escalation", () => {
     const repeatOwe = state.rescueDebts[0].amountDue;
     // Same principal advanced, strictly higher repayment → worse for the player.
     expect(repeatOwe).toBeGreaterThan(firstOwe);
+  });
+
+  it("RT-1b: defaulting a preorder converts unearned cash to an owed debt (NO pump)", () => {
+    const state = createState(8);
+    intoOffer(state);
+    const ev = chooseRescuePath(state, "preorder"); // +$110, owe 100 lbs in 7d
+    const cashIn = ev.detail.cashChange as number;
+    const totalLbs = ev.detail.totalLbs as number;
+    expect(state.preorderObligation).not.toBeNull();
+
+    // Deliver NOTHING: jump to the due day with zero roasted stock.
+    state.roastedStockLbs = 0;
+    state.dayNumber = state.preorderObligation!.dueDayNumber;
+    const report = endOfDay(state);
+
+    // The unearned cash is now a debt of kind preorder_default for the full infusion.
+    const dflt = state.rescueDebts.find((d) => d.kind === "preorder_default");
+    expect(dflt).toBeDefined();
+    expect(dflt!.amountDue).toBeCloseTo(cashIn, 6);
+    expect(report.rescueEvents.some((e) => e.kind === "preorder_partial")).toBe(true);
+    // Obligation cleared, but the liability replaced it → net wealth not increased.
+    expect(state.preorderObligation).toBeNull();
+    void totalLbs;
+  });
+
+  it("RT-1b: the preorder loop is NOT net-positive over repeated defaults", () => {
+    // Model the exploit: take preorder cash, convert to inventory, default, repeat.
+    // With the fix, each default leaves an equal debt, so net worth (cash + raw
+    // inventory value − debts owed) never ratchets up across cycles.
+    const state = createState(9);
+    state.cash = 50;
+
+    const netWorth = (): number => {
+      const debts = state.rescueDebts.reduce((s, d) => s + d.amountDue, 0);
+      return state.cash + state.rawStockLbs * 0.40 - debts;
+    };
+
+    const before = netWorth();
+    for (let cycle = 0; cycle < 3; cycle++) {
+      state.cash = 10;            // force a crisis
+      endOfDay(state);
+      if (state.rescueMode !== "offer") break;
+      chooseRescuePath(state, "preorder"); // +cash, owe lbs
+      // never deliver; jump to due day
+      state.roastedStockLbs = 0;
+      // due day is the LATEST among debts/obligation
+      const due = Math.max(
+        state.preorderObligation?.dueDayNumber ?? 0,
+        ...state.rescueDebts.map((d) => d.dueDayNumber),
+        state.dayNumber,
+      );
+      state.dayNumber = due;
+      endOfDay(state);
+    }
+    // Net worth must not have grown by free money (allow small fixed-cost drift down).
+    expect(netWorth()).toBeLessThanOrEqual(before + 0.01);
+  });
+
+  it("preorder_default debt survives a save round-trip", () => {
+    const state = createState(10);
+    intoOffer(state);
+    chooseRescuePath(state, "preorder");
+    state.roastedStockLbs = 0;
+    state.dayNumber = state.preorderObligation!.dueDayNumber;
+    endOfDay(state);
+    const loaded = deserialize(serialize(state));
+    const d = loaded.rescueDebts.find((x) => x.kind === "preorder_default");
+    expect(d).toBeDefined();
   });
 
   it("rescueEntryCount round-trips and legacy saves default to 0", () => {
