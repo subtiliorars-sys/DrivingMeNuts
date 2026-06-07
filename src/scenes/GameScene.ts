@@ -39,11 +39,15 @@ import {
   buyRoasterUpgrade,
   buyQueueSlot,
   chooseRescuePath,
+  balanceSheet,
+  buyBrandCampaign,
   type RescuePath,
 } from "../sim/engine.js";
 import type { SimState, DayReport } from "../sim/types.js";
 import { tryLoad, trySave, resetSave, safeStorage, serialize, importEnvelopeText } from "../sim/persistence.js";
 import { LORE_BY_ID } from "../data/lore.js";
+import { COMEBACK_BY_ID } from "../data/comebacks.js";
+import { AFTERMATH_BEATS, type AftermathPath } from "../data/rescue_aftermath.js";
 import { drawLegsy } from "./legsy.js";
 import {
   audioInit,
@@ -77,6 +81,8 @@ import {
   STARTING_QUEUE_SLOTS,
   DAY_NAMES,
   DAY_FACTOR,
+  BRAND_CAMPAIGN_LORE_THRESHOLD,
+  BRAND_CAMPAIGN_COST,
   type RecipeId,
   type RoasterTier,
 } from "../data/economy.js";
@@ -238,6 +244,23 @@ export class GameScene extends Phaser.Scene {
   // ---- Rescue arc modal state (Wave 5) ------------------------------------
   private rescueModalGroup?: Phaser.GameObjects.Group;
   private rescueModalOpen = false;
+
+  // Books panel (ledger + balance sheet)
+  private booksModalGroup?: Phaser.GameObjects.Group;
+  private booksModalOpen = false;
+
+  // Rescue aftermath beats: queued durably in state.pendingAftermath at
+  // endOfDay, shown one at a time after the day report closes (and before any
+  // new rescue offer). The scene reads/drains state.pendingAftermath directly.
+  private aftermathModalGroup?: Phaser.GameObjects.Group;
+  private aftermathModalOpen = false;
+  /**
+   * RT5-2: true across the entire post-report chain (aftermath beats → rescue
+   * offer), including the 300ms delayedCall gaps where no modal is on screen.
+   * Gates the sim tick AND the HUD buttons so a click in a gap can't open a
+   * second day report or stack a panel under a pending beat.
+   */
+  private inPostReportChain = false;
   /** HUD chip showing active debt/obligation status. */
   private rescueHudChip?: Phaser.GameObjects.Text;
 
@@ -555,6 +578,22 @@ export class GameScene extends Phaser.Scene {
     upgradesBtn.on("pointerover", () => upgradesBtn.setAlpha(0.85));
     upgradesBtn.on("pointerout",  () => upgradesBtn.setAlpha(1.0));
 
+    // ---- BOOKS button (Ledger v1: daily P&L + balance sheet) ----------------
+    const booksBtnY = upgBtnY + 24;
+    const booksBtn = this.add.rectangle(buyBtnX + 68, booksBtnY + 10, 137, 20, 0x556677)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.add.text(buyBtnX + 68, booksBtnY + 10, "BOOKS", {
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+    }).setOrigin(0.5);
+    booksBtn.on("pointerdown", () => {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen) {
+        this.openBooksModal();
+      }
+    });
+    booksBtn.on("pointerover", () => booksBtn.setAlpha(0.85));
+    booksBtn.on("pointerout",  () => booksBtn.setAlpha(1.0));
+
     // ---- Day progress bar --------------------------------------------------
     const dpY = H - 18;
     this.add.rectangle(W / 2, dpY + 5, W, 18, P.PANEL_BORDER);
@@ -620,6 +659,14 @@ export class GameScene extends Phaser.Scene {
       // Short delay so the backdrop finishes rendering before the first bubble
       this.time.delayedCall(400, () => this.showTutorialStep(0));
     }
+
+    // ---- RT5-1: drain any aftermath beats persisted from a prior session ----
+    // If the player closed the tab mid-queue, the beats are still in
+    // state.pendingAftermath — show them now so none are silently lost.
+    if (this.state.pendingAftermath.length > 0) {
+      this.inPostReportChain = true;
+      this.time.delayedCall(600, () => this.afterReportFlow());
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -630,7 +677,7 @@ export class GameScene extends Phaser.Scene {
     // Track wall-clock playtime (excludes offline time; used by trySave meta)
     this.playtimeSeconds += delta / 1_000;
 
-    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen) return;
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen || this.booksModalOpen || this.aftermathModalOpen || this.inPostReportChain) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -648,7 +695,13 @@ export class GameScene extends Phaser.Scene {
         this.coinPopAccum += ev.detail.revenue as number;
       }
       if (ev.kind === "gag") {
-        this.showGagBubble(ev.detail.loreId as string);
+        this.showGagBubble(ev.detail.loreId as string, ev.detail.comebackId as string | undefined);
+      }
+      if (ev.kind === "comeback_unlocked") {
+        // Earned progression toast — factual, celebratory, no pressure.
+        const label = ev.detail.label as string;
+        const threshold = ev.detail.threshold as number;
+        this.showToast(`Comeback lines unlocked: "${label}" (${threshold} lore entries collected)`);
       }
       if (ev.kind === "batch_ready") {
         playBatchReady();
@@ -704,7 +757,7 @@ export class GameScene extends Phaser.Scene {
     this.txtPrice.setText(`$${this.state.sellPrice.toFixed(2)}`);
 
     // Demand hint at current price
-    const demandLbsHr = projectedDemand(this.state.sellPrice);
+    const demandLbsHr = projectedDemand(this.state.sellPrice, "classic_salted", this.state.brandCampaignActive);
     // F7: derive COGS from economy constants, not a hardcoded literal
     const cogsPerLbClassic = RAW_PEANUT_BASE_PRICE + RECIPES.classic_salted.ingredientCostPerLb;
     const marginPct = this.state.sellPrice > 0
@@ -912,13 +965,13 @@ export class GameScene extends Phaser.Scene {
       // Row A: at current price
       const curPrice  = this.state.sellPrice;
       const margin1   = curPrice > 0 ? ((curPrice - cogs) / curPrice) * 100 : 0;
-      const demand1   = projectedDemand(curPrice, this.roastModalRecipe);
+      const demand1   = projectedDemand(curPrice, this.roastModalRecipe, this.state.brandCampaignActive);
       const marginColor = margin1 >= 60 ? "#4A7C4E" : margin1 >= 45 ? "#C08A00" : "#C0392B";
 
       // Row B: at optimum price (item 6 — two-row preview)
-      const optPrice  = optimumPrice(this.roastModalRecipe);
+      const optPrice  = optimumPrice(this.roastModalRecipe, this.state.brandCampaignActive);
       const marginOpt = optPrice > 0 ? ((optPrice - cogs) / optPrice) * 100 : 0;
-      const demandOpt = projectedDemand(optPrice, this.roastModalRecipe);
+      const demandOpt = projectedDemand(optPrice, this.roastModalRecipe, this.state.brandCampaignActive);
 
       if (previewLines.length >= 5) {
         previewLines[0].setText(`COGS total: $${cogsTotal.toFixed(2)}  Roast: ${roastMins.toFixed(0)} min (sim)`);
@@ -1124,7 +1177,7 @@ export class GameScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
-    const mW = 320, mH = 220;
+    const mW = 320, mH = 246;
     const mX = (W - mW) / 2;
     const mY = (H - mH) / 2;
 
@@ -1295,6 +1348,59 @@ export class GameScene extends Phaser.Scene {
       rowY += 14;
     }
 
+    // ---- Section: Brand campaign ("Legumes. Not Nuts." — GDD B4) ----
+    // Earned via lore collection; one-time purchase; permanent. No timer, no
+    // expiry, no FOMO — the unlock waits forever once earned.
+    this.upgradesModalGroup.add(this.add.rectangle(mX + mW / 2, rowY + 2, mW - 8, 1, P.PANEL_BORDER));
+    rowY += 8;
+    this.upgradesModalGroup.add(this.add.text(mX + 6, rowY, "BRAND", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    rowY += 12;
+
+    const loreCount = this.state.gagsSeen.size;
+    if (this.state.brandCampaignActive) {
+      this.upgradesModalGroup.add(
+        this.add.text(mX + 6, rowY, `  ▶ "Legumes. Not Nuts." campaign — active. Customers accept ~5% higher prices.`, { ...TEXT_STYLE_LABEL, color: "#4A7C4E" })
+      );
+    } else if (loreCount >= BRAND_CAMPAIGN_LORE_THRESHOLD) {
+      this.upgradesModalGroup.add(
+        this.add.text(mX + 6, rowY, `    "Legumes. Not Nuts." — flip the gag into the brand (+5% price tolerance)`, TEXT_STYLE_LABEL)
+      );
+      const canAfford = this.state.cash >= BRAND_CAMPAIGN_COST;
+      const btnColor = canAfford ? P.AWNING : 0x999977;
+      const brandBtn = this.add.rectangle(mX + mW - 46, rowY + 4, 72, 13, btnColor)
+        .setStrokeStyle(1, P.PANEL_BORDER)
+        .setInteractive({ cursor: canAfford ? "pointer" : "default" });
+      this.upgradesModalGroup.add(brandBtn);
+      const btnLabel = canAfford
+        ? `BUY $${BRAND_CAMPAIGN_COST}`
+        : `earn $${(BRAND_CAMPAIGN_COST - this.state.cash).toFixed(0)} more`;
+      this.upgradesModalGroup.add(
+        this.add.text(mX + mW - 46, rowY + 4, btnLabel, {
+          fontSize: "7px",
+          color: canAfford ? "#2C2416" : "#666644",
+          fontFamily: "monospace",
+        }).setOrigin(0.5)
+      );
+      if (canAfford) {
+        brandBtn.on("pointerdown", () => {
+          const ev = buyBrandCampaign(this.state);
+          if (ev) {
+            playButtonTick();
+            this.closeUpgradesModal();
+            this.showToast(`"Legumes. Not Nuts." is live — the joke is the brand now. Brand equity raises what customers will pay.`);
+          }
+        });
+        brandBtn.on("pointerover", () => brandBtn.setAlpha(0.85));
+        brandBtn.on("pointerout",  () => brandBtn.setAlpha(1.0));
+      }
+    } else {
+      // Progress hint — factual, no countdown, no pressure.
+      this.upgradesModalGroup.add(
+        this.add.text(mX + 6, rowY, `    Collect ${BRAND_CAMPAIGN_LORE_THRESHOLD} unique lore entries to unlock a brand campaign (${loreCount}/${BRAND_CAMPAIGN_LORE_THRESHOLD} so far).`, { ...TEXT_STYLE_LABEL, color: "#999977" })
+      );
+    }
+    rowY += 14;
+
     // ---- Day-factor legend (small, informational, no pressure) ----
     rowY += 4;
     this.upgradesModalGroup.add(this.add.rectangle(mX + mW / 2, rowY + 2, mW - 8, 1, P.PANEL_BORDER));
@@ -1394,6 +1500,125 @@ export class GameScene extends Phaser.Scene {
       this.upgradesModalGroup = undefined;
     }
     this.upgradesModalOpen = false;
+    this.updateHUD();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Books panel (Ledger v1) — balance sheet + daily P&L history
+  // Bookkeeping teaching surface: assets = liabilities + equity up top,
+  // then the last 7 closed days. Factual numbers only; profit ≠ cash is the
+  // through-line (debt column sits NEXT to net, never inside it).
+  // ---------------------------------------------------------------------------
+
+  private openBooksModal(): void {
+    // RT5-2: never open over a pending post-report chain / aftermath beat.
+    if (this.booksModalOpen || this.inPostReportChain || this.aftermathModalOpen || this.reportOpen) return;
+    this.booksModalOpen = true;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const mW = 380, mH = 240;
+    const mX = (W - mW) / 2;
+    const mY = (H - mH) / 2;
+
+    this.booksModalGroup = this.add.group();
+
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.55)
+      .setInteractive();
+    this.booksModalGroup.add(backdrop);
+
+    this.booksModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG)
+        .setStrokeStyle(2, P.PANEL_BORDER)
+    );
+
+    this.booksModalGroup.add(
+      this.add.text(mX + 6, mY + 5, "THE BOOKS — Balance Sheet & Daily Ledger", TEXT_STYLE_HEADER)
+    );
+
+    // Close [×]
+    const closeBtn = this.add.rectangle(mX + mW - 12, mY + 11, 16, 14, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.booksModalGroup.add(closeBtn);
+    this.booksModalGroup.add(
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    closeBtn.on("pointerdown", () => this.closeBooksModal());
+
+    this.booksModalGroup.add(this.add.rectangle(mX + mW / 2, mY + 21, mW - 8, 1, P.PANEL_BORDER));
+
+    // ---- Balance sheet (computed live) ----
+    const bs = balanceSheet(this.state);
+    let rowY = mY + 26;
+    this.booksModalGroup.add(this.add.text(mX + 6, rowY, "BALANCE SHEET (right now)", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    rowY += 11;
+    this.booksModalGroup.add(this.add.text(mX + 10, rowY,
+      `Assets:      cash $${bs.assets.cash.toFixed(2)} + raw inv $${bs.assets.rawInventoryValue.toFixed(2)} + roasted inv $${bs.assets.roastedInventoryValue.toFixed(2)} = $${bs.assets.total.toFixed(2)}`,
+      { ...TEXT_STYLE_LABEL, wordWrap: { width: mW - 20 } }));
+    rowY += 11;
+    const liabDetail = bs.liabilities.total > 0
+      ? `debts $${bs.liabilities.debtsOwed.toFixed(2)} + pre-paid orders $${bs.liabilities.deferredRevenue.toFixed(2)} = $${bs.liabilities.total.toFixed(2)}`
+      : "$0.00 — debt-free";
+    this.booksModalGroup.add(this.add.text(mX + 10, rowY, `Liabilities: ${liabDetail}`, TEXT_STYLE_LABEL));
+    rowY += 11;
+    this.booksModalGroup.add(this.add.text(mX + 10, rowY,
+      `Equity (what the business is worth on paper): $${bs.equity.toFixed(2)}`,
+      { ...TEXT_STYLE_LABEL, color: bs.equity >= 0 ? "#4A7C4E" : "#C0392B" }));
+    rowY += 13;
+
+    this.booksModalGroup.add(this.add.rectangle(mX + mW / 2, rowY, mW - 8, 1, P.PANEL_BORDER));
+    rowY += 5;
+
+    // ---- Daily ledger table (last 7 closed days) ----
+    this.booksModalGroup.add(this.add.text(mX + 6, rowY, "DAILY LEDGER (last 7 closed days)", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    rowY += 11;
+
+    const ledgerRows = this.state.ledger.slice(-7);
+    if (ledgerRows.length === 0) {
+      this.booksModalGroup.add(this.add.text(mX + 10, rowY, "No closed days yet — finish a day and the ledger starts here.", TEXT_STYLE_LABEL));
+      rowY += 12;
+    } else {
+      // Header row (monospace columns)
+      const header = "Day  Revenue    COGS   Fixed     Net    Debt$   Cash end";
+      this.booksModalGroup.add(this.add.text(mX + 10, rowY, header, { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+      rowY += 10;
+      const pad = (s: string, w: number) => s.padStart(w);
+      for (const e of ledgerRows) {
+        const line =
+          `${pad(String(e.day), 3)}  ${pad(e.revenue.toFixed(2), 7)} ${pad(e.cogs.toFixed(2), 7)} ${pad(e.fixedCosts.toFixed(2), 7)} ${pad(e.net.toFixed(2), 7)} ${pad(e.debtService > 0 ? e.debtService.toFixed(2) : "—", 7)} ${pad(e.cashAfter.toFixed(2), 9)}`;
+        this.booksModalGroup.add(this.add.text(mX + 10, rowY, line, {
+          ...TEXT_STYLE_LABEL,
+          color: e.net >= 0 ? "#2C2416" : "#C0392B",
+        }));
+        rowY += 10;
+      }
+    }
+
+    // Teaching footnote — the profit ≠ cash through-line
+    rowY += 2;
+    this.booksModalGroup.add(this.add.text(mX + 10, rowY,
+      "Note: Net is PROFIT. Debt$ is cash paid on debts — it lowers cash and\nliabilities, but it is not an expense. That's why profit ≠ cash.",
+      { ...TEXT_STYLE_LABEL, color: "#5A3A1A" }));
+
+    // Close button at bottom
+    const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.booksModalGroup.add(doneBtn);
+    this.booksModalGroup.add(
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    doneBtn.on("pointerdown", () => this.closeBooksModal());
+    doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
+    doneBtn.on("pointerout",  () => doneBtn.setAlpha(1.0));
+  }
+
+  private closeBooksModal(): void {
+    if (this.booksModalGroup) {
+      this.booksModalGroup.destroy(true);
+      this.booksModalGroup = undefined;
+    }
+    this.booksModalOpen = false;
     this.updateHUD();
   }
 
@@ -1612,7 +1837,9 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private triggerEndOfDay(): void {
-    if (this.reportOpen) return;
+    // RT5-2: also bail during the post-report chain — a click in a delayedCall
+    // gap must not open a second day report on top of a pending aftermath beat.
+    if (this.reportOpen || this.inPostReportChain || this.aftermathModalOpen) return;
     this.reportOpen = true;
 
     // Audio: day-end sting (synthesized, SOUND_DESIGN.md diegetic)
@@ -1634,6 +1861,8 @@ export class GameScene extends Phaser.Scene {
       if (msg) {
         this.time.delayedCall(500, () => this.showToast(msg));
       }
+      // Aftermath beats are queued durably by the engine in
+      // state.pendingAftermath (RT5-1) — no scene-local collection needed here.
     }
 
     // Show recipe-unlock toasts for any newly unlocked recipes.
@@ -1669,7 +1898,9 @@ export class GameScene extends Phaser.Scene {
     // +20px for sparkline row when ≥1 day of history exists (item 3)
     const sparklineHistory = this.state.netHistory.slice(-7); // last 7 days
     const hasSparkline = sparklineHistory.length >= 1;
-    const rH = 224 + (r.offlineEarned > 0 ? 14 : 0) + (r.activeDebtSummary ? 14 : 0) + (hasSparkline ? 20 : 0);
+    // +14px for debt-service row (cash-flow vs P&L lesson); +34px for the weekly recap block
+    const rH = 224 + (r.offlineEarned > 0 ? 14 : 0) + (r.activeDebtSummary ? 14 : 0) + (hasSparkline ? 20 : 0)
+      + (r.debtService > 0 ? 14 : 0) + (r.weekRecap ? 34 : 0);
     const rX = (W - rW) / 2;
     const rY = (H - rH) / 2;
 
@@ -1711,6 +1942,11 @@ export class GameScene extends Phaser.Scene {
         ? [[`Offline rest earnings:`, `+$${r.offlineEarned.toFixed(2)}`, TEXT_STYLE_GREEN] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
         : []),
       [`Net Profit:`, `$${r.net.toFixed(2)}`, r.net >= 0 ? TEXT_STYLE_GREEN : TEXT_STYLE_RED],
+      // Ledger v1: debt payments are cash out but NOT an expense — net profit
+      // stays untouched. Profit ≠ cash is the bookkeeping lesson.
+      ...(r.debtService > 0
+        ? [[`Debt payments (cash, not expense):`, `–$${r.debtService.toFixed(2)}`, TEXT_STYLE_RED] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
+        : []),
       // Wave 5: liability line — teaches liabilities vs cash (neutral, not shaming)
       ...(r.activeDebtSummary
         ? [[`Liabilities:`, r.activeDebtSummary, TEXT_STYLE_RED] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
@@ -1769,6 +2005,24 @@ export class GameScene extends Phaser.Scene {
       rowY += 20;
     }
 
+    // ---- Weekly recap (every 7th day — factual totals, no streak framing) ----
+    if (r.weekRecap) {
+      const wr = r.weekRecap;
+      this.reportGroup.add(this.add.rectangle(rX + rW / 2, rowY + 2, rW - 8, 1, P.PANEL_BORDER));
+      rowY += 6;
+      this.reportGroup.add(
+        this.add.text(rX + 8, rowY, `WEEK ${wr.weekNumber} RECAP (${wr.daysIncluded} day${wr.daysIncluded === 1 ? "" : "s"})`, { ...TEXT_STYLE_LABEL, color: "#8B6F47" })
+      );
+      rowY += 12;
+      const bestStr = wr.bestDay ? `best Day ${wr.bestDay.day} ($${wr.bestDay.net.toFixed(2)} net)` : "";
+      this.reportGroup.add(
+        this.add.text(rX + 8, rowY,
+          `Revenue $${wr.totalRevenue.toFixed(2)} · Net $${wr.totalNet.toFixed(2)} · Margin ${wr.grossMarginPct.toFixed(0)}% · ${bestStr}`,
+          { ...TEXT_STYLE_LABEL, wordWrap: { width: rW - 16 } })
+      );
+      rowY += 16;
+    }
+
     // "Start next day" button (no countdown, no pressure — DARK_PATTERN_GATE B.1)
     const nextBtn = this.add.rectangle(rX + rW / 2, rY + rH - 14, 140, 18, P.AWNING)
       .setStrokeStyle(1, P.PANEL_BORDER)
@@ -1788,14 +2042,132 @@ export class GameScene extends Phaser.Scene {
       this.reportGroup = undefined;
     }
     this.reportOpen = false;
+    // RT5-2: hold the chain guard from the instant the report closes until the
+    // whole post-report sequence (aftermath beats → rescue offer) is drained,
+    // so the flag-less delayedCall gaps can't be clicked through.
+    this.inPostReportChain = true;
     // Save after report is dismissed �� state is fully consistent post-endOfDay (spec §3)
     this.saveGame();
     this.updateHUD();
 
-    // Wave 5: open rescue-offer modal after report if trigger fired this day
-    if (this.state.rescueMode === "offer") {
-      this.time.delayedCall(300, () => this.openRescueModal());
+    // Aftermath beats first (closure of the OLD crisis), then any new rescue
+    // offer. showAftermathBeat chains back here via afterReportFlow.
+    this.afterReportFlow();
+  }
+
+  /**
+   * Post-report sequence: drain state.pendingAftermath one beat at a time, then
+   * open the rescue-offer modal if a new trigger fired this day. Holds
+   * inPostReportChain across the delayedCall gaps; clears it only when nothing
+   * is left to show (RT5-2).
+   */
+  private afterReportFlow(): void {
+    const nextPath = this.state.pendingAftermath[0] as AftermathPath | undefined;
+    if (nextPath) {
+      this.time.delayedCall(300, () => this.showAftermathBeat(nextPath));
+      return;
     }
+    // Wave 5: open rescue-offer modal after report if trigger fired this day.
+    // Keep the chain guard up through the 300ms gap, then release it right as
+    // the modal opens (openRescueModal sets rescueModalOpen synchronously).
+    if (this.state.rescueMode === "offer") {
+      this.time.delayedCall(300, () => {
+        this.inPostReportChain = false;
+        this.openRescueModal();
+      });
+      return;
+    }
+    // Nothing left — release the chain guard, sim resumes.
+    this.inPostReportChain = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rescue aftermath beat (one-time per path — data/rescue_aftermath.ts)
+  // A small dialogue card: speaker, two lines, the lesson, CONTINUE.
+  // Closure only — never a new offer (re-entry escalation is owner-gated).
+  // ---------------------------------------------------------------------------
+
+  private showAftermathBeat(path: AftermathPath): void {
+    if (this.aftermathModalOpen) return;
+    const beat = AFTERMATH_BEATS[path];
+    if (!beat) {
+      // Unknown path defensively dropped from the durable queue so the chain
+      // can't loop on it.
+      if (this.state.pendingAftermath[0] === path) this.state.pendingAftermath.shift();
+      this.afterReportFlow();
+      return;
+    }
+    this.aftermathModalOpen = true;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const mW = 340, mH = 150;
+    const mX = (W - mW) / 2;
+    const mY = (H - mH) / 2;
+
+    this.aftermathModalGroup = this.add.group();
+
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.60)
+      .setInteractive(); // block clicks through
+    this.aftermathModalGroup.add(backdrop);
+
+    this.aftermathModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG)
+        .setStrokeStyle(2, P.PANEL_BORDER)
+    );
+
+    this.aftermathModalGroup.add(
+      this.add.text(mX + 8, mY + 6, `${beat.speaker} stops by the window`, TEXT_STYLE_HEADER)
+    );
+    this.aftermathModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + 20, mW - 8, 1, P.PANEL_BORDER)
+    );
+
+    let lineY = mY + 26;
+    for (const line of beat.lines) {
+      const txt = this.add.text(mX + 8, lineY, line, {
+        ...TEXT_STYLE_LABEL, color: "#5A3A1A", wordWrap: { width: mW - 16 },
+      });
+      this.aftermathModalGroup.add(txt);
+      lineY += txt.height + 4;
+    }
+
+    // Lesson strip (same visual language as the report-card insight box)
+    this.aftermathModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + mH - 36, mW - 10, 24, 0xEDD99A)
+        .setStrokeStyle(1, P.PANEL_BORDER)
+    );
+    this.aftermathModalGroup.add(
+      this.add.text(mX + 8, mY + mH - 46, `Takeaway: ${beat.lesson}`, {
+        ...TEXT_STYLE_LABEL, wordWrap: { width: mW - 16 },
+      })
+    );
+
+    const contBtn = this.add.rectangle(mX + mW / 2, mY + mH - 11, 100, 16, P.AWNING)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.aftermathModalGroup.add(contBtn);
+    this.aftermathModalGroup.add(
+      this.add.text(mX + mW / 2, mY + mH - 11, "CONTINUE", { fontSize: "8px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    contBtn.on("pointerdown", () => this.closeAftermathBeat());
+    contBtn.on("pointerover", () => contBtn.setAlpha(0.85));
+    contBtn.on("pointerout",  () => contBtn.setAlpha(1.0));
+  }
+
+  private closeAftermathBeat(): void {
+    if (this.aftermathModalGroup) {
+      this.aftermathModalGroup.destroy(true);
+      this.aftermathModalGroup = undefined;
+    }
+    this.aftermathModalOpen = false;
+    // RT5-1: a beat is only marked "consumed" once it has actually been shown
+    // and dismissed — pop it from the durable queue and persist, so closing the
+    // tab mid-queue never silently drops the remaining beats.
+    this.state.pendingAftermath.shift();
+    this.saveGame();
+    // Continue the post-report chain (more beats, or a rescue offer).
+    this.afterReportFlow();
   }
 
   /** Persist current state to storage. Called at safe save points only (never mid-tick). */
@@ -1905,9 +2277,15 @@ export class GameScene extends Phaser.Scene {
   // At most one bubble at a time — new gag silently cancels the previous one.
   // ---------------------------------------------------------------------------
 
-  private showGagBubble(loreId: string): void {
+  private showGagBubble(loreId: string, comebackId?: string): void {
     const line = LORE_BY_ID[loreId];
     if (!line) return;
+
+    // Comeback Lines (GDD B4): once a tier is unlocked, the engine attaches a
+    // comebackId — the owner's earned reply replaces the stock one.
+    const ownerReply = (comebackId && COMEBACK_BY_ID[comebackId])
+      ? COMEBACK_BY_ID[comebackId].text
+      : line.owner;
 
     // Dismiss any existing bubble before showing the new one.
     this.dismissGagBubble();
@@ -1917,10 +2295,14 @@ export class GameScene extends Phaser.Scene {
     const truckY = 195;
 
     // Bubble anchor: just above the truck serving window (left side).
+    // Comeback replies run longer than stock ones — grow the bubble to fit.
+    // RT5-4: 7px monospace in a 172px wrap width fits ~40 chars/line, not 50;
+    // under-budgeting overflowed the longest tier-2/3/4 lines past the border.
+    const extraLines = Math.max(0, Math.ceil(ownerReply.length / 40) - 1);
     const bX = truckX - 80;
-    const bY = truckY - 80;
     const bW = 180;
-    const bH = 36;
+    const bH = 36 + extraLines * 9;
+    const bY = truckY - 80 - extraLines * 9;
 
     // Background rect (speech bubble)
     const bg = this.add.rectangle(bX + bW / 2, bY + bH / 2, bW, bH, P.PANEL_BG)
@@ -1950,7 +2332,7 @@ export class GameScene extends Phaser.Scene {
 
     // Beat 1 → Beat 2: reveal owner reply after 1.8 s
     const beat2Timer = this.time.delayedCall(1800, () => {
-      if (ownerLine.active) ownerLine.setText(line.owner);
+      if (ownerLine.active) ownerLine.setText(ownerReply);
     });
 
     // Auto-dismiss after 4 s total

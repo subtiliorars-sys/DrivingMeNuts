@@ -6,6 +6,19 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added (ledger/lore wave, PR #7)
+- **Ledger v1 (schema v4):** per-day P&L rows (revenue/COGS/fixed/net + debt-service + cash) ring-capped at 30 days; "BOOKS" panel with live balance sheet (assets = liabilities + equity; inventory at cost; preorder cash as deferred revenue) and last-7-day table. Teaching through-line: profit ≠ cash — debt payments shown as cash-out, never as expense.
+- **Weekly recap:** every 7th day's report card adds factual week totals (revenue, net, margin, best day). No streak framing (DARK_PATTERN_GATE-checked).
+- **Comeback Lines (GDD B4):** Nut Facts thresholds at 10/20/30/40 unique lore entries unlock owner comeback tiers (15 hand-written lines, sigh → dad-joke → scholar → philosopher); gag bubbles show earned replies; one-time unlock toasts.
+- **"Legumes. Not Nuts." brand campaign (GDD B4):** unlocks at 25 unique lore entries; one-time $250 purchase; permanent +5% price tolerance (demand base-price shift, optimum-price preview updates). No timer/expiry — earned unlock waits forever.
+- **Rescue aftermath beats:** one-time post-resolution dialogue per path (Old Joe/Marta/Derek/QuickNut) reinforcing each lesson; fires after the report card, before any new offer. Closure only — re-entry escalation remains owner-gated (RT-1).
+- **Docs:** `docs/BOOKKEEPING.md` (as-built + P2 dual-ledger seed).
+
+### Persistence
+- Schema v3→v4 migration: empty ledger (honest default), `comebackTier` derived from collected lore, campaign/aftermath defaults. Crafted-save hardening: non-finite ledger numbers, invalid tiers, bad types rejected; oversized ledgers capped; unknown aftermath paths dropped. Import/autosave regression-tested (26 new tests; 300 unit + 5 boot green).
+
+## [v0.3.0] — Wave 4, PRs #5/#6 (merged to main 2026-06-07)
+
 ### Added
 - Roaster/queue capital-investment mechanics (upgrade progression for throughput).
 - Weekday demand variation (Monday spike, mid-week dip, Friday premium — teaching business cyclicality).

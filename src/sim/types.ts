@@ -129,9 +129,117 @@ export interface SimState {
    */
   netHistory: number[];
 
+  // ---- Ledger v1 (schema v4) -------------------------------------------
+  /**
+   * Daily P&L rows for the last LEDGER_MAX_DAYS completed days (index 0 = oldest).
+   * Appended in endOfDay; ring-capped. Source for the Books panel and the
+   * weekly recap. netHistory remains the sparkline's source (kept separate
+   * for save back-compat; ledger is the richer record).
+   */
+  ledger: LedgerEntry[];
+
+  // ---- Comeback Lines (schema v4 — GDD B4 Nut Facts meter) -------------
+  /**
+   * Highest comeback tier unlocked (0 = none, 1–4 per COMEBACK_TIERS).
+   * Derived from gagsSeen.size crossing thresholds; stored so unlock events
+   * fire exactly once. Migration derives it from gagsSeen for old saves.
+   */
+  comebackTier: number;
+
+  // ---- Brand campaign (schema v4 — GDD B4 "Legumes. Not Nuts.") --------
+  /**
+   * True once the player buys the brand campaign (permanent; one-time).
+   * Shifts the demand curve's base price by BRAND_CAMPAIGN_PRICE_TOLERANCE.
+   */
+  brandCampaignActive: boolean;
+
+  // ---- Rescue aftermath (schema v4) -------------------------------------
+  /**
+   * Aftermath paths already shown ("loan" | "credit" | "payday" | "preorder").
+   * Each path's aftermath beat fires once per save, ever — repeat repayments
+   * of the same kind do not replay the beat. Plain array (max 4 entries).
+   */
+  aftermathSeen: string[];
+
+  /**
+   * Aftermath beats queued at endOfDay but not yet displayed (RT5-1 fix).
+   * Persisted so a beat is never lost if the player closes the tab while the
+   * day report or an earlier beat is still on screen — the engine marks a path
+   * "seen" (won't re-emit) at the same moment it queues it here, so this is the
+   * only durable record of a pending beat. Drained one-at-a-time by the scene.
+   */
+  pendingAftermath: string[];
+
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
   rngState: number;
+}
+
+// ---------------------------------------------------------------------------
+// Ledger v1 types  (bookkeeping teaching surface — GDD D2 / BUSINESS_CURRICULUM)
+// ---------------------------------------------------------------------------
+
+/**
+ * One completed day's P&L + cash-flow row.
+ * P&L identity: net = (revenue − cogs) − fixedCosts + offlineEarned.
+ * debtService is deliberately NOT in net — debt principal repayment is a
+ * cash-flow/balance-sheet item, not a P&L expense. Showing them side by side
+ * is the teaching point (profit ≠ cash).
+ */
+export interface LedgerEntry {
+  /** Day number this row describes (the day that ended). */
+  day: number;
+  revenue: number;
+  cogs: number;
+  fixedCosts: number;
+  offlineEarned: number;
+  /** P&L net for the day (same value pushed to netHistory). */
+  net: number;
+  /** $ paid toward rescue debts at this day's close (cash out, not expense). */
+  debtService: number;
+  /** Cash on hand after the day fully closed. */
+  cashAfter: number;
+}
+
+/**
+ * Weekly recap attached to the DayReport every WEEK_RECAP_EVERY_DAYS days.
+ * Factual totals only — no streaks, no "don't break it" framing
+ * (DARK_PATTERN_GATE A.1/A.4).
+ */
+export interface WeekRecap {
+  /** 1-based week number (day 7 → week 1). */
+  weekNumber: number;
+  /** Number of ledger days included (≤ 7; fewer if history was trimmed). */
+  daysIncluded: number;
+  totalRevenue: number;
+  totalNet: number;
+  /** Best day by net (null if no days included). */
+  bestDay: { day: number; net: number } | null;
+  /** Aggregate gross margin % across the week (0 if no revenue). */
+  grossMarginPct: number;
+}
+
+/**
+ * Balance-sheet snapshot (computed, not stored): assets = liabilities + equity.
+ * Inventory is valued at cost (raw at base price, roasted at cost basis) —
+ * conservative accounting, the standard for inventory.
+ */
+export interface BalanceSheet {
+  assets: {
+    cash: number;
+    rawInventoryValue: number;
+    roastedInventoryValue: number;
+    total: number;
+  };
+  liabilities: {
+    /** Sum of rescue-debt amountDue. */
+    debtsOwed: number;
+    /** Unearned portion of Derek's preorder cash (deferred revenue). */
+    deferredRevenue: number;
+    total: number;
+  };
+  /** equity = assets.total − liabilities.total (may be negative). */
+  equity: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +321,16 @@ export interface DayReport {
    * Empty array when no rescue-arc activity occurred.
    */
   rescueEvents: SimEvent[];
+  /**
+   * Ledger v1: $ paid toward rescue debts at this day's close (cash out,
+   * not a P&L expense — shown as its own report-card line). 0 when none.
+   */
+  debtService: number;
+  /**
+   * Weekly recap, attached every WEEK_RECAP_EVERY_DAYS days; null otherwise.
+   * Factual totals only (DARK_PATTERN_GATE-compliant — no streak framing).
+   */
+  weekRecap: WeekRecap | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -236,7 +354,10 @@ export type SimEventKind =
   | "debt_extended"
   | "payday_rollover"
   | "preorder_fulfilled"
-  | "preorder_partial";
+  | "preorder_partial"
+  // Ledger/lore wave: comeback unlocks + one-time rescue aftermath beats
+  | "comeback_unlocked"
+  | "debt_aftermath";
   // NOTE W15: "recipe_unlocked" SimEvent was specced in RECIPE_BATCH_UI.md §3e but
   // never emitted from endOfDay(). GameScene detects new unlocks via Set-diff
   // (unlockedBefore snapshot vs post-endOfDay state.recipesUnlocked) — that is
