@@ -6,6 +6,12 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Consolidation (wave 7, PR #9 — stacks on PR #8; no new scope)
+- **Cross-system integration test** (`src/sim/wave7_integration.test.ts`): a 7-day trading loop exercising buy→roast→sell→close with a mid-week save/load round-trip, asserting ledger P&L identity, weekly-recap timing, supplier leveling, achievement unlocks, and RT6-1 no-phantom-equity all compose end-to-end.
+- **RISK_REGISTER standing-trigger review** for waves 5–6 (triggers #4 data + #6/A4 dark-pattern): Tier A retained (local-only, no PII, no egress); dark-pattern gate passed for recap/achievements/campaign; A2 accuracy hardened by RT6-1. SME 93-claim walk remains owner-gated.
+- **Cleanup:** documented the intentional `cashSpentOnProduction` standard-cost simplification (RT6-1 follow-up; reconciliation deferred to the P2 dual-ledger per BOOKKEEPING.md §4). Dead-code/symbol audit clean; tsc strict clean.
+- 326 unit + 5 boot green.
+
 ### Added (Goals & Mastery wave, PR #8 — stacks on PR #7)
 - **Achievements (GDD F win-states, P1 subset):** 10 milestones (first sale, $1k/$10k/$100k lifetime, full menu, brand campaign, lore half/master, comeback master, survived-debt). Evaluated at day-close; one-time unlock toasts; **already-earned milestones derived silently on load** (no toast burst). Achievements grant **no mechanical bonus** — markers only, kept off the dark-pattern surface.
 - **Goals panel (GOALS button):** achievements checklist + collection view (Legume Lore X/40 progress bar, comeback tiers unlocked, supplier level/discount + next-level requirement).
