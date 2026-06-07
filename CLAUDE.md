@@ -27,3 +27,22 @@ food truck that teaches real small-business concepts. Public twin =
 - Branch per task (`work/<topic>`); stage only files you created/changed.
 - Sensitivity flag: peanut **allergy** is a real-world safety topic — see
   docs/RISK_REGISTER.md before writing any content that jokes about allergies.
+
+## Build & dev loop (P1)
+
+**Engine lock (owner-ratified 2026-06-07):** Phaser 3 + TypeScript + Vite. Do not
+swap or add competing game frameworks without owner sign-off.
+
+**npm scripts:**
+- `npm run dev` — Vite dev server (port 3000, HMR)
+- `npm run build` — production bundle to `dist/`
+- `npm run preview` — serve the production bundle locally
+- `npm run test` — vitest run (node environment, pure-logic tests)
+- `npm run verify` — full gate: `tsc --noEmit && vitest run && vite build`
+  Run `verify` before every commit; it must stay green.
+
+**Architecture rules:**
+- `src/sim/` must stay **Phaser-free** — pure TypeScript, no Phaser imports, fully
+  unit-testable in a node environment. The idle simulation logic lives here.
+- All economy constants live in `src/data/economy.ts` (**single source of truth**).
+  Do not hardcode prices, rates, or multipliers anywhere else; reference this file.
