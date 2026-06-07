@@ -210,38 +210,56 @@ Key insight:
 
 ### D2. Day-Cycle Example Walkthrough
 
-**Scenario:** Player is on Day 18 (Act I). Owns a Copper Roaster, 3 queue slots. Has unlocked Farmers' Market + Office Quarter. Current cash: $1200.
+**Economy constants (see `src/data/economy.ts`):**
+- Raw peanuts: $0.40/lb
+- Classic Salted COGS: $0.60/lb ($0.40 raw + $0.20 salt additive)
+- Default sell price: $1.50/lb → gross profit per lb = $0.90
+- Daily fixed costs: $5.00
+- Demand curve (Farmers' Market, Classic Salted): 20 − 10×(price − $1.20) lbs/hr
+- Day: 6am–8pm (14 hours)
+- Starting roaster: Tin Pan (10 min per 10-lb batch)
+- Starting queue slots: **1**
 
-**Morning (6am–10am):**
-1. Load 30 lbs raw peanuts (cost: $12) into queue slot 1. Recipe: Honey Cinnamon (12 min roast). Start roasting.
-2. Simultaneously, load 20 lbs into slot 2. Recipe: Classic Salted (10 min roast). Load 15 lbs into slot 3. Recipe: Ghost Pepper (15 min roast, high margin, niche demand).
-3. While roasting, check **market supply:** peanut price is $0.38/lb this week (good harvest season). Queue an order for 150 lbs at max $0.40/lb. Order placed; supplier will deliver next day.
-4. Check **demand forecast:** Farmers' Market foot traffic is high (morning spike). Office Quarter is ramping up. Set prices:
-   - Farmers' Market Classic Salted: $1.20 (normal)
-   - Farmers' Market Honey Cinnamon: $1.50 (premium, high demand morning)
-   - Office Quarter Honey Cinnamon: $1.40 (they'll buy but less price-elastic)
-   - Ghost Pepper: $2.50 both districts (niche, high margin).
+**Scenario:** Player is on Day 18 (Act I). Owns a Tin Pan Roaster, 1 queue slot (starting config). Has unlocked Farmers' Market. Current cash: $1200. Starting raw stock: 20 lbs (from Day 1 gift).
 
-**Mid-morning (10am–12pm):**
-1. First batch (Honey Cinnamon, slot 1) completes. 30 lbs roasted. Add to inventory. Decision: move truck to Farmers' Market now (morning peak) or wait for all slots?
-2. Player chooses: move truck + first batch to Farmers' Market. Slot 1 batch sits on truck, ready to sell. Slots 2 & 3 still roasting at home base.
-3. At Farmers' Market, 6 customers arrive (foot traffic modifier = high morning, good weather). First customer is **Marta** (loyal, +10% margin modifier). Player sells 5 lbs Honey Cinnamon at $1.50/lb = $7.50 gross (COGS: $3.50, profit: $4.00). Marta buys another 3 lbs. Total: 8 lbs sold, $12/profit. Marta dialogue triggers the **Legume Gag:** "You know peanuts aren't nuts, they're legumes." Player replies (variant locked until later) and gets +1 Nut Facts meter, small mood boost from Marta.
+**Capacity Note:** With 1 queue slot and a 10-minute roast per 10-lb batch, the player can chain ~6 batches during an 8-hour morning roasting window, or fewer while also moving the truck and selling. A realistic "decent day" is capacity-bound by roaster throughput, not demand. Upgrading queue slots (later) is the lever for scaling output.
 
-**Afternoon (12pm–3pm):**
-1. Batches 2 & 3 complete back home. Player drives to Office Quarter (lunch rush incoming). Brings Honey Cinnamon (slot 2) and holds Ghost Pepper for later (niche demand, better evening).
-2. Office Quarter lunch rush: 12 customers in 2 hours. Derek shows up (daily commuter). Sells 10 lbs Classic Salted at $1.20 = $12 gross. Derek doesn't eat Ghost Pepper (too extreme for his taste), but feedback is positive. Derek's **consistency metric** is met (roast is on-brand). +1 loyalty toward Derek (relationship now at 7/100).
-3. Other customers buy Honey Cinnamon (3 sales of 2–5 lbs each = 12 lbs moved). Total afternoon: $30 gross, ~$16 profit after COGS.
+**Morning (6am–9am):**
+1. Start Day 18 with 20 lbs raw stock from previous days (or order fresh). Load **Batch 1: 10 lbs Classic Salted** into the roaster. Roast time: 10 min. Batch ready at 6:10 am.
+2. While waiting, check **market supply:** peanut price is $0.38/lb this week (good harvest season). Queue an order for 100 lbs at max $0.40/lb. Order placed; supplier will deliver next day.
+3. At 6:10 am, Batch 1 done. While it cools, load **Batch 2: 10 lbs Classic Salted** (roast 6:10–6:20 am). Repeat: **Batch 3: 10 lbs** (roast 6:20–6:30 am).
+4. Check **demand forecast:** Farmers' Market has high morning foot traffic (9am–12pm peak). Set price: Classic Salted at **$1.50/lb** (default). At this price, demand = 20 − 10(1.50 − 1.20) = **17 lbs/hr**.
+
+**Mid-morning (9am–12pm):**
+1. By 9am, Batches 1–3 are ready: 30 lbs total. Load **Batch 4** (final 10 lbs of starting stock) into roaster (roast 9:00–9:10 am). Decision: stay at home roasting, or move truck to market now?
+2. Player chooses: move truck + Batches 1–3 (30 lbs) to Farmers' Market at 9:15 am. Leave Batch 4 (not yet done) at home; it will be ready by 10am if needed.
+3. At Farmers' Market (9:15 am–12:15 pm, 3 hours). Morning demand = 17 lbs/hr × 3 = 51 lbs *if supply never runs out*. Player has 30 lbs. Realistic foot-traffic variance means ~15–18 customers across 3 hours; player sells all 30 lbs across 2.5 hours, then idles (no stock). Batch 4 sits at home, unneeded for this window.
+4. Sales: 30 lbs × $1.50 = **$45 revenue**. COGS: 30 lbs × $0.60 = **$18**. Gross profit: **$27**. Legume Gag triggers once or twice (random). Nut Facts meter +1 or +2.
+
+**Afternoon (12pm–5pm):**
+1. Player drives home (12:30 pm). Batch 4 is ready. Decide: roast more from the bulk order arriving tomorrow? Or load the 100 lbs from the order?
+2. Player chose to order 100 lbs. Order arrives ~1pm (instant in-game, represents overnight delivery). Stock on truck: 100 lbs raw.
+3. Load **Batch 5: 10 lbs** (roast 1:00–1:10 pm). Batch 6, 7, 8, 9 follow: one every 10 min through mid-afternoon (last roast done ~2:50 pm). By 3pm, player has 5 fresh batches (50 lbs Classic Salted).
+4. Demand at Farmers' Market afternoon (1pm–5pm): lower traffic, ~10–12 lbs/hr (seasonal + time-of-day dip). Player could move to Office Quarter (lunch already passed, less ideal). Stays at Farmers' Market, sells ~40 lbs through 5pm (8 lbs remain: 4 hot, 4 from Batch 4 aging one day).
+5. Afternoon sales: 40 lbs × $1.50 = **$60 revenue**. COGS: **$24**. Gross profit: **$36**. Legume Gag triggers once. Nut Facts +1.
 
 **Evening (5pm–8pm):**
-1. Move truck to Boardwalk (evening tourist spike). Ghost Pepper is the draw here. Tourists are price-insensitive for novelty. Sell 18 lbs Ghost Pepper at $2.50/lb = $45 gross, ~$27 profit (high margin).
-2. Legume Gag triggers 2 more times (different customers, random). +2 Nut Facts. Combo not triggered yet (different customers each time).
-3. End of day inventory: ~2 lbs remaining (auto-sell at 10% discount overnight if player upgraded; otherwise, sits until tomorrow or spoils slowly).
-4. Day earnings: $12 (Marta) + $16 (Office) + $27 (Boardwalk) = $55 gross, ~$35 net profit after COGS.
+1. Player stays at Farmers' Market for evening wind-down (foot traffic lower, but loyal customers). Sells remaining 4 hot lbs + decides against roasting fresh (limited time before close).
+2. Evening sales: 4 lbs × $1.50 = **$6 revenue**. COGS: **$2.40**. Gross profit: **$3.60**.
+3. End-of-day inventory: Raw stock (100 − 50 roasted = 50 lbs left). Roasted: 4 lbs from Batch 4 (day old, not yet sold).
 
-**Night (after close):**
-1. Player checks stats: $35 earned. Cash: $1200 + $35 = $1235.
-2. **Next milestone:** $1500 needed for first queue slot upgrade. Or $300 for permit expedite (gate to unlock third district). Player decides to push toward permit. Sets overnight idle auto-sell: ON (reduces spoilage, frees capital).
-3. **Tomorrow:** Supply shipment of 150 lbs arrives. Player can immediately load it into queue slots and chain roasts, scaling output without upfront cost—but spoilage risk grows if demand doesn't keep pace.
+**Night (after close, 8pm):**
+1. Player checks **end-of-day report:**
+   - **Total revenue today:** $45 + $60 + $6 = **$111**
+   - **Total COGS:** $18 + $24 + $2.40 = **$44.40**
+   - **Gross profit:** $27 + $36 + $3.60 = **$66.60**
+   - **Fixed costs:** $5.00
+   - **Net profit (today):** $66.60 − $5.00 = **$61.60**
+   - **Cash at end of day:** $1200 + $61.60 = **$1261.60**
+
+2. **Why this day was strong:** Player was capacity-bound but efficient. They roasted 6 batches in 4 hours (morning), sold 70 of 74 lbs ready, and hit the high-traffic Farmers' Market window. At the default price ($1.50), they captured the profit peak of the demand curve. Unmet demand (~30 lbs, since 17 lbs/hr × 3 hours = 51 available, but player had only 30) reveals the constraint: **roaster capacity, not demand.**
+3. **Upgrade insight:** If the player had 2 queue slots, they could roast Batch 2 while Batch 1 sells, doubling throughput. This day's bottleneck (40 lbs sold, not 51) is bridged by upgrading queue slots to 2 or 3, opening the path to +50–100% revenue days.
+4. **Next decision:** $1261.60 puts them within reach of a $500 queue-slot upgrade (total cost for one +1 slot). Or a $300 permit expedite for a third district. Player tracks their next milestone.
 
 ---
 
