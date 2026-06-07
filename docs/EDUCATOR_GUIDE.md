@@ -318,3 +318,20 @@ Use this checklist to prepare and run a classroom session. All steps are **pract
 This confirms: the game is **fully offline-capable** after the initial load. No student data is transmitted. No tracking. No external calls.
 
 ---
+
+## In-Game Glossary & Accessibility (⚙ MENU)
+
+The **⚙ MENU** button (bottom-right) opens Settings, which holds:
+- **Glossary** — plain-language definitions of every business term the game uses
+  (COGS, gross margin, profit-vs-cash, break-even, APR, deferred revenue, supplier
+  relationship, permit, and a serious entry on peanut allergy). It opens with a
+  standing reminder that the game is *simplified* and real fees/laws *vary by
+  location* — point students to your local SBA office for real figures. Learning
+  here is **opt-in**: nothing forces a student to read it.
+- **Accessibility** — **Reduced motion** (stops ambient animation for motion-sensitive
+  players) and **Colour-blind cues** (adds a word — "healthy/tight/low" — to the
+  colour-coded margin so colour is never the only signal). Both persist per-device.
+
+These preferences are stored locally on the device only — no accounts, no transmission.
+
+---

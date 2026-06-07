@@ -102,6 +102,21 @@ export function isMuted(): boolean {
   return _muted;
 }
 
+/**
+ * Sync the in-memory mute flag from storage WITHOUT creating an AudioContext.
+ * Call on scene create so isMuted() is truthful before the first user gesture —
+ * otherwise a freshly-loaded session reports "not muted" regardless of the saved
+ * pref (RT F1: the Settings Sound pill would lie and the first tap would clobber
+ * the saved preference). AudioContext creation still waits for audioInit() on a
+ * real gesture (browser autoplay policy).
+ */
+export function loadMutePref(storage?: Pick<Storage, "getItem">): void {
+  if (storage) {
+    _muted = storage.getItem(MUTE_KEY) === "1";
+    if (_masterGain) _masterGain.gain.value = _muted ? 0 : 0.7;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // SFX: coin pop blip
 // ---------------------------------------------------------------------------
