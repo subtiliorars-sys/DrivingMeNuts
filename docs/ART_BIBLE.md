@@ -194,6 +194,8 @@ avoid it. A trademark search is OPEN work (see OPEN items at the end of this doc
 
 ### Palette A: "Golden Market" (daytime) — P1 DEFAULT
 
+> **OWNER-RATIFIED 2026-06-07:** Palette A locked as the P1 default; B (dusk) and C stay zone/time variants. Sprites use A exclusively in P1.
+
 **Why P1 default:** warm, high-contrast, peanut-adjacent colors that read well on
 both bright monitors and mid-range mobile screens; all UI elements pass WCAG AA contrast
 at these values.
