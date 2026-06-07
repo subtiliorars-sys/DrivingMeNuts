@@ -35,9 +35,14 @@ import {
   setPrice,
   endOfDay,
   projectedDemand,
+  optimumPrice,
+  buyRoasterUpgrade,
+  buyQueueSlot,
+  chooseRescuePath,
+  type RescuePath,
 } from "../sim/engine.js";
 import type { SimState, DayReport } from "../sim/types.js";
-import { tryLoad, trySave, resetSave, safeStorage } from "../sim/persistence.js";
+import { tryLoad, trySave, resetSave, safeStorage, serialize, importEnvelopeText } from "../sim/persistence.js";
 import { LORE_BY_ID } from "../data/lore.js";
 import { drawLegsy } from "./legsy.js";
 import {
@@ -65,7 +70,15 @@ import {
   RECIPE_UNLOCK_THRESHOLD,
   bulkDiscountFor,
   SIM_TIME_SCALE,
+  ROASTER_TIER_ORDER,
+  ROASTER_UPGRADE_COST,
+  MAX_QUEUE_SLOTS,
+  QUEUE_SLOT_COST,
+  STARTING_QUEUE_SLOTS,
+  DAY_NAMES,
+  DAY_FACTOR,
   type RecipeId,
+  type RoasterTier,
 } from "../data/economy.js";
 import { LORE_LINES, LORE_TIER_DAY_GATE } from "../data/lore.js";
 
@@ -175,6 +188,7 @@ export class GameScene extends Phaser.Scene {
   // ---- HUD text refs (updated each frame via updateHUD) --------------------
   private txtCash!: Phaser.GameObjects.Text;
   private txtDay!: Phaser.GameObjects.Text;
+  private txtDayOfWeek!: Phaser.GameObjects.Text;  // W4: day-of-week label
   private txtRawStock!: Phaser.GameObjects.Text;
   private txtRoastedStock!: Phaser.GameObjects.Text;
   private txtPrice!: Phaser.GameObjects.Text;
@@ -216,6 +230,16 @@ export class GameScene extends Phaser.Scene {
   private roastModalSlotIndex = 0;
   private roastModalRecipe: RecipeId = "classic_salted";
   private roastModalBatchLbs = 10;
+
+  // ---- Upgrades modal state (Wave 4) -------------------------------------
+  private upgradesModalGroup?: Phaser.GameObjects.Group;
+  private upgradesModalOpen = false;
+
+  // ---- Rescue arc modal state (Wave 5) ------------------------------------
+  private rescueModalGroup?: Phaser.GameObjects.Group;
+  private rescueModalOpen = false;
+  /** HUD chip showing active debt/obligation status. */
+  private rescueHudChip?: Phaser.GameObjects.Text;
 
   // ---- Supply modal working qty -------------------------------------------
   private supplyQty = 50; // default qty for supply modal
@@ -378,6 +402,11 @@ export class GameScene extends Phaser.Scene {
       ...TEXT_STYLE_BODY, color: "#F5DEB3",
     });
 
+    // W4: day-of-week label (predictable, visible — DARK_PATTERN_GATE §A.1 compliant)
+    this.txtDayOfWeek = this.add.text(48, 2, "Monday", {
+      ...TEXT_STYLE_LABEL, color: "#C0A060",
+    });
+
     this.add.text(W / 2, 2, "FARMERS' MARKET", {
       ...TEXT_STYLE_LABEL, color: "#FF9800",
     }).setOrigin(0.5, 0);
@@ -392,6 +421,12 @@ export class GameScene extends Phaser.Scene {
     this.txtLoreCounter = this.add.text(W - 6, 18, "Lore: 0/6", {
       ...TEXT_STYLE_LABEL, color: "#C0A060",
     }).setOrigin(1, 0);
+
+    // ---- Rescue arc HUD chip (Wave 5) — neutral framing, visible while debt/obligation active --
+    // Positioned below the lore counter; hidden when no active debt.
+    this.rescueHudChip = this.add.text(W - 6, 28, "", {
+      fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+    }).setOrigin(1, 0).setVisible(false);
 
     // ---- Roast Queue Panel (P1_SPRITE_SPEC #13) ----------------------------
     // Panel: 160×80 px, top-left area at x=5, y=20
@@ -431,7 +466,7 @@ export class GameScene extends Phaser.Scene {
 
       const slotIndex = i;
       slotRect.on("pointerdown", () => {
-        if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen) {
+        if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen) {
           this.advanceTutorialOnAction(1); // step 1: "start a roast"
           this.handleSlotClick(slotIndex);
         }
@@ -496,13 +531,29 @@ export class GameScene extends Phaser.Scene {
       fontSize: "8px", color: "#2C2416", fontFamily: "monospace",
     }).setOrigin(0.5);
     buyBtn.on("pointerdown", () => {
-      if (!this.reportOpen) {
+      if (!this.reportOpen && !this.rescueModalOpen) {
         this.advanceTutorialOnAction(0); // step 0: "buy raw peanuts"
         this.openSupplyModal();
       }
     });
     buyBtn.on("pointerover", () => buyBtn.setAlpha(0.85));
     buyBtn.on("pointerout",  () => buyBtn.setAlpha(1.0));
+
+    // ---- UPGRADES button (Wave 4: capital-investment teaching surface) -----
+    const upgBtnY = buyBtnY + 24;
+    const upgradesBtn = this.add.rectangle(buyBtnX + 68, upgBtnY + 10, 137, 20, 0x556677)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.add.text(buyBtnX + 68, upgBtnY + 10, "UPGRADES", {
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+    }).setOrigin(0.5);
+    upgradesBtn.on("pointerdown", () => {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.rescueModalOpen) {
+        this.openUpgradesModal();
+      }
+    });
+    upgradesBtn.on("pointerover", () => upgradesBtn.setAlpha(0.85));
+    upgradesBtn.on("pointerout",  () => upgradesBtn.setAlpha(1.0));
 
     // ---- Day progress bar --------------------------------------------------
     const dpY = H - 18;
@@ -515,7 +566,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(W - 50, dpY + 5, "END DAY", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
-    endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen) this.triggerEndOfDay(); });
+    endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen) this.triggerEndOfDay(); });
 
     // ---- Reset Save button (spec req; tucked in bottom-left corner) --------
     // Player-initiated only — confirm dialog prevents accidents. (DARK_PATTERN_GATE §B.3)
@@ -524,7 +575,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.add.text(28, dpY + 5, "RESET", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
     resetBtn.on("pointerdown", () => {
-      if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen) return;
+      if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen) return;
       this.showResetConfirm();
     });
 
@@ -579,7 +630,7 @@ export class GameScene extends Phaser.Scene {
     // Track wall-clock playtime (excludes offline time; used by trySave meta)
     this.playtimeSeconds += delta / 1_000;
 
-    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen) return;
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -588,8 +639,10 @@ export class GameScene extends Phaser.Scene {
     const prevDayElapsed = this.state.dayElapsedSeconds;
     const events = tick(this.state, dtSeconds);
 
-    // Handle events for coin pops, gag bubbles, and day-end trigger
-    // F5: accumulate revenue; spawn one pop per COIN_POP_THRESHOLD earned
+    // Handle events for coin pops, gag bubbles, and day-end trigger.
+    // F5: accumulate revenue; spawn one pop per COIN_POP_THRESHOLD earned.
+    // Item 1: trySave on batch_ready — closes the crash-loss window between
+    //         roast completion and end-of-day save (cheap; no UI noise on success).
     for (const ev of events) {
       if (ev.kind === "sale") {
         this.coinPopAccum += ev.detail.revenue as number;
@@ -599,6 +652,7 @@ export class GameScene extends Phaser.Scene {
       }
       if (ev.kind === "batch_ready") {
         playBatchReady();
+        this.saveGame();
       }
     }
     if (this.coinPopAccum >= this.COIN_POP_THRESHOLD) {
@@ -638,6 +692,12 @@ export class GameScene extends Phaser.Scene {
     ).length;
     this.txtCash.setText(`Cash: $${this.state.cash.toFixed(2)}`);
     this.txtDay.setText(`Day ${this.state.dayNumber}`);
+    // W4: day-of-week label (predictable, never framed as pressure — DARK_PATTERN_GATE §A.1)
+    const dowIdx = ((this.state.dayNumber - 1) % 7 + 7) % 7;
+    const dayFactor = DAY_FACTOR[dowIdx];
+    const dowLabel = DAY_NAMES[dowIdx];
+    // Show factor as a neutral context hint (not "peak!" or "slow day!")
+    this.txtDayOfWeek.setText(`${dowLabel} (×${dayFactor.toFixed(2)})`);
     this.txtLoreCounter.setText(`Lore: ${this.state.gagsSeen.size}/${unlockedLoreCount}`);
     this.txtRawStock.setText(`Raw: ${this.state.rawStockLbs.toFixed(1)} lbs`);
     this.txtRoastedStock.setText(`Roasted: ${this.state.roastedStockLbs.toFixed(1)} lbs`);
@@ -706,6 +766,38 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.txtRawStock.setStyle(TEXT_STYLE_LABEL);
     }
+
+    // Wave 5: rescue arc HUD chip — neutral, factual, never shaming
+    if (this.rescueHudChip) {
+      const chipText = this.buildRescueHudChipText();
+      if (chipText) {
+        this.rescueHudChip.setText(chipText).setVisible(true);
+      } else {
+        this.rescueHudChip.setVisible(false);
+      }
+    }
+  }
+
+  /** Build a short HUD chip string for active debts/obligations. Neutral framing. */
+  private buildRescueHudChipText(): string | null {
+    const parts: string[] = [];
+    for (const debt of this.state.rescueDebts) {
+      const daysLeft = debt.dueDayNumber - this.state.dayNumber;
+      if (debt.kind === "loan") {
+        parts.push(`Owe Old Joe $${debt.amountDue.toFixed(2)} — ${daysLeft}d left`);
+      } else if (debt.kind === "credit") {
+        parts.push(`Supplier: owe $${debt.amountDue.toFixed(2)} — ${daysLeft}d left`);
+      } else if (debt.kind === "payday") {
+        const rNote = debt.rollovers > 0 ? ` [×${debt.rollovers}]` : "";
+        parts.push(`QuickNut: $${debt.amountDue.toFixed(2)} due d${debt.dueDayNumber}${rNote}`);
+      }
+    }
+    if (this.state.preorderObligation) {
+      const ob = this.state.preorderObligation;
+      const daysLeft = ob.dueDayNumber - this.state.dayNumber;
+      parts.push(`Derek: ${ob.fulfilledLbs.toFixed(0)}/${ob.totalLbs}lbs — ${daysLeft}d left`);
+    }
+    return parts.length > 0 ? parts.join(" | ") : null;
   }
 
   // ---------------------------------------------------------------------------
@@ -814,23 +906,26 @@ export class GameScene extends Phaser.Scene {
 
     const refreshPreview = (): void => {
       const cogs = cogsForRecipe(this.roastModalRecipe);
-      const revenue1 = this.state.sellPrice * this.roastModalBatchLbs;
       const cogsTotal = cogs * this.roastModalBatchLbs;
-      const margin1 = this.state.sellPrice > 0
-        ? ((this.state.sellPrice - cogs) / this.state.sellPrice) * 100
-        : 0;
-      // Honey Cinnamon optimal price hint from spec: p* ≈ $1.95; generic: highlight current price
-      const optPrice = this.state.sellPrice;
-      const demandHint = projectedDemand(optPrice, this.roastModalRecipe);
       const roastMins = (RECIPES[this.roastModalRecipe].roastSecondsPerLbTinPan * this.roastModalBatchLbs) / 60;
 
+      // Row A: at current price
+      const curPrice  = this.state.sellPrice;
+      const margin1   = curPrice > 0 ? ((curPrice - cogs) / curPrice) * 100 : 0;
+      const demand1   = projectedDemand(curPrice, this.roastModalRecipe);
       const marginColor = margin1 >= 60 ? "#4A7C4E" : margin1 >= 45 ? "#C08A00" : "#C0392B";
+
+      // Row B: at optimum price (item 6 — two-row preview)
+      const optPrice  = optimumPrice(this.roastModalRecipe);
+      const marginOpt = optPrice > 0 ? ((optPrice - cogs) / optPrice) * 100 : 0;
+      const demandOpt = projectedDemand(optPrice, this.roastModalRecipe);
 
       if (previewLines.length >= 5) {
         previewLines[0].setText(`COGS total: $${cogsTotal.toFixed(2)}  Roast: ${roastMins.toFixed(0)} min (sim)`);
-        previewLines[1].setText(`At $${this.state.sellPrice.toFixed(2)}/lb: Rev $${revenue1.toFixed(2)}  Margin ${margin1.toFixed(0)}%`);
+        previewLines[1].setText(`at current $${curPrice.toFixed(2)}: margin ${margin1.toFixed(0)}%  ~${demand1.toFixed(0)} lbs/hr`);
         previewLines[1].setStyle({ ...TEXT_STYLE_LABEL, color: marginColor });
-        previewLines[2].setText(`Demand hint: ~${demandHint.toFixed(0)} lbs/hr at your price`);
+        previewLines[2].setText(`at optimum $${optPrice.toFixed(2)}: margin ${marginOpt.toFixed(0)}%  ~${demandOpt.toFixed(0)} lbs/hr`);
+        previewLines[2].setStyle({ ...TEXT_STYLE_LABEL, color: "#4A7C4E" });
         previewLines[3].setText(`COGS/lb: $${cogs.toFixed(2)}`);
       }
 
@@ -1018,6 +1113,355 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------------
+  // Upgrades modal (Wave 4: roaster tiers + queue slots capital-investment lesson)
+  // No countdown timers, no FOMO. Insufficient-cash = grey + earn-more hint.
+  // DARK_PATTERN_GATE §A.1 / §A.5 compliant: no pressure, no wall-clock urgency.
+  // ---------------------------------------------------------------------------
+
+  private openUpgradesModal(): void {
+    if (this.upgradesModalOpen) return;
+    this.upgradesModalOpen = true;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const mW = 320, mH = 220;
+    const mX = (W - mW) / 2;
+    const mY = (H - mH) / 2;
+
+    this.upgradesModalGroup = this.add.group();
+
+    // Backdrop
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.55)
+      .setInteractive();
+    this.upgradesModalGroup.add(backdrop);
+
+    // Panel
+    this.upgradesModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG)
+        .setStrokeStyle(2, P.PANEL_BORDER)
+    );
+
+    // Header
+    this.upgradesModalGroup.add(
+      this.add.text(mX + 6, mY + 5, "UPGRADES — Capital Investment", TEXT_STYLE_HEADER)
+    );
+
+    // Close [×]
+    const closeBtn = this.add.rectangle(mX + mW - 12, mY + 11, 16, 14, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.upgradesModalGroup.add(closeBtn);
+    this.upgradesModalGroup.add(
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    closeBtn.on("pointerdown", () => this.closeUpgradesModal());
+
+    // Divider
+    this.upgradesModalGroup.add(this.add.rectangle(mX + mW / 2, mY + 21, mW - 8, 1, P.PANEL_BORDER));
+
+    let rowY = mY + 27;
+
+    // ---- Section: Roaster Tiers ----
+    this.upgradesModalGroup.add(this.add.text(mX + 6, rowY, "ROASTER", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    rowY += 12;
+
+    const currentTierIdx = ROASTER_TIER_ORDER.indexOf(this.state.roasterTier as RoasterTier);
+    const tierLabels: Record<RoasterTier, string> = {
+      tin_pan:    "Tin Pan  (1.0×)",
+      copper:     "Copper   (0.6×)",
+      industrial: "Industrial (0.2×)",
+    };
+    const tierDesc: Record<RoasterTier, string> = {
+      tin_pan:    "starter",
+      copper:     "40% faster roast",
+      industrial: "80% faster roast",
+    };
+
+    for (let i = 0; i < ROASTER_TIER_ORDER.length; i++) {
+      const tier = ROASTER_TIER_ORDER[i];
+      const isCurrent = i === currentTierIdx;
+      const isPurchasable = i === currentTierIdx + 1;
+      const isLocked = i > currentTierIdx + 1;
+      const cost = ROASTER_UPGRADE_COST[tier];
+
+      // Payback hint: daily net ~$60, payback = cost / 60
+      const paybackDays = cost > 0 ? Math.round(cost / 60) : 0;
+      const paybackStr = isPurchasable && cost > 0 ? `  (~${paybackDays}d payback)` : "";
+
+      const labelColor: string = isCurrent ? "#4A7C4E" : isLocked ? "#999977" : "#2C2416";
+
+      const lineText = `  ${isCurrent ? "▶" : " "} ${tierLabels[tier]}  — ${tierDesc[tier]}${paybackStr}`;
+      this.upgradesModalGroup.add(
+        this.add.text(mX + 6, rowY, lineText, { ...TEXT_STYLE_LABEL, color: isCurrent ? "#4A7C4E" : labelColor })
+      );
+
+      if (isPurchasable) {
+        const canAfford = this.state.cash >= cost;
+        const btnColor = canAfford ? P.AWNING : 0x999977;
+        const buyBtn = this.add.rectangle(mX + mW - 46, rowY + 4, 72, 13, btnColor)
+          .setStrokeStyle(1, P.PANEL_BORDER)
+          .setInteractive({ cursor: canAfford ? "pointer" : "default" });
+        this.upgradesModalGroup.add(buyBtn);
+
+        const btnLabel = canAfford
+          ? `BUY $${cost}`
+          : `earn $${(cost - this.state.cash).toFixed(0)} more`;
+        this.upgradesModalGroup.add(
+          this.add.text(mX + mW - 46, rowY + 4, btnLabel, {
+            fontSize: "7px",
+            color: canAfford ? "#2C2416" : "#666644",
+            fontFamily: "monospace",
+          }).setOrigin(0.5)
+        );
+
+        if (canAfford) {
+          buyBtn.on("pointerdown", () => {
+            const ev = buyRoasterUpgrade(this.state);
+            if (ev) {
+              playButtonTick();
+              this.closeUpgradesModal();
+              this.showToast(`Upgraded to ${(ev.detail.nextTier as string).replace("_", " ")}! Roast speed improved.`);
+            }
+          });
+          buyBtn.on("pointerover", () => buyBtn.setAlpha(0.85));
+          buyBtn.on("pointerout",  () => buyBtn.setAlpha(1.0));
+        }
+      }
+
+      rowY += 14;
+    }
+
+    // Divider
+    this.upgradesModalGroup.add(this.add.rectangle(mX + mW / 2, rowY + 2, mW - 8, 1, P.PANEL_BORDER));
+    rowY += 8;
+
+    // ---- Section: Queue Slots ----
+    this.upgradesModalGroup.add(this.add.text(mX + 6, rowY, "ROAST QUEUE SLOTS", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    rowY += 12;
+
+    const currentSlots = this.state.roastSlots.length;
+    for (let slotCount = STARTING_QUEUE_SLOTS; slotCount <= MAX_QUEUE_SLOTS; slotCount++) {
+      const isCurrent = slotCount === currentSlots;
+      const isPurchasable = slotCount === currentSlots + 1;
+      const isLocked = slotCount > currentSlots + 1;
+
+      // Cost to buy this slot (purchaseIdx = slotCount - STARTING_QUEUE_SLOTS - 1)
+      const purchaseIdx = slotCount - STARTING_QUEUE_SLOTS - 1;
+      const cost = QUEUE_SLOT_COST[purchaseIdx] ?? 0;
+      const paybackDays = cost > 0 ? Math.round(cost / 50) : 0;
+      const paybackStr = isPurchasable && cost > 0 ? `  (~${paybackDays}d payback)` : "";
+
+      const prefix = isCurrent ? "▶" : " ";
+      const lineText = `  ${prefix} ${slotCount} Slot${slotCount > 1 ? "s" : ""}  — ${slotCount === 1 ? "starter" : `parallel batch × ${slotCount}`}${paybackStr}`;
+      const lineColor = isCurrent ? "#4A7C4E" : isLocked ? "#999977" : "#2C2416";
+      this.upgradesModalGroup.add(
+        this.add.text(mX + 6, rowY, lineText, { ...TEXT_STYLE_LABEL, color: lineColor })
+      );
+
+      if (isPurchasable) {
+        const canAfford = this.state.cash >= cost;
+        const btnColor = canAfford ? P.AWNING : 0x999977;
+        const buyBtn = this.add.rectangle(mX + mW - 46, rowY + 4, 72, 13, btnColor)
+          .setStrokeStyle(1, P.PANEL_BORDER)
+          .setInteractive({ cursor: canAfford ? "pointer" : "default" });
+        this.upgradesModalGroup.add(buyBtn);
+
+        const btnLabel = canAfford
+          ? `BUY $${cost}`
+          : `earn $${(cost - this.state.cash).toFixed(0)} more`;
+        this.upgradesModalGroup.add(
+          this.add.text(mX + mW - 46, rowY + 4, btnLabel, {
+            fontSize: "7px",
+            color: canAfford ? "#2C2416" : "#666644",
+            fontFamily: "monospace",
+          }).setOrigin(0.5)
+        );
+
+        if (canAfford) {
+          buyBtn.on("pointerdown", () => {
+            const ev = buyQueueSlot(this.state);
+            if (ev) {
+              playButtonTick();
+              // Rebuild slot UI for the newly added slot
+              this.rebuildSlotUI();
+              this.closeUpgradesModal();
+              this.showToast(`Queue expanded to ${(ev.detail.newSlotCount as number)} slots! Run more batches at once.`);
+            }
+          });
+          buyBtn.on("pointerover", () => buyBtn.setAlpha(0.85));
+          buyBtn.on("pointerout",  () => buyBtn.setAlpha(1.0));
+        }
+      }
+
+      rowY += 14;
+    }
+
+    // ---- Day-factor legend (small, informational, no pressure) ----
+    rowY += 4;
+    this.upgradesModalGroup.add(this.add.rectangle(mX + mW / 2, rowY + 2, mW - 8, 1, P.PANEL_BORDER));
+    rowY += 6;
+    this.upgradesModalGroup.add(
+      this.add.text(mX + 6, rowY, "THIS WEEK  Mon 0.85 · Tue 0.90 · Wed 0.95 · Thu 1.00 · Fri 1.10 · Sat 1.25 · Sun 1.10", {
+        fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+      })
+    );
+
+    // ---- Save Export / Import buttons (item 2) ----
+    // All local — CRIT-1 compliant (zero server).
+    rowY += 10;
+    this.upgradesModalGroup.add(this.add.rectangle(mX + mW / 2, rowY + 2, mW - 8, 1, P.PANEL_BORDER));
+    rowY += 8;
+
+    const exportBtn = this.add.rectangle(mX + 60, rowY + 6, 90, 14, 0x445566)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.upgradesModalGroup.add(exportBtn);
+    this.upgradesModalGroup.add(
+      this.add.text(mX + 60, rowY + 6, "EXPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    exportBtn.on("pointerdown", () => {
+      const json = serialize(this.state, this.playtimeSeconds);
+      const blob = new Blob([json], { type: "application/json" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = "driving-me-nuts-save.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+    exportBtn.on("pointerover", () => exportBtn.setAlpha(0.85));
+    exportBtn.on("pointerout",  () => exportBtn.setAlpha(1.0));
+
+    const importBtn = this.add.rectangle(mX + 170, rowY + 6, 90, 14, 0x445566)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.upgradesModalGroup.add(importBtn);
+    this.upgradesModalGroup.add(
+      this.add.text(mX + 170, rowY + 6, "IMPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    importBtn.on("pointerdown", () => {
+      const fileInput = document.createElement("input");
+      fileInput.type   = "file";
+      fileInput.accept = ".json,application/json";
+      fileInput.onchange = () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const text = ev.target?.result as string | undefined;
+          if (!text) {
+            this.showToast("Import failed: could not read file.");
+            return;
+          }
+          const result = importEnvelopeText(text, this.storage);
+          if (!result.ok || !result.state) {
+            this.showToast(result.errorMessage ?? "Import failed: unknown error.");
+          } else {
+            this.state = result.state;
+            // RT-2: imported save may have a different queue-slot count than the
+            // scene was built with — reconcile UI rows BEFORE updateHUD touches them.
+            this.syncSlotUI();
+            this.closeUpgradesModal();
+            this.updateHUD();
+            this.showToast(result.previousSaveBackedUp
+              ? "Save imported. (Your previous save was backed up automatically.)"
+              : "Save imported — game state restored.");
+          }
+        };
+        reader.readAsText(file);
+      };
+      fileInput.click();
+    });
+    importBtn.on("pointerover", () => importBtn.setAlpha(0.85));
+    importBtn.on("pointerout",  () => importBtn.setAlpha(1.0));
+
+    // Close button at bottom
+    rowY += 14;
+    const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.upgradesModalGroup.add(doneBtn);
+    this.upgradesModalGroup.add(
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    doneBtn.on("pointerdown", () => this.closeUpgradesModal());
+    doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
+    doneBtn.on("pointerout",  () => doneBtn.setAlpha(1.0));
+  }
+
+  private closeUpgradesModal(): void {
+    if (this.upgradesModalGroup) {
+      this.upgradesModalGroup.destroy(true);
+      this.upgradesModalGroup = undefined;
+    }
+    this.upgradesModalOpen = false;
+    this.updateHUD();
+  }
+
+  /**
+   * Rebuild slot UI objects after a queue slot purchase.
+   * Adds the new slot's rect/label/bar to the existing slot arrays.
+   * Called immediately after buyQueueSlot mutates state.roastSlots.
+   */
+  private rebuildSlotUI(): void {
+    // Add the newest slot (last index) — existing slots are already rendered.
+    this.addSlotUIRow(this.state.roastSlots.length - 1);
+  }
+
+  /**
+   * RT-2: reconcile the slot-UI arrays with state.roastSlots after the state
+   * object is replaced wholesale (save import). An imported save can have MORE
+   * or FEWER slots than the scene was built with; without this, updateHUD()
+   * indexes past the UI arrays and crashes on undefined (black screen).
+   */
+  private syncSlotUI(): void {
+    // Remove surplus rows (imported save has fewer slots than the current UI)
+    while (this.slotRects.length > this.state.roastSlots.length) {
+      this.slotRects.pop()?.destroy();
+      this.slotLabels.pop()?.destroy();
+      this.slotBars.pop()?.destroy();
+      this.slotBarBgs.pop()?.destroy();
+    }
+    // Add missing rows (imported save has more slots than the current UI)
+    while (this.slotRects.length < this.state.roastSlots.length) {
+      this.addSlotUIRow(this.slotRects.length);
+    }
+  }
+
+  /** Build one roast-queue slot row (rect, label, progress bar) at slot index i. */
+  private addSlotUIRow(i: number): void {
+    const qX = 5, qY = 20;
+    const sx = qX + 5;
+    const sy = qY + 18 + i * 30;
+    const sw = 150, sh = 24;
+
+    const slotRect = this.add.rectangle(sx + sw / 2, sy + sh / 2, sw, sh, P.SLOT_EMPTY)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+
+    const barBg = this.add.rectangle(sx + 3 + 70, sy + sh / 2 + 6, 74, 5, 0xAAAAAA);
+    barBg.setVisible(false);
+
+    const bar = this.add.rectangle(sx + 3 + 33, sy + sh / 2 + 6, 0, 5, P.SLOT_ROAST);
+    bar.setVisible(false);
+
+    const slotLabel = this.add.text(sx + 3, sy + 3, `Slot ${i + 1}: [Empty] — tap to roast`, TEXT_STYLE_LABEL);
+
+    this.slotRects.push(slotRect);
+    this.slotLabels.push(slotLabel);
+    this.slotBars.push(bar);
+    this.slotBarBgs.push(barBg);
+
+    const slotIndex = i;
+    slotRect.on("pointerdown", () => {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen) {
+        this.handleSlotClick(slotIndex);
+      }
+    });
+    slotRect.on("pointerover", () => slotRect.setAlpha(0.85));
+    slotRect.on("pointerout",  () => slotRect.setAlpha(1.0));
+  }
+
+  // ---------------------------------------------------------------------------
   // Supply modal (P1_WIREFRAMES §3)
   // ---------------------------------------------------------------------------
 
@@ -1184,6 +1628,14 @@ export class GameScene extends Phaser.Scene {
     // Pause the sim — reportOpen flag stops tick() calls
     const report = endOfDay(this.state);
 
+    // Wave 5: surface rescue arc events as toasts (factual, never shaming)
+    for (const ev of report.rescueEvents) {
+      const msg = ev.detail.message as string | undefined;
+      if (msg) {
+        this.time.delayedCall(500, () => this.showToast(msg));
+      }
+    }
+
     // Show recipe-unlock toasts for any newly unlocked recipes.
     const RECIPE_LABELS: Record<RecipeId, string> = {
       classic_salted: "Classic Salted",
@@ -1213,7 +1665,11 @@ export class GameScene extends Phaser.Scene {
     const H = this.scale.height;
     const rW = 300;
     // +14px for F1 "Cash spent on production" row; +14px more when offline row present (spec §6)
-    const rH = 224 + (r.offlineEarned > 0 ? 14 : 0);
+    // +14px for Wave 5 liability line when debts/obligations are active
+    // +20px for sparkline row when ≥1 day of history exists (item 3)
+    const sparklineHistory = this.state.netHistory.slice(-7); // last 7 days
+    const hasSparkline = sparklineHistory.length >= 1;
+    const rH = 224 + (r.offlineEarned > 0 ? 14 : 0) + (r.activeDebtSummary ? 14 : 0) + (hasSparkline ? 20 : 0);
     const rX = (W - rW) / 2;
     const rY = (H - rH) / 2;
 
@@ -1255,6 +1711,10 @@ export class GameScene extends Phaser.Scene {
         ? [[`Offline rest earnings:`, `+$${r.offlineEarned.toFixed(2)}`, TEXT_STYLE_GREEN] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
         : []),
       [`Net Profit:`, `$${r.net.toFixed(2)}`, r.net >= 0 ? TEXT_STYLE_GREEN : TEXT_STYLE_RED],
+      // Wave 5: liability line — teaches liabilities vs cash (neutral, not shaming)
+      ...(r.activeDebtSummary
+        ? [[`Liabilities:`, r.activeDebtSummary, TEXT_STYLE_RED] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
+        : []),
     ];
 
     let rowY = rY + 42;
@@ -1286,6 +1746,29 @@ export class GameScene extends Phaser.Scene {
     );
     rowY += 36;
 
+    // ---- Net history sparkline (item 3: last-7-days bar row) ----
+    // Bookkeeping concept: factual framing only, no FOMO. Green = positive net, red = negative.
+    if (hasSparkline) {
+      this.reportGroup.add(
+        this.add.text(rX + 8, rowY, "Last 7 days:", TEXT_STYLE_LABEL)
+      );
+      const maxAbs = Math.max(1, ...sparklineHistory.map(Math.abs));
+      const barMaxH = 10;
+      const barW    = 12;
+      const barGap  = 3;
+      const barBaseY = rowY + barMaxH + 2;
+      for (let i = 0; i < sparklineHistory.length; i++) {
+        const netVal = sparklineHistory[i];
+        const barH   = Math.max(2, Math.round((Math.abs(netVal) / maxAbs) * barMaxH));
+        const barColor = netVal >= 0 ? P.CASH_GREEN : P.WARNING_RED;
+        const bx = rX + 80 + i * (barW + barGap);
+        this.reportGroup.add(
+          this.add.rectangle(bx + barW / 2, barBaseY - barH / 2, barW, barH, barColor)
+        );
+      }
+      rowY += 20;
+    }
+
     // "Start next day" button (no countdown, no pressure — DARK_PATTERN_GATE B.1)
     const nextBtn = this.add.rectangle(rX + rW / 2, rY + rH - 14, 140, 18, P.AWNING)
       .setStrokeStyle(1, P.PANEL_BORDER)
@@ -1305,9 +1788,14 @@ export class GameScene extends Phaser.Scene {
       this.reportGroup = undefined;
     }
     this.reportOpen = false;
-    // Save after report is dismissed — state is fully consistent post-endOfDay (spec §3)
+    // Save after report is dismissed �� state is fully consistent post-endOfDay (spec §3)
     this.saveGame();
     this.updateHUD();
+
+    // Wave 5: open rescue-offer modal after report if trigger fired this day
+    if (this.state.rescueMode === "offer") {
+      this.time.delayedCall(300, () => this.openRescueModal());
+    }
   }
 
   /** Persist current state to storage. Called at safe save points only (never mid-tick). */
@@ -1490,15 +1978,309 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------------
-  // Phaser scene lifecycle — teardown
+  // Rescue arc modal (Wave 5 — RESCUE_ARC_SCRIPT.md)
+  //
+  // Opens after the day-report dismisses, when state.rescueMode === "offer".
+  // Four paths + QuickNut cautionary display + decline.
+  // DARK_PATTERN_GATE compliance: no locked options, no pressure framing,
+  // no countdown. QuickNut shown with full APR math; player may choose it —
+  // the math itself is the teaching moment.
   // ---------------------------------------------------------------------------
 
-  shutdown(): void {
-    // Remove DOM listeners added in create() — prevents leaks if scene restarts.
-    document.removeEventListener("visibilitychange", this.onVisibilityChange);
-    window.removeEventListener("pagehide", this.onPageHide);
-    // Clean up any active tutorial bubble
-    this.dismissTutorial();
+  private openRescueModal(): void {
+    if (this.rescueModalOpen || this.state.rescueMode !== "offer") return;
+    this.rescueModalOpen = true;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const mW = 460, mH = 240;
+    const mX = (W - mW) / 2;
+    const mY = (H - mH) / 2;
+
+    this.rescueModalGroup = this.add.group();
+
+    // ---- Backdrop ----
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.70)
+      .setInteractive();
+    this.rescueModalGroup.add(backdrop);
+
+    // ---- Panel ----
+    this.rescueModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG)
+        .setStrokeStyle(2, P.PANEL_BORDER)
+    );
+
+    // ---- Old Joe portrait (Legsy-style code-drawn gruff elder) ----
+    // Weathered, 70s. Different from Legsy: wider body, no pod shape — a human silhouette.
+    // Built with same Palette A + monochrome; separate from drawLegsy (which is the mascot).
+    this.drawOldJoePortrait(mX + 22, mY + mH - 14);
+
+    // ---- Header ----
+    this.rescueModalGroup.add(
+      this.add.text(mX + 52, mY + 6, "TILL RUNS THIN — Old Joe's at the Window", TEXT_STYLE_HEADER)
+    );
+
+    // ---- Old Joe dialogue ----
+    this.rescueModalGroup.add(
+      this.add.text(mX + 52, mY + 20,
+        "\"Long day? Cash-flow problems aren't shameful — that's how you learn.\nBefore tomorrow gets worse, let's talk about what gets you through the week.\"",
+        { ...TEXT_STYLE_LABEL, color: "#5A3A1A", wordWrap: { width: mW - 60 } }
+      )
+    );
+
+    // ---- Divider ----
+    this.rescueModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + 48, mW - 8, 1, P.PANEL_BORDER)
+    );
+
+    // ---- Option cards (4 paths + decline) ----
+    // Each card: 84px wide, 170px tall — 5 columns
+    const cardW = 84, cardH = 170;
+    const cardY = mY + 52;
+    const cardGap = 4;
+    const totalCardsW = cardW * 5 + cardGap * 4;
+    const cardsStartX = mX + (mW - totalCardsW) / 2;
+
+    type CardDef = {
+      id: RescuePath;
+      label: string;
+      color: number;
+      lines: string[];
+    };
+
+    const cards: CardDef[] = [
+      {
+        id: "loan",
+        label: "OLD JOE'S LOAN",
+        color: P.CASH_GREEN,
+        lines: [
+          "+$75 cash now",
+          "Owe: $78.75",
+          "Due: 14 days",
+          "5% flat/season",
+          "(≈20%/yr)",
+          "",
+          "Fair handshake.",
+          "Pay any time.",
+          "No hidden fees.",
+        ],
+      },
+      {
+        id: "credit",
+        label: "MARTA'S CREDIT",
+        color: P.AWNING,
+        lines: [
+          "+125 lbs raw",
+          "(cash stays)",
+          "Owe: $50.00",
+          "Due: 14 days",
+          "No interest.",
+          "",
+          "Marta vouched",
+          "for you. Sell,",
+          "then pay.",
+        ],
+      },
+      {
+        id: "preorder",
+        label: "DEREK'S ORDER",
+        color: 0x5A7A8A,
+        lines: [
+          "+$110 cash now",
+          "Deliver 100lbs",
+          "roasted in 7d",
+          "",
+          "Rev: $110",
+          "COGS: ~$50",
+          "Profit: ~$60",
+          "",
+          "Execute or",
+          "trust is dented.",
+        ],
+      },
+      {
+        id: "payday",
+        label: "QUICKNUT ⚠",
+        color: 0xDD6600,
+        lines: [
+          "+$50 cash now",
+          "Owe: $57.50",
+          "Due: 14 days",
+          "",
+          "APR: ~391%",
+          "Roll: +$7.50/2wk",
+          "",
+          "Old Joe says:",
+          "\"Come to me",
+          "first.\"",
+        ],
+      },
+      {
+        id: "decline",
+        label: "DECLINE",
+        color: 0x888866,
+        lines: [
+          "No action now.",
+          "",
+          "Can re-trigger",
+          "next low-cash",
+          "day.",
+          "",
+          "Old Joe:",
+          "\"Door's open.",
+          "Think on it.\"",
+        ],
+      },
+    ];
+
+    for (let ci = 0; ci < cards.length; ci++) {
+      const card = cards[ci];
+      const cx = cardsStartX + ci * (cardW + cardGap);
+      const isQuickNut = card.id === "payday";
+
+      // Card background — QuickNut gets an off-palette "sketchy flyer" look
+      const cardBg = this.add.rectangle(cx + cardW / 2, cardY + cardH / 2, cardW, cardH,
+        isQuickNut ? 0xFFEEBB : P.PANEL_BG
+      ).setStrokeStyle(isQuickNut ? 2 : 1, isQuickNut ? 0xDD6600 : P.PANEL_BORDER)
+        .setInteractive({ cursor: "pointer" });
+      this.rescueModalGroup.add(cardBg);
+
+      // Card header label
+      const headerColor = isQuickNut ? "#CC4400" : "#2C2416";
+      this.rescueModalGroup.add(
+        this.add.text(cx + cardW / 2, cardY + 5, card.label, {
+          fontSize: "6px", color: headerColor, fontFamily: "monospace", fontStyle: "bold",
+          wordWrap: { width: cardW - 4 }, align: "center",
+        }).setOrigin(0.5, 0)
+      );
+
+      // Card detail lines
+      let lineY = cardY + 18;
+      for (const line of card.lines) {
+        if (line) {
+          const lineColor = isQuickNut && (line.includes("391") || line.includes("Roll")) ? "#CC2200" : "#2C2416";
+          this.rescueModalGroup.add(
+            this.add.text(cx + 2, lineY, line, {
+              fontSize: "5px", color: lineColor, fontFamily: "monospace",
+              wordWrap: { width: cardW - 4 },
+            })
+          );
+        }
+        lineY += 8;
+      }
+
+      // Choose button at card bottom
+      const btnLabel = card.id === "decline" ? "SKIP" :
+                       card.id === "payday" ? "CHOOSE (see warning)" : "CHOOSE";
+      const btnColor = card.id === "decline" ? 0x999977 :
+                       isQuickNut ? 0xDD6600 : P.AWNING;
+      const chooseBtn = this.add.rectangle(cx + cardW / 2, cardY + cardH - 8, cardW - 6, 13, btnColor)
+        .setStrokeStyle(1, P.PANEL_BORDER)
+        .setInteractive({ cursor: "pointer" });
+      this.rescueModalGroup.add(chooseBtn);
+      this.rescueModalGroup.add(
+        this.add.text(cx + cardW / 2, cardY + cardH - 8, btnLabel, {
+          fontSize: "5px", color: "#2C2416", fontFamily: "monospace",
+        }).setOrigin(0.5)
+      );
+
+      const pathId = card.id;
+      const handler = (): void => {
+        chooseRescuePath(this.state, pathId);
+        this.closeRescueModal();
+        this.updateHUD();
+        // Toast confirming the choice (factual, not congratulatory)
+        const toastMsg = pathId === "loan"
+          ? "Old Joe's loan: +$75. Owe $78.75 in 14 days."
+          : pathId === "credit"
+          ? "Marta's credit: +125 lbs raw. Owe $50 in 14 days."
+          : pathId === "preorder"
+          ? "Derek's order accepted: +$110. Deliver 100 lbs roasted in 7 days."
+          : pathId === "payday"
+          ? "QuickNut: +$50. $57.50 due in 14 days. Rolls +$7.50 if unpaid."
+          : "Old Joe nods. Door stays open.";
+        this.showToast(toastMsg);
+        this.saveGame();
+      };
+
+      chooseBtn.on("pointerdown", handler);
+      cardBg.on("pointerdown", handler);
+      chooseBtn.on("pointerover", () => chooseBtn.setAlpha(0.85));
+      chooseBtn.on("pointerout",  () => chooseBtn.setAlpha(1.0));
+      cardBg.on("pointerover",  () => cardBg.setAlpha(0.9));
+      cardBg.on("pointerout",   () => cardBg.setAlpha(1.0));
+    }
+
+    // ---- QuickNut extra warning strip at bottom (per script: Old Joe shows flyer + warning) ----
+    const warnY = cardY + cardH + 4;
+    this.rescueModalGroup.add(
+      this.add.text(mX + 52, warnY,
+        "QuickNut APR math: $7.50 fee on $50 for 14 days = 15%/period × 26 periods/yr = ~391% APR. Old Joe: \"It's designed to keep people in debt.\"",
+        { fontSize: "5px", color: "#994400", fontFamily: "monospace", wordWrap: { width: mW - 60 } }
+      )
+    );
+
+    // ---- Old Joe's closing note ----
+    this.rescueModalGroup.add(
+      this.add.text(mX + 52, warnY + 10,
+        "\"Whatever you choose — keep an eye on the till. Cash flow is predictable if you're watching.\"",
+        { fontSize: "5px", color: "#5A3A1A", fontFamily: "monospace", fontStyle: "italic", wordWrap: { width: mW - 60 } }
+      )
+    );
+  }
+
+  private closeRescueModal(): void {
+    if (this.rescueModalGroup) {
+      this.rescueModalGroup.destroy(true);
+      this.rescueModalGroup = undefined;
+    }
+    this.rescueModalOpen = false;
+  }
+
+  /**
+   * Draw Old Joe — weathered elder in a peanut-roasting-league cap.
+   * Programmer-art, code-drawn. Palette A only.
+   * (x, y) = bottom-centre of figure.
+   */
+  private drawOldJoePortrait(x: number, y: number): void {
+    const g = this.rescueModalGroup!;
+    const s = 0.9; // scale
+
+    // Cap (faded, rectangular brim)
+    g.add(this.add.rectangle(x, y - 54 * s, 20 * s, 6 * s, P.PANEL_BORDER)); // brim
+    g.add(this.add.rectangle(x, y - 58 * s, 16 * s, 8 * s, 0x6A4F2F));       // crown (darker)
+
+    // Head
+    g.add(this.add.ellipse(x, y - 44 * s, 18 * s, 20 * s, P.NPC_SKIN));
+
+    // Eyes (small, world-weary — narrower than Legsy's)
+    g.add(this.add.rectangle(x - 4 * s, y - 46 * s, 4 * s, 2 * s, P.TEXT));
+    g.add(this.add.rectangle(x + 4 * s, y - 46 * s, 4 * s, 2 * s, P.TEXT));
+
+    // Wrinkle lines (horizontal marks each side of mouth area)
+    g.add(this.add.rectangle(x - 6 * s, y - 42 * s, 3 * s, 1 * s, 0xB89070));
+    g.add(this.add.rectangle(x + 6 * s, y - 42 * s, 3 * s, 1 * s, 0xB89070));
+
+    // Mouth (straight line — weathered, not smiling)
+    g.add(this.add.rectangle(x, y - 39 * s, 6 * s, 1 * s, P.TEXT));
+
+    // Body (flannel shirt — wider than head)
+    g.add(this.add.rectangle(x, y - 25 * s, 22 * s, 24 * s, 0x5A3A1A)); // flannel brown
+
+    // Arms (raised slightly — holding flyer in right hand)
+    g.add(this.add.rectangle(x - 14 * s, y - 24 * s, 6 * s, 14 * s, P.NPC_SKIN));
+    g.add(this.add.rectangle(x + 14 * s, y - 28 * s, 6 * s, 18 * s, P.NPC_SKIN)); // right arm raised
+
+    // Legs
+    g.add(this.add.rectangle(x - 6 * s, y - 7 * s, 7 * s, 12 * s, P.PANEL_BORDER));
+    g.add(this.add.rectangle(x + 6 * s, y - 7 * s, 7 * s, 12 * s, P.PANEL_BORDER));
+
+    // QuickNut flyer in right hand (small neon-orange rectangle)
+    g.add(this.add.rectangle(x + 18 * s, y - 34 * s, 10 * s, 8 * s, 0xFF6600)
+      .setStrokeStyle(1, 0xDD4400));
+    g.add(this.add.text(x + 18 * s, y - 34 * s, "QN", {
+      fontSize: "4px", color: "#FFEE00", fontFamily: "monospace",
+    }).setOrigin(0.5));
   }
 
   // ---------------------------------------------------------------------------

@@ -127,6 +127,30 @@ export const ROASTER_EFFICIENCY: Readonly<Record<RoasterTier, number>> = {
   industrial: 0.2,
 } as const;
 
+/** Ordered upgrade path: tin_pan → copper → industrial. */
+export const ROASTER_TIER_ORDER: readonly RoasterTier[] = [
+  "tin_pan",
+  "copper",
+  "industrial",
+] as const;
+
+/**
+ * One-time purchase cost to upgrade to each roaster tier (you can never buy the
+ * starting tier "tin_pan"). Price 0 is a sentinel — never reachable.
+ *
+ * Payback calibration (at $1.50 sell price, default demand ~17 lbs/hr):
+ *   Daily net ≈ $60–65 on a solid play session with 1 queue slot.
+ *   copper ($500): payback ≈ 500 / 62 ≈ ~8 good-session days      → teaches capex ROI
+ *   industrial ($2500): payback ≈ 2500 / ~120 ≈ ~21 good-session days (after copper)
+ *     (industrial halves roast time again, enabling much higher throughput when
+ *      combined with extra queue slots — compounding capital-investment lesson).
+ */
+export const ROASTER_UPGRADE_COST: Readonly<Record<RoasterTier, number>> = {
+  tin_pan:    0,    // starting tier — cannot be purchased
+  copper:     500,
+  industrial: 2_500,
+} as const;
+
 // ---------------------------------------------------------------------------
 // Roast queue
 // ---------------------------------------------------------------------------
@@ -134,11 +158,57 @@ export const ROASTER_EFFICIENCY: Readonly<Record<RoasterTier, number>> = {
 /** Number of simultaneous roast slots available at game start. */
 export const STARTING_QUEUE_SLOTS = 1;
 
+/** Maximum purchasable queue slots (total including the starting slot). */
+export const MAX_QUEUE_SLOTS = 3;
+
+/**
+ * Cost to purchase each additional queue slot beyond the first.
+ * Escalating to teach: each unit of parallelism costs more than the last.
+ *
+ * Payback calibration (at $1.50 price, copper roaster):
+ *   Slot 2 ($300): a second parallel batch roughly doubles output capacity
+ *     when demand keeps up. Payback ≈ 5–7 good days at +$50–60 extra net/day.
+ *   Slot 3 ($600): third slot adds less marginal value at P1 single-district
+ *     demand (diminishing returns lesson). Payback ≈ 10–14 days.
+ * Index = slot index being purchased (1 = buying the 2nd slot, 2 = 3rd slot).
+ */
+export const QUEUE_SLOT_COST: readonly number[] = [
+  300, // buying slot index 1 (the 2nd slot)
+  600, // buying slot index 2 (the 3rd slot)
+] as const;
+
 /** Hard minimum batch size (lbs). */
 export const BATCH_MIN_LBS = 1;
 
 /** Hard maximum batch size (lbs). */
 export const BATCH_MAX_LBS = 100;
+
+// ---------------------------------------------------------------------------
+// Weekday demand factors  (GDD C3 — "day of week, season")
+// Applied as a multiplier to the base demand curve.
+// Factor is VISIBLE and PREDICTABLE (shown in HUD legend — DARK_PATTERN_GATE §A.1
+// compliant: no FOMO framing, no "you missed Saturday" messaging).
+//
+// dayNumber % 7 maps to: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun.
+// (Day 1 of the game is a Monday by convention.)
+//
+// Mild variance (0.85–1.25) teaches weekly rhythm without punishing any given day.
+// ---------------------------------------------------------------------------
+
+export const DAY_FACTOR: readonly number[] = [
+  0.85, // Monday   — slow start of week
+  0.90, // Tuesday  — picking up
+  0.95, // Wednesday — mid-week
+  1.00, // Thursday — baseline
+  1.10, // Friday   — end-of-week boost
+  1.25, // Saturday — peak market day
+  1.10, // Sunday   — weekend tail
+] as const;
+
+/** Human-readable label for each day-of-week index (0=Mon … 6=Sun). */
+export const DAY_NAMES: readonly string[] = [
+  "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+] as const;
 
 // ---------------------------------------------------------------------------
 // Pricing bounds  (UI_WIREFRAMES §2 slider spec)
@@ -255,3 +325,36 @@ export const RESCUE_ARC_CASH_THRESHOLD = 25;
 
 /** Emit one 'gag' SimEvent per this many cumulative lbs sold (whole-game counter). */
 export const GAG_EVERY_N_LBS_SOLD = 80;
+
+// ---------------------------------------------------------------------------
+// Rescue arc constants  (RESCUE_ARC_SCRIPT.md — Wave 5)
+// All numbers derive from the script; do not hardcode elsewhere.
+// ---------------------------------------------------------------------------
+
+/** Path 1 — Old Joe Fair Loan: cash advanced. */
+export const RESCUE_LOAN_PRINCIPAL = 75;
+/** Path 1 — Old Joe Fair Loan: flat interest rate per season (5%). */
+export const RESCUE_LOAN_FEE_RATE = 0.05;
+/** Path 1 — Old Joe Fair Loan: repayment window in game-days. */
+export const RESCUE_LOAN_DUE_DAYS = 14;
+
+/** Path 2 — Marta's Supplier Credit: raw peanuts credited (lbs at $0.40 base). */
+export const RESCUE_CREDIT_RAW_LBS = 125;
+/** Path 2 — Marta's Supplier Credit: dollar amount due (= 125 lbs × $0.40). */
+export const RESCUE_CREDIT_AMOUNT_DUE = 50;
+/** Path 2 — Marta's Supplier Credit: repayment window in game-days. */
+export const RESCUE_CREDIT_DUE_DAYS = 14;
+
+/** Path 3 — Derek's Pre-Order: lbs of roasted peanuts to deliver. */
+export const RESCUE_PREORDER_LBS = 100;
+/** Path 3 — Derek's Pre-Order: cash received upfront. */
+export const RESCUE_PREORDER_CASH = 110;
+/** Path 3 — Derek's Pre-Order: delivery window in game-days. */
+export const RESCUE_PREORDER_DUE_DAYS = 7;
+
+/** Path 4 — QuickNut Payday: cash advanced. */
+export const RESCUE_PAYDAY_PRINCIPAL = 50;
+/** Path 4 — QuickNut Payday: flat fee per 14-day period. */
+export const RESCUE_PAYDAY_FEE = 7.50;
+/** Path 4 — QuickNut Payday: repayment window in game-days per period. */
+export const RESCUE_PAYDAY_DUE_DAYS = 14;

@@ -21,7 +21,11 @@ import {
   RECIPE_DEMAND_MULT,
   RECIPE_UNLOCK_THRESHOLD,
   ROASTER_EFFICIENCY,
+  ROASTER_TIER_ORDER,
+  ROASTER_UPGRADE_COST,
   STARTING_QUEUE_SLOTS,
+  MAX_QUEUE_SLOTS,
+  QUEUE_SLOT_COST,
   BATCH_MIN_LBS,
   BATCH_MAX_LBS,
   PRICE_MIN,
@@ -40,6 +44,20 @@ import {
   OFFLINE_CAP_HOURS,
   RESCUE_ARC_CASH_THRESHOLD,
   GAG_EVERY_N_LBS_SOLD,
+  DAY_FACTOR,
+  DAY_NAMES,
+  RESCUE_LOAN_PRINCIPAL,
+  RESCUE_LOAN_FEE_RATE,
+  RESCUE_LOAN_DUE_DAYS,
+  RESCUE_CREDIT_RAW_LBS,
+  RESCUE_CREDIT_AMOUNT_DUE,
+  RESCUE_CREDIT_DUE_DAYS,
+  RESCUE_PREORDER_LBS,
+  RESCUE_PREORDER_CASH,
+  RESCUE_PREORDER_DUE_DAYS,
+  RESCUE_PAYDAY_PRINCIPAL,
+  RESCUE_PAYDAY_FEE,
+  RESCUE_PAYDAY_DUE_DAYS,
 } from "../data/economy.js";
 
 // default blended multiplier = classic_salted = 1.0
@@ -52,6 +70,7 @@ import type {
   RoastSlot,
   DayReport,
   SimEvent,
+  RescueDebt,
 } from "./types.js";
 
 import type { RecipeId } from "../data/economy.js";
@@ -84,19 +103,21 @@ function cogsPerLb(recipe: RecipeId): number {
 }
 
 /**
- * Demand in lbs/hour at a given price, scaled by the provided demand multiplier.
- * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × demandMult
+ * Demand in lbs/hour at a given price, scaled by the provided demand multiplier
+ * and the day-of-week factor.
+ * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × demandMult × dayFactor
  * Clamped to [0, DEMAND_MAX_LBS_PER_HOUR].
  * Small Gaussian-ish jitter applied via PRNG so repeat ticks aren't exactly equal.
  *
  * W2: tick() passes state.roastedDemandMultBlended as demandMult so the blended-pool
  * recipe multiplier is applied to live sales. Default 1.0 preserves backward compat.
+ * W4: tick() passes dayFactorFor(state.dayNumber) so weekday patterns apply.
  */
-function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0): number {
+function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0, dayFactor = 1.0): number {
   const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - DEMAND_BASE_PRICE);
   // ±10% jitter (two uniform samples averaged → triangular distribution)
   const jitter = ((nextRand(state) + nextRand(state)) / 2 - 0.5) * 0.20;
-  return clamp(base * (1 + jitter) * demandMult, 0, DEMAND_MAX_LBS_PER_HOUR);
+  return clamp(base * (1 + jitter) * demandMult * dayFactor, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 /**
@@ -170,10 +191,14 @@ export function createState(seed = 1): SimState {
     dayNumber: 1,
     dayStats: { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0, offlineEarned: 0 },
     rescueArcPending: false,
+    rescueMode: null,
+    rescueDebts: [],
+    preorderObligation: null,
     unitsSoldLifetime: 0,
     gagsSeen: new Set<string>(),
     lifetimeEarned: 0,
     recipesUnlocked: new Set<string>(["classic_salted"]),
+    netHistory: [],
     rngState: seed >>> 0,
   };
 }
@@ -224,7 +249,8 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
   if (state.roastedStockLbs > 0) {
     // Convert lbs/hour demand to lbs/second, then scale by dt.
     // W2: pass blended demand multiplier so mixed inventory sells at weighted velocity.
-    const lbsPerSec = demandLbsPerHour(state.sellPrice, state, state.roastedDemandMultBlended) / 3_600;
+    // W4: apply day-of-week factor (visible/predictable; no FOMO framing).
+    const lbsPerSec = demandLbsPerHour(state.sellPrice, state, state.roastedDemandMultBlended, dayFactorFor(state.dayNumber)) / 3_600;
     const demandedLbs = lbsPerSec * dtSeconds;
     const soldLbs = Math.min(demandedLbs, state.roastedStockLbs);
 
@@ -385,6 +411,10 @@ export function endOfDay(state: SimState): DayReport {
   // Accumulate lifetime earnings BEFORE resetting dayStats (spec §6d).
   state.lifetimeEarned += revenue;
 
+  // Append today's net to the rolling 14-day history (sparkline source).
+  state.netHistory.push(net);
+  if (state.netHistory.length > 14) state.netHistory.shift();
+
   // Evaluate recipe unlock thresholds against updated lifetimeEarned.
   // State is mutated; GameScene detects new unlocks via state.recipesUnlocked post-call.
   for (const recipeId of (["honey_cinnamon", "ghost_pepper"] as const)) {
@@ -392,6 +422,125 @@ export function endOfDay(state: SimState): DayReport {
       state.recipesUnlocked.add(recipeId);
     }
   }
+
+  // ---- Wave 5: rescue arc — preorder fulfillment + debt auto-repayment ----
+  // Processed before fixed costs so the player gets full benefit of the day's earnings.
+  const rescueEvents: SimEvent[] = [];
+
+  // 3a. Preorder fulfillment: allocate roasted stock toward obligation
+  if (state.preorderObligation) {
+    const ob = state.preorderObligation;
+    const remaining = ob.totalLbs - ob.fulfilledLbs;
+    const canFulfill = Math.min(remaining, state.roastedStockLbs);
+    if (canFulfill > 0) {
+      ob.fulfilledLbs += canFulfill;
+      state.roastedStockLbs = Math.max(0, state.roastedStockLbs - canFulfill);
+    }
+
+    if (state.dayNumber >= ob.dueDayNumber) {
+      // Delivery day: check if fully or partially fulfilled
+      if (ob.fulfilledLbs >= ob.totalLbs) {
+        // Full delivery — success
+        rescueEvents.push({
+          kind: "preorder_fulfilled",
+          dayNumber: state.dayNumber,
+          daySecond: state.dayElapsedSeconds,
+          detail: {
+            fulfilledLbs: ob.fulfilledLbs,
+            totalLbs: ob.totalLbs,
+            message: "Derek's order delivered in full.",
+          },
+        });
+        state.preorderObligation = null;
+      } else {
+        // Partial delivery — pro-rata payment adjustment (we already received cash upfront;
+        // script says trust dented, not reversed; we keep the math clean:
+        // the cash was already credited, no clawback — delivery failure costs reputation only)
+        const pct = ob.fulfilledLbs / ob.totalLbs;
+        rescueEvents.push({
+          kind: "preorder_partial",
+          dayNumber: state.dayNumber,
+          daySecond: state.dayElapsedSeconds,
+          detail: {
+            fulfilledLbs: ob.fulfilledLbs,
+            totalLbs: ob.totalLbs,
+            pctDelivered: pct,
+            message: `Partial delivery: ${ob.fulfilledLbs.toFixed(0)} of ${ob.totalLbs} lbs. Derek is disappointed.`,
+          },
+        });
+        state.preorderObligation = null;
+      }
+    }
+  }
+
+  // 3b. Debt repayment: attempt auto-deduct for due debts
+  const remainingDebts: RescueDebt[] = [];
+  for (const debt of state.rescueDebts) {
+    if (state.dayNumber >= debt.dueDayNumber) {
+      if (state.cash >= debt.amountDue) {
+        // Can pay — auto-deduct
+        state.cash -= debt.amountDue;
+        applyCashFloor(state);
+        let message = "";
+        if (debt.kind === "payday") {
+          message = debt.rollovers > 0
+            ? `Paid off QuickNut. That fee money is gone — that's the lesson.`
+            : `QuickNut repaid $${debt.amountDue.toFixed(2)}.`;
+        } else if (debt.kind === "loan") {
+          message = `Old Joe's loan repaid. $${debt.amountDue.toFixed(2)} paid.`;
+        } else {
+          message = `Supplier credit paid. $${debt.amountDue.toFixed(2)} paid.`;
+        }
+        rescueEvents.push({
+          kind: "debt_repaid",
+          dayNumber: state.dayNumber,
+          daySecond: state.dayElapsedSeconds,
+          detail: { debtKind: debt.kind, amountPaid: debt.amountDue, message },
+        });
+        // Do NOT push to remainingDebts — debt is cleared
+      } else if (debt.kind === "payday") {
+        // Payday rollover: add $7.50 fee, extend by 14 days
+        const rolloverFee = RESCUE_PAYDAY_FEE;
+        debt.amountDue += rolloverFee;
+        debt.dueDayNumber += RESCUE_PAYDAY_DUE_DAYS;
+        debt.rollovers += 1;
+        rescueEvents.push({
+          kind: "payday_rollover",
+          dayNumber: state.dayNumber,
+          daySecond: state.dayElapsedSeconds,
+          detail: {
+            newAmountDue: debt.amountDue,
+            newDueDayNumber: debt.dueDayNumber,
+            rollovers: debt.rollovers,
+            message: `QuickNut rolled over: +$${rolloverFee.toFixed(2)} fee. Total owed $${debt.amountDue.toFixed(2)}.`,
+          },
+        });
+        remainingDebts.push(debt);
+      } else {
+        // Loan or credit: gentle extension (one more period, no extra fee per script)
+        debt.dueDayNumber += RESCUE_LOAN_DUE_DAYS;
+        rescueEvents.push({
+          kind: "debt_extended",
+          dayNumber: state.dayNumber,
+          daySecond: state.dayElapsedSeconds,
+          detail: {
+            debtKind: debt.kind,
+            newDueDayNumber: debt.dueDayNumber,
+            amountDue: debt.amountDue,
+            message: debt.kind === "loan"
+              ? `Old Joe extends the loan — $${debt.amountDue.toFixed(2)} now due day ${debt.dueDayNumber}.`
+              : `Supplier extends credit — $${debt.amountDue.toFixed(2)} now due day ${debt.dueDayNumber}.`,
+          },
+        });
+        remainingDebts.push(debt);
+      }
+    } else {
+      remainingDebts.push(debt); // not due yet
+    }
+  }
+  state.rescueDebts = remainingDebts;
+
+  // ---- End Wave 5 rescue-arc processing ----
 
   const cashBefore = state.cash;
   // cash already includes all revenue credits (from tick + applyOffline) and ingredient debits
@@ -403,6 +552,11 @@ export function endOfDay(state: SimState): DayReport {
 
   const cashAfter = state.cash;
 
+  // W4: pass day-factor context so insight line can reference it (factual, not FOMO).
+  // state.dayNumber has not been incremented yet here, so it is the day that just ended.
+  const todayFactor = dayFactorFor(state.dayNumber);
+  const todayName = DAY_NAMES[((state.dayNumber - 1) % 7 + 7) % 7];
+
   const insightLine = buildInsightLine({
     revenue,
     grossMarginPct,
@@ -410,7 +564,27 @@ export function endOfDay(state: SimState): DayReport {
     roastedStockLbs: state.roastedStockLbs,
     fixedCosts,
     net,
+    dayFactor: todayFactor,
+    dayName: todayName,
   });
+
+  // Wave 5: build active-debt summary line for the report card.
+  const activeDebtSummary = buildActiveDebtSummary(state);
+
+  // Wave 5: set rescueMode to "offer" when rescue arc is pending.
+  // Clear "active" mode when all debts and obligations are resolved.
+  //
+  // RED-TEAM RT-1 (wave4): never re-offer while a rescue line is still ACTIVE.
+  // Without this gate, a player whose cash stays below the trigger could stack a
+  // new +$75 loan every day while old loans auto-extend fee-free — an infinite
+  // cash pump that inverts the lesson. Script §Re-Entry *does* allow repeat
+  // crises, but only with escalation (7% second loan, Marta hesitation) that v1
+  // does not implement yet; until that ships, one concurrent crisis line is canon.
+  if (state.rescueArcPending && state.rescueMode !== "active") {
+    state.rescueMode = "offer";
+  } else if (state.rescueMode === "active" && state.rescueDebts.length === 0 && state.preorderObligation === null) {
+    state.rescueMode = null;
+  }
 
   // Reset day stats and advance day counter
   state.dayStats = { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0, offlineEarned: 0 };
@@ -440,7 +614,178 @@ export function endOfDay(state: SimState): DayReport {
     cashBefore,
     cashAfter,
     insightLine,
+    activeDebtSummary,
+    rescueEvents,
   };
+}
+
+// ---------------------------------------------------------------------------
+// chooseRescuePath(state, path) → SimEvent
+// Apply a rescue path when the player selects one from the rescue-offer modal.
+// Deterministic; no PRNG. Cash floor respected. Returns an event for the log.
+// ---------------------------------------------------------------------------
+
+export type RescuePath = "loan" | "credit" | "preorder" | "payday" | "decline";
+
+/**
+ * Apply the chosen rescue path to the state.
+ *
+ * "loan"     — +$75 cash; debt $78.75 due in 14 game-days.
+ * "credit"   — +125 lbs raw stock; debt $50.00 due in 14 game-days.
+ * "preorder" — +$110 cash; obligation: deliver 100 lbs roasted in 7 days.
+ * "payday"   — +$50 cash; debt $57.50 due in 14 game-days; rolls over on miss.
+ * "decline"  — no state change; rescueMode reset to null (re-triggers next time).
+ */
+export function chooseRescuePath(state: SimState, path: RescuePath): SimEvent {
+  // The offer modal is only available in "offer" mode.
+  // Guard: if not in offer mode, treat as decline (idempotent).
+  if (state.rescueMode !== "offer") {
+    return {
+      kind: "rescue_path_chosen",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: { path: "decline", reason: "not_in_offer_mode" },
+    };
+  }
+
+  if (path === "decline") {
+    // Player declines — clear offer mode, can re-trigger on next low-cash day
+    state.rescueMode = null;
+    state.rescueArcPending = false;
+    return {
+      kind: "rescue_path_chosen",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: { path, cashChange: 0 },
+    };
+  }
+
+  if (path === "loan") {
+    const principal = RESCUE_LOAN_PRINCIPAL;
+    const fee = principal * RESCUE_LOAN_FEE_RATE;
+    const amountDue = principal + fee; // $78.75
+    const debt: RescueDebt = {
+      kind: "loan",
+      principal,
+      amountDue,
+      dueDayNumber: state.dayNumber + RESCUE_LOAN_DUE_DAYS,
+      createdOnDay: state.dayNumber,
+      rollovers: 0,
+    };
+    state.cash += principal;
+    applyCashFloor(state);
+    state.rescueDebts.push(debt);
+    state.rescueMode = "active";
+    state.rescueArcPending = false;
+    return {
+      kind: "rescue_path_chosen",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: { path, cashChange: principal, amountDue, dueDayNumber: debt.dueDayNumber },
+    };
+  }
+
+  if (path === "credit") {
+    // +125 lbs raw stock (not cash); debt $50 due in 14 days
+    state.rawStockLbs += RESCUE_CREDIT_RAW_LBS;
+    const debt: RescueDebt = {
+      kind: "credit",
+      principal: RESCUE_CREDIT_AMOUNT_DUE,
+      amountDue: RESCUE_CREDIT_AMOUNT_DUE,
+      dueDayNumber: state.dayNumber + RESCUE_CREDIT_DUE_DAYS,
+      createdOnDay: state.dayNumber,
+      rollovers: 0,
+    };
+    state.rescueDebts.push(debt);
+    state.rescueMode = "active";
+    state.rescueArcPending = false;
+    return {
+      kind: "rescue_path_chosen",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: { path, rawLbsAdded: RESCUE_CREDIT_RAW_LBS, amountDue: RESCUE_CREDIT_AMOUNT_DUE, dueDayNumber: debt.dueDayNumber },
+    };
+  }
+
+  if (path === "preorder") {
+    // Only one preorder obligation at a time
+    if (state.preorderObligation !== null) {
+      return {
+        kind: "rescue_path_chosen",
+        dayNumber: state.dayNumber,
+        daySecond: state.dayElapsedSeconds,
+        detail: { path, reason: "preorder_already_active" },
+      };
+    }
+    state.cash += RESCUE_PREORDER_CASH;
+    applyCashFloor(state);
+    state.preorderObligation = {
+      totalLbs: RESCUE_PREORDER_LBS,
+      fulfilledLbs: 0,
+      dueDayNumber: state.dayNumber + RESCUE_PREORDER_DUE_DAYS,
+      cashReceived: RESCUE_PREORDER_CASH,
+      createdOnDay: state.dayNumber,
+    };
+    state.rescueMode = "active";
+    state.rescueArcPending = false;
+    return {
+      kind: "rescue_path_chosen",
+      dayNumber: state.dayNumber,
+      daySecond: state.dayElapsedSeconds,
+      detail: { path, cashChange: RESCUE_PREORDER_CASH, totalLbs: RESCUE_PREORDER_LBS, dueDayNumber: state.preorderObligation.dueDayNumber },
+    };
+  }
+
+  // path === "payday"
+  const principal = RESCUE_PAYDAY_PRINCIPAL;
+  const amountDue = principal + RESCUE_PAYDAY_FEE; // $57.50
+  const debt: RescueDebt = {
+    kind: "payday",
+    principal,
+    amountDue,
+    dueDayNumber: state.dayNumber + RESCUE_PAYDAY_DUE_DAYS,
+    createdOnDay: state.dayNumber,
+    rollovers: 0,
+  };
+  state.cash += principal;
+  applyCashFloor(state);
+  state.rescueDebts.push(debt);
+  state.rescueMode = "active";
+  state.rescueArcPending = false;
+  return {
+    kind: "rescue_path_chosen",
+    dayNumber: state.dayNumber,
+    daySecond: state.dayElapsedSeconds,
+    detail: { path, cashChange: principal, amountDue, dueDayNumber: debt.dueDayNumber, aprPct: 391 },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// buildActiveDebtSummary — one-line liability summary for the report card
+// ---------------------------------------------------------------------------
+
+function buildActiveDebtSummary(state: SimState): string | null {
+  const parts: string[] = [];
+
+  for (const debt of state.rescueDebts) {
+    const daysLeft = debt.dueDayNumber - state.dayNumber;
+    if (debt.kind === "loan") {
+      parts.push(`Owe Old Joe $${debt.amountDue.toFixed(2)} — day ${state.dayNumber}/${debt.dueDayNumber} (${daysLeft} days left)`);
+    } else if (debt.kind === "credit") {
+      parts.push(`Owe supplier $${debt.amountDue.toFixed(2)} — day ${state.dayNumber}/${debt.dueDayNumber} (${daysLeft} days left)`);
+    } else if (debt.kind === "payday") {
+      const rolloverNote = debt.rollovers > 0 ? ` [${debt.rollovers}x rolled]` : "";
+      parts.push(`QuickNut: $${debt.amountDue.toFixed(2)} due day ${debt.dueDayNumber}${rolloverNote}`);
+    }
+  }
+
+  if (state.preorderObligation) {
+    const ob = state.preorderObligation;
+    const daysLeft = ob.dueDayNumber - state.dayNumber;
+    parts.push(`Derek's order: ${ob.fulfilledLbs.toFixed(0)}/${ob.totalLbs} lbs — ${daysLeft} days left`);
+  }
+
+  return parts.length > 0 ? parts.join(" | ") : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -501,6 +846,43 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
 }
 
 // ---------------------------------------------------------------------------
+// dayFactorFor(dayNumber) → day-of-week demand multiplier
+// Pure helper; deterministic (no PRNG). Exported for HUD/report use.
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the DAY_FACTOR entry for a given 1-indexed game day.
+ * dayNumber 1 = Monday (index 0), 2 = Tuesday (index 1), etc.
+ * Wraps weekly via modulo so it works for any day count.
+ */
+export function dayFactorFor(dayNumber: number): number {
+  // dayNumber is 1-indexed; (dayNumber - 1) % 7 maps it to Mon=0 … Sun=6
+  const idx = ((dayNumber - 1) % 7 + 7) % 7; // safe modulo for any integer
+  return DAY_FACTOR[idx];
+}
+
+// ---------------------------------------------------------------------------
+// optimumPrice(recipe) → $ per lb
+// Pure helper: the price that maximises total profit for a given recipe.
+// Derivation: d/dp [(p - cogs) * demand(p)] = 0 with demand linear in p gives
+//   p* = (BASE_LBS_PER_HOUR / DEMAND_SLOPE + DEMAND_BASE_PRICE + cogs) / 2
+// Clamped to [PRICE_MIN, PRICE_MAX] so the UI can always display it.
+// Exported for recipe-card two-row preview (Wave 4 polish, item 6).
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the profit-maximising price for a given recipe.
+ * Uses the global demand curve constants (no recipe-specific demand mult —
+ * the formula is the same regardless of demand-mult scaling because the mult
+ * cancels out in the first-order condition).
+ */
+export function optimumPrice(recipe: RecipeId): number {
+  const cogs = RAW_PEANUT_BASE_PRICE + RECIPES[recipe].ingredientCostPerLb;
+  const pStar = (DEMAND_BASE_LBS_PER_HOUR / DEMAND_SLOPE + DEMAND_BASE_PRICE + cogs) / 2;
+  return clamp(parseFloat(pStar.toFixed(2)), PRICE_MIN, PRICE_MAX);
+}
+
+// ---------------------------------------------------------------------------
 // projectedDemand(price) → lbs/hour (deterministic, no jitter)
 // Pure utility for the price-stepper UI demand hint.
 // Uses the same base formula as demandLbsPerHour() but without PRNG jitter.
@@ -518,6 +900,70 @@ export function projectedDemand(price: number, recipe: RecipeId = "classic_salte
 }
 
 // ---------------------------------------------------------------------------
+// buyRoasterUpgrade(state) → SimEvent | null
+// Purchase the next roaster tier. Pure function; mutates state only on success.
+// Guards: sufficient cash, next tier exists, NaN-guard, cash floor respected.
+// ---------------------------------------------------------------------------
+
+export function buyRoasterUpgrade(state: SimState): SimEvent | null {
+  const currentIdx = ROASTER_TIER_ORDER.indexOf(state.roasterTier);
+  // NaN-guard: indexOf returns -1 if tier is somehow invalid
+  if (currentIdx < 0) return null;
+  const nextIdx = currentIdx + 1;
+  if (nextIdx >= ROASTER_TIER_ORDER.length) return null; // already at max tier
+
+  const nextTier = ROASTER_TIER_ORDER[nextIdx];
+  const cost = ROASTER_UPGRADE_COST[nextTier];
+  if (!Number.isFinite(cost) || cost <= 0) return null; // safety: no zero-cost upgrades
+
+  if (cost > state.cash) return null; // insufficient funds — no state change
+
+  state.cash -= cost;
+  applyCashFloor(state);
+  const prevTier = state.roasterTier;
+  state.roasterTier = nextTier;
+
+  return {
+    kind: "upgrade_purchased",
+    dayNumber: state.dayNumber,
+    daySecond: state.dayElapsedSeconds,
+    detail: { upgradeType: "roaster", prevTier, nextTier, cost },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// buyQueueSlot(state) → SimEvent | null
+// Purchase one additional roast queue slot. Pure function; mutates on success.
+// Guards: sufficient cash, below MAX_QUEUE_SLOTS, NaN-guard, cash floor respected.
+// ---------------------------------------------------------------------------
+
+export function buyQueueSlot(state: SimState): SimEvent | null {
+  const currentSlots = state.roastSlots.length;
+  if (currentSlots >= MAX_QUEUE_SLOTS) return null; // already at cap
+
+  // QUEUE_SLOT_COST is 0-indexed by purchase number (0 = buying slot 2, 1 = buying slot 3)
+  const purchaseIdx = currentSlots - STARTING_QUEUE_SLOTS;
+  const cost = QUEUE_SLOT_COST[purchaseIdx];
+  if (cost === undefined || !Number.isFinite(cost) || cost <= 0) return null;
+
+  if (cost > state.cash) return null; // insufficient funds — no state change
+
+  state.cash -= cost;
+  applyCashFloor(state);
+
+  // Add a new empty slot with the next sequential id
+  const newSlotId = currentSlots; // 0-indexed, so length == next id
+  state.roastSlots.push(emptySlot(newSlotId));
+
+  return {
+    kind: "upgrade_purchased",
+    dayNumber: state.dayNumber,
+    daySecond: state.dayElapsedSeconds,
+    detail: { upgradeType: "queue_slot", newSlotCount: state.roastSlots.length, cost },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Internal: generate insight line for end-of-day report card.
 // Rules: questions not shame; one per day; maps to a curriculum concept.
 // ---------------------------------------------------------------------------
@@ -529,6 +975,10 @@ interface InsightParams {
   roastedStockLbs: number;
   fixedCosts: number;
   net: number;
+  /** Day-of-week factor applied today (from DAY_FACTOR table). */
+  dayFactor: number;
+  /** Human-readable day name for insight line. */
+  dayName: string;
 }
 
 function buildInsightLine(p: InsightParams): string {
@@ -549,6 +999,14 @@ function buildInsightLine(p: InsightParams): string {
   }
   if (p.unitsSold < 5) {
     return `Only ${p.unitsSold.toFixed(1)} lbs sold. Was the truck open long enough? Make sure your queue has roasted stock ready before customers arrive.`;
+  }
+  // W4: day-factor insight — factual, never FOMO-framed.
+  // Saturday (factor 1.25) or Friday/Sunday (1.10): note it as context, not pressure.
+  if (p.dayFactor >= 1.20) {
+    return `${p.dayName} crowd — ${p.grossMarginPct.toFixed(0)}% margin, $${p.net.toFixed(2)} net. Weekend foot traffic runs ~${Math.round(p.dayFactor * 100)}% of baseline.`;
+  }
+  if (p.dayFactor >= 1.05) {
+    return `${p.dayName} boost — foot traffic at ~${Math.round(p.dayFactor * 100)}% of baseline today. ${p.grossMarginPct.toFixed(0)}% margin, $${p.net.toFixed(2)} net.`;
   }
   return `Solid day: ${p.grossMarginPct.toFixed(0)}% gross margin, $${p.net.toFixed(2)} net. Keep supply steady to maintain momentum.`;
 }

@@ -61,3 +61,28 @@ Re-review this register when:
 ---
 
 *Last reviewed: 2026-06-06 (red-team pass applied)*
+
+---
+
+## Standing-trigger review 2026-06-07 — persistence v1
+
+**Trigger:** "Any feature that touches player data" (trigger #4, Standing Review Triggers section).
+
+**What shipped:** Browser localStorage save of game state (save/load on exit/boot, schema-versioned for forward compat). No accounts, no server, no analytics, no network egress. Red-team grep of `src/` confirms no telemetry, no cloud sync, no educator export, no leaderboard. Offline earnings cap ($100/hr) + pause-on-blur + uncompressed JSON (human-readable, owner-auditable).
+
+**CRIT-1 re-tier evaluation:** CRIT-1 row mandates re-tier to A+B the moment ANY player data is collected. **Verdict: Tier A retained.** Rationale:
+- Data never leaves the device (localStorage is browser-local, no HTTP egress).
+- No PII collected (save file contains only game state: inventory, money, elapsed time, recipe picks, day count — no names, emails, IP, identifiers).
+- No collection by the developer (owner has zero access to player saves; no telemetry endpoint, no analytics, no cloud storage).
+- CRIT-1's own criteria are "data from likely-minors" + "regulated collection" — neither applies. Local-only, developer-blind save is the safest possible data posture.
+
+**Re-trigger conditions:** CRIT-1 moves to active re-tier (A+B governance, Owner Decision gate) if any of these ship:
+1. Cloud sync (e.g., Firebase, AWS save-slot backend).
+2. Telemetry (session length, feature usage, play time, crash reports).
+3. Educator export (teachers accessing student play transcripts).
+4. Leaderboards (global or peer ranking, even pseudonymous).
+5. Analytics (Mixpanel, Plausible, Sentry).
+
+Each is an explicit Owner Decision per CRIT-1 mitigation; none ship without owner approval and legal/privacy review first.
+
+**Verdict:** Tier A retained. No governance re-tier required. CRIT-1 remains a standing alert; any data-touching feature re-evaluates this register before implementation.
