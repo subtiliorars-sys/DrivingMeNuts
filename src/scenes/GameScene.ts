@@ -37,6 +37,12 @@ import {
   projectedDemand,
 } from "../sim/engine.js";
 import type { SimState, DayReport } from "../sim/types.js";
+import { LORE_BY_ID, LORE_LINES } from "../data/lore.js";
+
+// Denominator for the HUD lore counter: use the count of currently-loaded lines
+// (early tier only in P1). Grows automatically as more tiers are added to lore.ts.
+// LORE_TOTAL_COUNT (40) is kept for future use when all tiers are present.
+const LORE_LOADED_COUNT = LORE_LINES.length;
 import {
   DAY_DURATION_SECONDS,
   DEFAULT_SELL_PRICE,
@@ -120,6 +126,18 @@ interface CoinPop {
 }
 
 // ---------------------------------------------------------------------------
+// Gag speech-bubble (two-beat: customer line → owner reply → auto-dismiss)
+// ---------------------------------------------------------------------------
+
+interface GagBubble {
+  bg: Phaser.GameObjects.Rectangle;
+  tail: Phaser.GameObjects.Triangle;
+  customerLine: Phaser.GameObjects.Text;
+  ownerLine: Phaser.GameObjects.Text;
+  timerEvent: Phaser.Time.TimerEvent;   // tracked per F11 rule
+}
+
+// ---------------------------------------------------------------------------
 // NPC data (3 ambient customers walk left/right near truck)
 // ---------------------------------------------------------------------------
 
@@ -184,6 +202,12 @@ export class GameScene extends Phaser.Scene {
 
   // ---- Price step size ----------------------------------------------------
   private readonly PRICE_STEP = 0.05;
+
+  // ---- Lore counter HUD (Wave 2) ------------------------------------------
+  private txtLoreCounter!: Phaser.GameObjects.Text;
+
+  // ---- Active gag speech bubble (at most one at a time) -------------------
+  private gagBubble?: GagBubble;
 
   constructor() {
     super({ key: "GameScene" });
@@ -274,6 +298,12 @@ export class GameScene extends Phaser.Scene {
 
     this.txtCash = this.add.text(W - 6, 2, "Cash: $50.00", {
       ...TEXT_STYLE_BODY, color: "#FFD700",
+    }).setOrigin(1, 0);
+
+    // ---- Lore counter (Wave 2: collection tease, no pressure framing) -------
+    // Positioned below the top bar at the right edge; visible but unobtrusive.
+    this.txtLoreCounter = this.add.text(W - 6, 18, `Lore: 0/${LORE_LOADED_COUNT}`, {
+      ...TEXT_STYLE_LABEL, color: "#C0A060",
     }).setOrigin(1, 0);
 
     // ---- Roast Queue Panel (P1_SPRITE_SPEC #13) ----------------------------
@@ -411,11 +441,14 @@ export class GameScene extends Phaser.Scene {
     const prevDayElapsed = this.state.dayElapsedSeconds;
     const events = tick(this.state, dtSeconds);
 
-    // Handle events for coin pops and day-end trigger
+    // Handle events for coin pops, gag bubbles, and day-end trigger
     // F5: accumulate revenue; spawn one pop per COIN_POP_THRESHOLD earned
     for (const ev of events) {
       if (ev.kind === "sale") {
         this.coinPopAccum += ev.detail.revenue as number;
+      }
+      if (ev.kind === "gag") {
+        this.showGagBubble(ev.detail.loreId as string);
       }
     }
     if (this.coinPopAccum >= this.COIN_POP_THRESHOLD) {
@@ -450,6 +483,7 @@ export class GameScene extends Phaser.Scene {
   private updateHUD(): void {
     this.txtCash.setText(`Cash: $${this.state.cash.toFixed(2)}`);
     this.txtDay.setText(`Day ${this.state.dayNumber}`);
+    this.txtLoreCounter.setText(`Lore: ${this.state.gagsSeen.size}/${LORE_LOADED_COUNT}`);
     this.txtRawStock.setText(`Raw: ${this.state.rawStockLbs.toFixed(1)} lbs`);
     this.txtRoastedStock.setText(`Roasted: ${this.state.roastedStockLbs.toFixed(1)} lbs`);
     this.txtPrice.setText(`$${this.state.sellPrice.toFixed(2)}`);
@@ -896,5 +930,84 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     this.time.delayedCall(1800, () => { if (toast.active) toast.destroy(); });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Gag speech-bubble toast (Wave 2)
+  // Two-beat: customer line (1.8 s) → owner reply → total auto-dismiss ~4 s.
+  // Never blocks input. Tracks its own timer per F11 rule (no removeAllEvents).
+  // At most one bubble at a time — new gag silently cancels the previous one.
+  // ---------------------------------------------------------------------------
+
+  private showGagBubble(loreId: string): void {
+    const line = LORE_BY_ID[loreId];
+    if (!line) return;
+
+    // Dismiss any existing bubble before showing the new one.
+    this.dismissGagBubble();
+
+    const W = this.scale.width;
+    const truckX = W / 2 + 60;
+    const truckY = 195;
+
+    // Bubble anchor: just above the truck serving window (left side).
+    const bX = truckX - 80;
+    const bY = truckY - 80;
+    const bW = 180;
+    const bH = 36;
+
+    // Background rect (speech bubble)
+    const bg = this.add.rectangle(bX + bW / 2, bY + bH / 2, bW, bH, P.PANEL_BG)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setAlpha(0.95);
+
+    // Small tail triangle pointing down toward the truck
+    const tail = this.add.triangle(
+      bX + bW / 2, bY + bH + 5,
+      -6, 0,
+      6, 0,
+      0, 8,
+      P.PANEL_BORDER,
+    );
+
+    // Customer line (shown immediately)
+    const customerLine = this.add.text(bX + 4, bY + 3, `"${line.customer}"`, {
+      fontSize: "7px", color: "#2C2416", fontFamily: "monospace",
+      wordWrap: { width: bW - 8 },
+    });
+
+    // Owner reply (shown after a short pause)
+    const ownerLine = this.add.text(bX + 4, bY + 20, "", {
+      fontSize: "7px", color: "#4A7C4E", fontFamily: "monospace",
+      wordWrap: { width: bW - 8 },
+    });
+
+    // Beat 1 → Beat 2: reveal owner reply after 1.8 s
+    const beat2Timer = this.time.delayedCall(1800, () => {
+      if (ownerLine.active) ownerLine.setText(line.owner);
+    });
+
+    // Auto-dismiss after 4 s total
+    const dismissTimer = this.time.delayedCall(4000, () => {
+      this.dismissGagBubble();
+    });
+
+    // Store only the dismiss timer as the bubble's tracked event.
+    // beat2Timer is an independent one-shot that cleans itself up.
+    // (We hold a ref to it so dismissGagBubble can remove it cleanly too.)
+    void beat2Timer; // used above, no further reference needed
+
+    this.gagBubble = { bg, tail, customerLine, ownerLine, timerEvent: dismissTimer };
+  }
+
+  private dismissGagBubble(): void {
+    if (!this.gagBubble) return;
+    const b = this.gagBubble;
+    b.timerEvent.destroy();
+    if (b.bg.active)           b.bg.destroy();
+    if (b.tail.active)         b.tail.destroy();
+    if (b.customerLine.active) b.customerLine.destroy();
+    if (b.ownerLine.active)    b.ownerLine.destroy();
+    this.gagBubble = undefined;
   }
 }

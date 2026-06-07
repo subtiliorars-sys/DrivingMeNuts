@@ -37,7 +37,10 @@ import {
   OFFLINE_CAP_DOLLARS_PER_HOUR,
   OFFLINE_CAP_HOURS,
   RESCUE_ARC_CASH_THRESHOLD,
+  GAG_EVERY_N_LBS_SOLD,
 } from "../data/economy.js";
+
+import { LORE_LINES } from "../data/lore.js";
 
 import type {
   SimState,
@@ -106,6 +109,24 @@ function applyCashFloor(state: SimState): void {
   }
 }
 
+/**
+ * Pick and emit a 'gag' SimEvent using the seeded PRNG.
+ * Selects a lore line deterministically; records it in gagsSeen.
+ * Returns null only if LORE_LINES is empty (should never happen in production).
+ */
+function maybeGagEvent(state: SimState): SimEvent | null {
+  if (LORE_LINES.length === 0) return null;
+  const idx = Math.floor(nextRand(state) * LORE_LINES.length);
+  const line = LORE_LINES[idx];
+  state.gagsSeen.add(line.id);
+  return {
+    kind: "gag",
+    dayNumber: state.dayNumber,
+    daySecond: state.dayElapsedSeconds,
+    detail: { loreId: line.id },
+  };
+}
+
 /** Create a blank RoastSlot. */
 function emptySlot(id: number): RoastSlot {
   return { id, status: "empty", batchLbs: 0, recipe: null, secondsRemaining: 0, totalSeconds: 0 };
@@ -135,6 +156,8 @@ export function createState(seed = 1): SimState {
     dayNumber: 1,
     dayStats: { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0 },
     rescueArcPending: false,
+    unitsSoldLifetime: 0,
+    gagsSeen: new Set<string>(),
     rngState: seed >>> 0,
   };
 }
@@ -191,6 +214,16 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
       state.dayStats.revenue += revenue;
       state.dayStats.cogsTotal += cogsSold;
       state.dayStats.unitsSold += soldLbs;
+
+      // Gag trigger: fire one 'gag' event per GAG_EVERY_N_LBS_SOLD cumulative lbs.
+      // Deterministic: threshold crossed detected by integer-bucket transition.
+      const prevBucket = Math.floor(state.unitsSoldLifetime / GAG_EVERY_N_LBS_SOLD);
+      state.unitsSoldLifetime += soldLbs;
+      const newBucket  = Math.floor(state.unitsSoldLifetime / GAG_EVERY_N_LBS_SOLD);
+      if (newBucket > prevBucket) {
+        const gagEvent = maybeGagEvent(state);
+        if (gagEvent) events.push(gagEvent);
+      }
 
       events.push({
         kind: "sale",

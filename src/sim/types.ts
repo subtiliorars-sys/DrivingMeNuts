@@ -70,6 +70,15 @@ export interface SimState {
    */
   rescueArcPending: boolean;
 
+  // ---- Legume Lore collectible (Wave 2) --------------------------------
+  /** Cumulative lbs sold across all days — drives gag trigger cadence. */
+  unitsSoldLifetime: number;
+  /**
+   * Set of lore ids seen so far (e.g. "LL-001").
+   * Seed for the future Legume Lore collectible screen.
+   */
+  gagsSeen: Set<string>;
+
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
   rngState: number;
@@ -109,7 +118,8 @@ export type SimEventKind =
   | "price_changed"
   | "day_ended"
   | "offline_applied"
-  | "rescue_arc_triggered";
+  | "rescue_arc_triggered"
+  | "gag";
 
 export interface SimEvent {
   kind: SimEventKind;

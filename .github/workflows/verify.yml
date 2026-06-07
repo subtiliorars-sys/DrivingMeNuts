@@ -1,0 +1,31 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "work/**"
+      - main           # post-merge signal: confirms main stays green after PR merge
+
+# Minimal permissions: this workflow only reads code and runs tests.
+# TODO (hardening): pin actions to full SHA digests instead of @v4 tags
+#   for supply-chain security once the repo is closer to production.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run verify gate
+        run: npm run verify

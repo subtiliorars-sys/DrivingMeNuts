@@ -54,17 +54,17 @@ Each district has a distinct customer base, foot-traffic curve, permit tier, and
 
 **Mechanical realization:**
 
-- **Nut Facts Meter:** Each time a customer delivers the gag, a hidden "Nut Facts" meter ticks up. At thresholds (10, 25, 50, 100 gags heard), the owner unlocks new **Comeback Lines** (dialogue variants). Early variants are tired sighs; late-game variants are dad jokes, factoids about legume cultivation, or playful "I named the truck after this exact conversation."
+- **Nut Facts Meter:** Each time a customer delivers the gag, a hidden "Nut Facts" meter ticks up. At thresholds (10, 20, 30, 40 gags heard — calibrated to 40-entry canon), the owner unlocks new **Comeback Lines** (dialogue variants). Early variants are tired sighs; late-game variants are dad jokes, factoids about legume cultivation, or playful "I named the truck after this exact conversation."
 
-- **Legume Lore Collectible:** Each unique dialogue variant is a collectable "Legume Lore" entry. At late-game (50+ collected), the owner can unlock a **marketing campaign** ("Legumes Not Nuts — It's a Feature!") that flips the joke into a brand identity, granting a permanent +5% price tolerance and +15% in Boardwalk/Downtown districts.
+- **Legume Lore Collectible:** Each unique dialogue variant is a collectable "Legume Lore" entry. At mid-game (25+ collected — more than half the 40-entry set), the owner can unlock a **marketing campaign** ("Legumes Not Nuts — It's a Feature!") that flips the joke into a brand identity, granting a permanent +5% price tolerance and +15% in Boardwalk/Downtown districts.
 
 - **Combo Bonus:** If the same customer delivers the gag in consecutive visits, a "Gag Combo" meter activates, granting +10% margin on that visit (the owner is so amused they price it higher). Combo resets if a different customer buys next, teaching: recognize regulars, foster loyalty.
 
-- **Story gatekeeping:** Act III's "save the truck" arc is partially unlocked by reaching 75 Legume Lore entries—the owner's journey from annoyance to mastery of this joke mirrors their business maturation.
+- **Story gatekeeping:** Act III's "save the truck" arc is partially unlocked by reaching 30 Legume Lore entries (¾ of the 40-entry canon set) — the owner's journey from annoyance to mastery of this joke mirrors their business maturation.
 
 ### B5. Quests & Milestones
 
-1. **"Get the Permit"** (Act I, gate): Reach $300 cash, visit Maya, wait 6 in-game days. Reward: unlock Farmers' Market and one other district.
+1. **"Get the Permit"** (Act I, gate): Reach $300 cash, visit Maya, wait 3 in-game days. Reward: unlock Farmers' Market and one other district.
 2. **"Survive Winter"** (Seasonal, Act I): Keep truck operational through a 30-day season where foot traffic drops 40%, supply costs spike 20%, and cash reserves are tested. Reward: $500 windfall from Old Joe ("You didn't give up").
 3. **"Win the Food Truck Festival"** (Act II, seasonal event): Compete head-to-head with 3 other trucks (including Sal). Highest sales in 3 in-game days wins. Reward: Legendary Recipe unlock (Miso Butter Peanuts) + $1500.
 4. **"Impress Dr. Chen"** (Act II, branching): Craft a 5-star flavor batch and serve it during her visit to your location. Reward: Premium Roast upgrade + Prestige points.
@@ -99,14 +99,22 @@ The core idle loop centers on **batch roasting**. Player loads raw peanuts into 
 The player sets a **selling price** per flavor per district. Demand is **price-elastic**:
 
 ```
-Demand = Base Demand - (Price - Base Price) * Elasticity Factor
+Demand (lbs/hr) = Base Demand − Slope × (Price − Base Price)
 ```
 
-Example (Farmers' Market, Classic Salted):
-- Base Demand (per hour): 20 units/hour
-- Base Price: $1.20/unit (profit: $0.60)
-- If player raises price to $2.00: demand drops to ~15 units/hour
-- If player drops price to $0.80: demand rises to ~28 units/hour
+**Formula (Farmers' Market, Classic Salted):**
+- Base Demand: 20 lbs/hr
+- Base Price: $1.20/lb
+- Slope: 10 (lbs/hr per $1 price change)
+
+**Worked examples:**
+- At $2.00: Demand = 20 − 10 × (2.00 − 1.20) = 20 − 8 = **12 lbs/hr**
+- At $0.80: Demand = 20 − 10 × (0.80 − 1.20) = 20 + 4 = **24 lbs/hr**
+- At $1.90 (profit peak): Demand = 20 − 10 × (1.90 − 1.20) = 20 − 7 = **13 lbs/hr**
+
+**Profit optimization:** With COGS = $0.60/lb, gross profit per lb = (Price − 0.60). Total profit = (Price − 0.60) × Demand. This function peaks at **$1.90**, strictly interior to the UI slider bounds ($0.75–$2.50). Below or above $1.90, profit declines despite margin changes.
+
+**Live source:** All demand constants are defined in `src/data/economy.ts` (`DEMAND_BASE_LBS_PER_HOUR`, `DEMAND_BASE_PRICE`, `DEMAND_SLOPE`).
 
 **District-level demand modifiers:**
 - Location foot traffic (time of day, day of week, season)
@@ -116,7 +124,7 @@ Example (Farmers' Market, Classic Salted):
 - Marketing campaigns (post-gag flip: +5% price tolerance across all districts)
 - Permits and festivals (Food Truck Festival week: 3x all district demands for 3 days)
 
-Player must balance: high prices = more margin per sale but fewer sales; low prices = volume but tight margins.
+Player must balance: high prices = more margin per sale but fewer sales; low prices = volume but tight margins. The optimal price ($1.90) is *not* the highest margin; it maximizes total profit by balancing both.
 
 ### C4. Compounding Upgrades
 
@@ -137,7 +145,11 @@ Upgrades are purchased with in-game earnings and compound over time. They map to
 
 When the player closes the game, the truck continues earning **passively** at a reduced rate:
 
-- **Offline earn rate:** 20% of peak on-game earn rate, capped at `$100/min offline` (soft cap prevents AFK abuse).
+- **Offline earn rate:** 20% of peak on-game earn rate, capped at `$100/min offline`
+  (soft cap prevents AFK abuse).
+  **OPEN OWNER DECISION:** The implemented constant (`OFFLINE_CAP_DOLLARS_PER_HOUR` in
+  economy.ts) is $100/hr — 60× stricter than "$100/min". Safe in direction but diverges
+  from this spec. Do not resolve until owner ratifies which value is canon.
 - **Offline battery:** Earnings accrue for up to 24 hours offline. After 24 hours, the truck "closes for maintenance" and earnings stop.
 - **Return message:** "Truck was idle for [X] hours. Made $[amount]. Stock depleted [%]." Teaches: time value and inventory risk.
 
@@ -248,15 +260,17 @@ Key insight:
 ### Win States (Plurality)
 1. **Act III completion:** Defeat the corporate threat, unlock Franchise mode.
 2. **Prestige track:** Complete 3 franchises, earn "Peanut Royalty" achievement.
-3. **Legume mastery:** Collect 100 Legume Lore variants, earn "Philosopher of Legumes" achievement (unlocks hidden silly ending).
+3. **Legume mastery:** Collect all 40 Legume Lore variants, earn "Philosopher of Legumes" achievement (unlocks hidden silly ending).
 4. **NPC mastery:** Reach 100/100 friendship with all 6 core NPCs (unlocks reunion ending).
 5. **Revenue target:** Hit $100k lifetime earnings (teaches compound growth).
 
 ### Fail States (None — Rescue Arc Instead)
-- **Cash crunch:** If player goes below $50 cash with $200+ in bills due, a **"Save the Truck"** quest auto-triggers.
-  - **Old Joe** offers a $500 loan at 5% per in-game season — clearly flagged in-dialogue as "cheaper than the alternatives, but read the terms." (Teachable: cost of debt and why loan terms matter.)
-  - OR **Marta** offers supplier credit: skip 2 days of spoilage, reduce raw peanut cost 10% for 7 days (reciprocal: they helped, build relationship).
-  - OR **Derek** offers a **bulk pre-order:** 100 lbs committed buy from his office building at $1.10/unit, guaranteed, next week (teaches: B2B channel, customer lock-in, forward cash flow).
+- **Cash crunch:** If end-of-day cash is below $25 (evaluated at END OF DAY — not
+  mid-day), a **"Save the Truck"** quest auto-triggers. (The "$200+ bills due" concept
+  is a P2+ refinement; deferred until the dual-ledger and calendar systems are live.)
+  - **Old Joe** offers a $75 loan at 5% flat per in-game season — clearly flagged in-dialogue as "cheaper than the alternatives, but read the terms." (Teachable: cost of debt and why loan terms matter.)
+  - OR **Marta** offers supplier credit: net-14 on a $50 raw peanut order (reciprocal: she vouched for you, build relationship).
+  - OR **Derek** offers a **bulk pre-order:** 100 lbs committed buy from his office building at $1.10/lb, paid in full upfront — delivery risk is yours (teaches: B2B channel, customer lock-in, execution risk).
 - Player must choose a path. Each path teaches a different business recovery strategy. All paths avoid hard game-over; all are narrative-rich.
 
 ---
@@ -267,7 +281,7 @@ Key insight:
 
 2. **Multiplayer or leaderboard?** Single-player campaign is the core, but would a weekly challenge mode ("Beat Sal's sales record") or asynchronous leaderboard (global best earnings, fastest franchise completion) add replayability without bloating scope? If yes, what data do we track and where?
 
-3. **Legume gag saturation:** The joke will repeat. How many unique dialogue variants do we need to avoid fatigue? Current design hints at 100+ Legume Lore entries. Is that sustainable for writing? Should some variants be **emergent** (procedurally spliced customer archetypes + owner comebacks)?
+3. **Legume gag saturation:** The joke will repeat. How many unique dialogue variants do we need to avoid fatigue? Current canon is 40 hand-written entries (LEGUME_LORE.md). Is that sufficient, or should some late variants be **emergent** (procedurally spliced customer archetypes + owner comebacks) for higher replayability?
 
 4. **Real-world accuracy vs. game feel:** Should peanut COGS, supply volatility, and permit costs be **based on real data** (researched USDA prices, actual city permit fees)? Or stylized for game balance? If real, we'll need a sourcing pass; if stylized, we risk educational credibility.
 
