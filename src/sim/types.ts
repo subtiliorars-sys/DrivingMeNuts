@@ -161,6 +161,15 @@ export interface SimState {
    */
   aftermathSeen: string[];
 
+  /**
+   * Aftermath beats queued at endOfDay but not yet displayed (RT5-1 fix).
+   * Persisted so a beat is never lost if the player closes the tab while the
+   * day report or an earlier beat is still on screen — the engine marks a path
+   * "seen" (won't re-emit) at the same moment it queues it here, so this is the
+   * only durable record of a pending beat. Drained one-at-a-time by the scene.
+   */
+  pendingAftermath: string[];
+
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
   rngState: number;

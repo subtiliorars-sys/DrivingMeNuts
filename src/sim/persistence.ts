@@ -123,6 +123,8 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   brandCampaignActive?: boolean;
   /** Schema v4: rescue aftermath paths already shown (max 4 entries). */
   aftermathSeen?: string[];
+  /** Schema v4: aftermath beats queued but not yet displayed (RT5-1). */
+  pendingAftermath?: string[];
 };
 
 interface SaveMeta {
@@ -205,6 +207,7 @@ const MIGRATIONS: Record<number, Migrator> = {
         comebackTier: comebackTierFor(gagsSeenCount),
         brandCampaignActive: false,
         aftermathSeen: [],
+        pendingAftermath: [],
       },
     };
     return upgraded;
@@ -339,8 +342,11 @@ function sanityCheck(env: SaveEnvelope): string | null {
       return `preorderObligation dueDayNumber invalid: ${ob.dueDayNumber}`;
   }
 
-  // Schema v4: ledger rows — every numeric field must be finite (an Infinity
-  // revenue row would poison week-recap totals; same crafted-import class as RT-4).
+  // Schema v4: ledger rows — every numeric field must be finite AND bounded
+  // (RT5-3: finite-but-astronomical rows e.g. 1e308 would still sum week-recap
+  // totals to Infinity / NaN%. Cap magnitude like the spirit of the cash/lbs
+  // guards. $1e9 is far above any reachable single-day P&L at P1 scale.)
+  const LEDGER_FIELD_MAX = 1e9;
   if (ss.ledger !== undefined) {
     if (!Array.isArray(ss.ledger))
       return `ledger must be an array`;
@@ -351,6 +357,8 @@ function sanityCheck(env: SaveEnvelope): string | null {
       for (const field of ["day", "revenue", "cogs", "fixedCosts", "offlineEarned", "net", "debtService", "cashAfter"] as const) {
         if (!Number.isFinite(e[field]))
           return `ledger entry ${field} invalid: ${e[field]}`;
+        if (Math.abs(e[field]) > LEDGER_FIELD_MAX)
+          return `ledger entry ${field} out of range: ${e[field]}`;
       }
       if (e.day < 1) return `ledger entry day invalid: ${e.day}`;
     }
@@ -366,13 +374,16 @@ function sanityCheck(env: SaveEnvelope): string | null {
   if (ss.brandCampaignActive !== undefined && typeof ss.brandCampaignActive !== "boolean")
     return `brandCampaignActive invalid: ${ss.brandCampaignActive}`;
 
-  // Schema v4: aftermathSeen must be an array of strings when present.
-  if (ss.aftermathSeen !== undefined) {
-    if (!Array.isArray(ss.aftermathSeen))
-      return `aftermathSeen must be an array`;
-    for (const p of ss.aftermathSeen) {
-      if (typeof p !== "string")
-        return `aftermathSeen entry invalid: ${String(p)}`;
+  // Schema v4: aftermathSeen / pendingAftermath must be arrays of strings.
+  for (const key of ["aftermathSeen", "pendingAftermath"] as const) {
+    const arr = ss[key];
+    if (arr !== undefined) {
+      if (!Array.isArray(arr))
+        return `${key} must be an array`;
+      for (const p of arr) {
+        if (typeof p !== "string")
+          return `${key} entry invalid: ${String(p)}`;
+      }
     }
   }
 
@@ -540,6 +551,12 @@ export function deserialize(json: string): SimState {
   const aftermathSeen: string[] = Array.isArray(ss.aftermathSeen)
     ? ss.aftermathSeen.filter((p): p is string => typeof p === "string" && VALID_AFTERMATH_PATHS.has(p))
     : [];
+  // RT5-1: revive the pending queue; only keep paths that were also marked seen
+  // (a pending path always implies seen — drop any inconsistency defensively).
+  const aftermathSeenSet = new Set(aftermathSeen);
+  const pendingAftermath: string[] = Array.isArray(ss.pendingAftermath)
+    ? ss.pendingAftermath.filter((p): p is string => typeof p === "string" && VALID_AFTERMATH_PATHS.has(p) && aftermathSeenSet.has(p))
+    : [];
 
   const state: SimState = {
     cash: sim.cash,
@@ -573,6 +590,7 @@ export function deserialize(json: string): SimState {
     comebackTier,
     brandCampaignActive,
     aftermathSeen,
+    pendingAftermath,
     rngState: sim.rngState,
   };
 

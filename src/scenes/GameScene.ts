@@ -249,11 +249,18 @@ export class GameScene extends Phaser.Scene {
   private booksModalGroup?: Phaser.GameObjects.Group;
   private booksModalOpen = false;
 
-  // Rescue aftermath beats: queued at endOfDay, shown one at a time after the
-  // day report closes (and before any new rescue offer).
-  private aftermathQueue: AftermathPath[] = [];
+  // Rescue aftermath beats: queued durably in state.pendingAftermath at
+  // endOfDay, shown one at a time after the day report closes (and before any
+  // new rescue offer). The scene reads/drains state.pendingAftermath directly.
   private aftermathModalGroup?: Phaser.GameObjects.Group;
   private aftermathModalOpen = false;
+  /**
+   * RT5-2: true across the entire post-report chain (aftermath beats → rescue
+   * offer), including the 300ms delayedCall gaps where no modal is on screen.
+   * Gates the sim tick AND the HUD buttons so a click in a gap can't open a
+   * second day report or stack a panel under a pending beat.
+   */
+  private inPostReportChain = false;
   /** HUD chip showing active debt/obligation status. */
   private rescueHudChip?: Phaser.GameObjects.Text;
 
@@ -652,6 +659,14 @@ export class GameScene extends Phaser.Scene {
       // Short delay so the backdrop finishes rendering before the first bubble
       this.time.delayedCall(400, () => this.showTutorialStep(0));
     }
+
+    // ---- RT5-1: drain any aftermath beats persisted from a prior session ----
+    // If the player closed the tab mid-queue, the beats are still in
+    // state.pendingAftermath — show them now so none are silently lost.
+    if (this.state.pendingAftermath.length > 0) {
+      this.inPostReportChain = true;
+      this.time.delayedCall(600, () => this.afterReportFlow());
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -662,7 +677,7 @@ export class GameScene extends Phaser.Scene {
     // Track wall-clock playtime (excludes offline time; used by trySave meta)
     this.playtimeSeconds += delta / 1_000;
 
-    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen || this.booksModalOpen || this.aftermathModalOpen) return;
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen || this.booksModalOpen || this.aftermathModalOpen || this.inPostReportChain) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -1496,7 +1511,8 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private openBooksModal(): void {
-    if (this.booksModalOpen) return;
+    // RT5-2: never open over a pending post-report chain / aftermath beat.
+    if (this.booksModalOpen || this.inPostReportChain || this.aftermathModalOpen || this.reportOpen) return;
     this.booksModalOpen = true;
 
     const W = this.scale.width;
@@ -1821,7 +1837,9 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private triggerEndOfDay(): void {
-    if (this.reportOpen) return;
+    // RT5-2: also bail during the post-report chain — a click in a delayedCall
+    // gap must not open a second day report on top of a pending aftermath beat.
+    if (this.reportOpen || this.inPostReportChain || this.aftermathModalOpen) return;
     this.reportOpen = true;
 
     // Audio: day-end sting (synthesized, SOUND_DESIGN.md diegetic)
@@ -1843,12 +1861,8 @@ export class GameScene extends Phaser.Scene {
       if (msg) {
         this.time.delayedCall(500, () => this.showToast(msg));
       }
-      // Aftermath beats: queue for display after the report closes (one-time
-      // per path; engine guarantees this via aftermathSeen).
-      if (ev.kind === "debt_aftermath") {
-        const path = ev.detail.path as AftermathPath;
-        if (AFTERMATH_BEATS[path]) this.aftermathQueue.push(path);
-      }
+      // Aftermath beats are queued durably by the engine in
+      // state.pendingAftermath (RT5-1) — no scene-local collection needed here.
     }
 
     // Show recipe-unlock toasts for any newly unlocked recipes.
@@ -2028,6 +2042,10 @@ export class GameScene extends Phaser.Scene {
       this.reportGroup = undefined;
     }
     this.reportOpen = false;
+    // RT5-2: hold the chain guard from the instant the report closes until the
+    // whole post-report sequence (aftermath beats → rescue offer) is drained,
+    // so the flag-less delayedCall gaps can't be clicked through.
+    this.inPostReportChain = true;
     // Save after report is dismissed �� state is fully consistent post-endOfDay (spec §3)
     this.saveGame();
     this.updateHUD();
@@ -2038,19 +2056,29 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Post-report sequence: drain the aftermath queue one beat at a time, then
-   * open the rescue-offer modal if a new trigger fired this day.
+   * Post-report sequence: drain state.pendingAftermath one beat at a time, then
+   * open the rescue-offer modal if a new trigger fired this day. Holds
+   * inPostReportChain across the delayedCall gaps; clears it only when nothing
+   * is left to show (RT5-2).
    */
   private afterReportFlow(): void {
-    const nextPath = this.aftermathQueue.shift();
+    const nextPath = this.state.pendingAftermath[0] as AftermathPath | undefined;
     if (nextPath) {
       this.time.delayedCall(300, () => this.showAftermathBeat(nextPath));
       return;
     }
-    // Wave 5: open rescue-offer modal after report if trigger fired this day
+    // Wave 5: open rescue-offer modal after report if trigger fired this day.
+    // Keep the chain guard up through the 300ms gap, then release it right as
+    // the modal opens (openRescueModal sets rescueModalOpen synchronously).
     if (this.state.rescueMode === "offer") {
-      this.time.delayedCall(300, () => this.openRescueModal());
+      this.time.delayedCall(300, () => {
+        this.inPostReportChain = false;
+        this.openRescueModal();
+      });
+      return;
     }
+    // Nothing left — release the chain guard, sim resumes.
+    this.inPostReportChain = false;
   }
 
   // ---------------------------------------------------------------------------
@@ -2062,7 +2090,13 @@ export class GameScene extends Phaser.Scene {
   private showAftermathBeat(path: AftermathPath): void {
     if (this.aftermathModalOpen) return;
     const beat = AFTERMATH_BEATS[path];
-    if (!beat) { this.afterReportFlow(); return; }
+    if (!beat) {
+      // Unknown path defensively dropped from the durable queue so the chain
+      // can't loop on it.
+      if (this.state.pendingAftermath[0] === path) this.state.pendingAftermath.shift();
+      this.afterReportFlow();
+      return;
+    }
     this.aftermathModalOpen = true;
 
     const W = this.scale.width;
@@ -2127,6 +2161,11 @@ export class GameScene extends Phaser.Scene {
       this.aftermathModalGroup = undefined;
     }
     this.aftermathModalOpen = false;
+    // RT5-1: a beat is only marked "consumed" once it has actually been shown
+    // and dismissed — pop it from the durable queue and persist, so closing the
+    // tab mid-queue never silently drops the remaining beats.
+    this.state.pendingAftermath.shift();
+    this.saveGame();
     // Continue the post-report chain (more beats, or a rescue offer).
     this.afterReportFlow();
   }
@@ -2256,9 +2295,10 @@ export class GameScene extends Phaser.Scene {
     const truckY = 195;
 
     // Bubble anchor: just above the truck serving window (left side).
-    // Comeback replies run longer than stock ones — grow the bubble to fit
-    // (~50 chars per wrapped line at 7px monospace in a 172px wrap width).
-    const extraLines = Math.max(0, Math.ceil(ownerReply.length / 50) - 1);
+    // Comeback replies run longer than stock ones — grow the bubble to fit.
+    // RT5-4: 7px monospace in a 172px wrap width fits ~40 chars/line, not 50;
+    // under-budgeting overflowed the longest tier-2/3/4 lines past the border.
+    const extraLines = Math.max(0, Math.ceil(ownerReply.length / 40) - 1);
     const bX = truckX - 80;
     const bW = 180;
     const bH = 36 + extraLines * 9;

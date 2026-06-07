@@ -393,6 +393,8 @@ describe("rescue aftermath", () => {
     expect(after1).toHaveLength(1);
     expect(after1[0].detail.path).toBe("loan");
     expect(state.aftermathSeen).toContain("loan");
+    // RT5-1: also queued durably for the scene to drain
+    expect(state.pendingAftermath).toContain("loan");
 
     // Second loan, repaid again → aftermath must NOT replay
     state.cash = 10;
@@ -477,6 +479,35 @@ describe("persistence schema v4", () => {
     // Stored blob is schema-current
     const stored = JSON.parse(storage._store.get("dmn_save_v1") as string);
     expect(stored.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("RT5-1: pendingAftermath survives round-trip and a v3 migration defaults it empty", () => {
+    const state = createState(1);
+    state.aftermathSeen = ["loan", "preorder"];
+    state.pendingAftermath = ["preorder"]; // loan shown, preorder still pending
+    const loaded = deserialize(serialize(state));
+    expect(loaded.pendingAftermath).toEqual(["preorder"]);
+
+    // A pending path with no matching seen entry is dropped (defensive consistency)
+    const bad = createState(1);
+    bad.aftermathSeen = ["loan"];
+    const env = JSON.parse(serialize(bad));
+    env.sim.pendingAftermath = ["loan", "credit"]; // credit not in seen
+    const loadedBad = deserialize(JSON.stringify(env));
+    expect(loadedBad.pendingAftermath).toEqual(["loan"]);
+
+    // v3 migration defaults the queue to empty
+    const v3 = makeV3Json(createState(1));
+    expect(deserialize(v3).pendingAftermath).toEqual([]);
+  });
+
+  it("RT5-3: ledger rows with astronomical-but-finite numbers are rejected", () => {
+    const state = createState(1);
+    sellThroughDay(state, 10);
+    endOfDay(state);
+    const env = JSON.parse(serialize(state));
+    env.sim.ledger[0].revenue = 1e308; // finite, but would sum recaps to Infinity
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/ledger.*out of range/);
   });
 
   it("rejects crafted saves: non-finite ledger numbers, bad tier, bad types", () => {

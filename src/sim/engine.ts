@@ -264,6 +264,7 @@ export function createState(seed = 1): SimState {
     comebackTier: 0,
     brandCampaignActive: false,
     aftermathSeen: [],
+    pendingAftermath: [],
     rngState: seed >>> 0,
   };
 }
@@ -501,6 +502,9 @@ export function endOfDay(state: SimState): DayReport {
   const emitAftermath = (path: string): void => {
     if (state.aftermathSeen.includes(path)) return;
     state.aftermathSeen.push(path);
+    // RT5-1: also queue durably in state so the beat survives a reload that
+    // happens before the scene has shown it. The scene drains pendingAftermath.
+    state.pendingAftermath.push(path);
     rescueEvents.push({
       kind: "debt_aftermath",
       dayNumber: state.dayNumber,
