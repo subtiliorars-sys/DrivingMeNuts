@@ -10,7 +10,15 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 - **Achievements (GDD F win-states, P1 subset):** 10 milestones (first sale, $1k/$10k/$100k lifetime, full menu, brand campaign, lore half/master, comeback master, survived-debt). Evaluated at day-close; one-time unlock toasts; **already-earned milestones derived silently on load** (no toast burst). Achievements grant **no mechanical bonus** — markers only, kept off the dark-pattern surface.
 - **Goals panel (GOALS button):** achievements checklist + collection view (Legume Lore X/40 progress bar, comeback tiers unlocked, supplier level/discount + next-level requirement).
 - **Supplier relationship (GDD C4):** loyalty discount earned by cumulative lbs ordered (Level 1/2/3 at 500/2,000/6,000 lbs → −3%/−8%/−15% on raw orders). Stacks multiplicatively with the bulk discount (never reaches zero); shown live in the supply modal with an accurate cost preview; level-up toast. Teaches working capital + repeat-business terms.
-- Additive-optional persistence (no schema bump; v4 and earlier saves load with supplier 0 + achievements re-derived). Sanity-checked + revived defensively. 16 new tests (318 unit + 5 boot green).
+- Additive-optional persistence (no schema bump; v4 and earlier saves load with supplier 0 + achievements re-derived). Sanity-checked + revived defensively.
+
+### Fixed (wave-6 red-team, FIX-FIRST)
+- **RT6-1 (MED, educational-correctness — phantom equity):** discounts (bulk + supplier) were valued into balance-sheet equity at purchase instead of flowing to COGS. Introduced `rawCostBasisPerLb` (weighted-avg price actually paid); raw inventory is now valued at cost paid and the discount carries through the roast into COGS at sale — buying inventory is equity-neutral, and the discount correctly shows as lower COGS / higher margin. Default (no-discount) numbers unchanged.
+- **RT6-3 (LOW):** `deserialize` now dedupes `achievementsUnlocked`.
+- **RT6-4 (LOW):** Goals-panel rows advance by measured height so a wrapped locked-achievement line can't overlap the CLOSE button.
+- **RT6-5 (LOW):** removed an unused `supplier_level_up` event-kind (level-ups ride on the `supply_purchased` event detail).
+- RT6-2 (supplier "$1k (time)" → cumulative-lbs model) accepted + documented in the GDD live-source note (not a silent change).
+- 24 new tests total; 324 unit + 5 boot green; verify gate passes.
 
 ### Added (ledger/lore wave, PR #7)
 - **Ledger v1 (schema v4):** per-day P&L rows (revenue/COGS/fixed/net + debt-service + cash) ring-capped at 30 days; "BOOKS" panel with live balance sheet (assets = liabilities + equity; inventory at cost; preorder cash as deferred revenue) and last-7-day table. Teaching through-line: profit ≠ cash — debt payments shown as cash-out, never as expense.

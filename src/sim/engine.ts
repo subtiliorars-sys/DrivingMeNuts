@@ -245,6 +245,7 @@ export function createState(seed = 1): SimState {
   return {
     cash: STARTING_CASH,
     rawStockLbs: STARTING_RAW_STOCK_LBS,
+    rawCostBasisPerLb: RAW_PEANUT_BASE_PRICE, // starting stock valued at base price
     roastedStockLbs: 0,
     roastedCostBasisPerLb: 0,
     roastedDemandMultBlended: DEFAULT_DEMAND_MULT_BLENDED, // W2: 1.0 at start (classic_salted)
@@ -294,7 +295,13 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
       // F1: update weighted-average cost basis when new roasted stock arrives.
       const oldLbs  = state.roastedStockLbs;
       const newLbs  = slot.batchLbs;
-      const batchBasis = slot.recipe ? cogsPerLb(slot.recipe) : 0;
+      // RT6-1: COGS basis of this batch = the raw stock's ACTUAL cost basis
+      // (reflecting bulk + supplier discounts) plus the recipe's ingredient
+      // cost — so the discount flows to margin at sale. Default (no discount)
+      // = base price + ingredient = the original cogsPerLb value, unchanged.
+      const batchBasis = slot.recipe
+        ? state.rawCostBasisPerLb + RECIPES[slot.recipe].ingredientCostPerLb
+        : 0;
       const totalLbs = oldLbs + newLbs;
       state.roastedCostBasisPerLb = totalLbs > 0
         ? (oldLbs * state.roastedCostBasisPerLb + newLbs * batchBasis) / totalLbs
@@ -390,7 +397,16 @@ export function buyRaw(state: SimState, lbs: number): SimEvent | null {
   // computed, so this order's discount reflects the relationship as it stood.
   const levelBefore = supplierLevelFor(state.supplierLbsPurchased);
   state.cash -= totalCost;
-  state.rawStockLbs += qty;
+  // RT6-1: blend the weighted-average price actually paid into the raw cost
+  // basis (old stock basis × old lbs + this order's actual $/lb × qty). The
+  // discount thus rides the inventory and surfaces as lower COGS at sale,
+  // instead of inflating balance-sheet equity at purchase time.
+  const oldLbs = state.rawStockLbs;
+  const totalLbs = oldLbs + qty;
+  state.rawCostBasisPerLb = totalLbs > 0
+    ? (oldLbs * state.rawCostBasisPerLb + qty * pricePerLb) / totalLbs
+    : pricePerLb;
+  state.rawStockLbs = totalLbs;
   state.supplierLbsPurchased += qty;
   applyCashFloor(state);
   const levelAfter = supplierLevelFor(state.supplierLbsPurchased);
@@ -820,7 +836,10 @@ export function endOfDay(state: SimState): DayReport {
 
 export function balanceSheet(state: SimState): BalanceSheet {
   const cash = state.cash;
-  const rawInventoryValue = state.rawStockLbs * RAW_PEANUT_BASE_PRICE;
+  // RT6-1: value raw inventory at the price actually paid (weighted-avg basis),
+  // not the undiscounted base price — buying below base no longer manufactures
+  // equity. Roasted inventory was already valued at its cost basis.
+  const rawInventoryValue = state.rawStockLbs * state.rawCostBasisPerLb;
   const roastedInventoryValue = state.roastedStockLbs * state.roastedCostBasisPerLb;
 
   const debtsOwed = state.rescueDebts.reduce((sum, d) => sum + d.amountDue, 0);

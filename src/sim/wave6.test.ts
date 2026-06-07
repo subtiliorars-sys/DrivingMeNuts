@@ -13,6 +13,8 @@ import {
   checkAchievements,
   tick,
   chooseRescuePath,
+  balanceSheet,
+  startRoast,
 } from "./engine.js";
 import { serialize, deserialize } from "./persistence.js";
 import {
@@ -198,6 +200,82 @@ describe("supplier relationship", () => {
     const cashBefore = state.cash;
     buyRaw(state, 1000);
     expect(state.cash).toBeLessThan(cashBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2b. RT6-1: no phantom equity — a discounted purchase is equity-neutral, and
+// the discount surfaces as lower COGS at sale (educational-correctness fix).
+// ---------------------------------------------------------------------------
+
+describe("RT6-1 cost basis (no phantom equity)", () => {
+  it("buying raw at a discount does not raise equity", () => {
+    const state = createState(1);
+    state.cash = 100_000;
+    state.supplierLbsPurchased = 1e9; // max relationship for a deep discount
+    const eqBefore = balanceSheet(state).equity;
+    buyRaw(state, 1000); // max bulk + max supplier discount
+    const eqAfter = balanceSheet(state).equity;
+    // Cash fell, raw inventory rose by the SAME amount actually paid → equity flat.
+    expect(eqAfter).toBeCloseTo(eqBefore, 6);
+  });
+
+  it("raw cost basis is the weighted-average price actually paid", () => {
+    const state = createState(1);
+    state.cash = 100_000;
+    // Starting stock (20 lbs) is valued at base price 0.40.
+    expect(state.rawCostBasisPerLb).toBeCloseTo(RAW_PEANUT_BASE_PRICE, 6);
+    state.supplierLbsPurchased = 1e9;
+    buyRaw(state, 1000); // 1000 lbs at 0.40*0.88*0.85 = 0.2992/lb
+    const paid = 0.40 * 0.88 * 0.85;
+    const expectedBasis = (20 * 0.40 + 1000 * paid) / 1020;
+    expect(state.rawCostBasisPerLb).toBeCloseTo(expectedBasis, 6);
+  });
+
+  it("discount flows to COGS at sale (lower COGS, higher margin)", () => {
+    // Two identical scenarios except one has a deep supplier relationship.
+    const run = (supplierLbs: number): number => {
+      const s = createState(1);
+      s.cash = 100_000;
+      s.rawStockLbs = 0; s.rawCostBasisPerLb = RAW_PEANUT_BASE_PRICE;
+      s.supplierLbsPurchased = supplierLbs;
+      buyRaw(s, 200); // buy fresh stock at the prevailing basis
+      startRoast(s, 0, "classic_salted", 100);
+      // finish the roast
+      for (let i = 0; i < 200; i++) tick(s, 600);
+      return s.roastedCostBasisPerLb;
+    };
+    const noRel = run(0);
+    const maxRel = run(1e9);
+    // Discounted raw → lower roasted COGS basis (the discount reached margin).
+    expect(maxRel).toBeLessThan(noRel);
+    // A 200-lb order already earns the 5% BULK discount, so even the
+    // no-relationship basis = 0.40×0.95 + 0.20 ingredient = 0.58.
+    expect(noRel).toBeCloseTo(0.40 * 0.95 + 0.20, 6);
+    // Max supplier relationship adds −15% on the raw component on top of bulk.
+    expect(maxRel).toBeCloseTo(0.40 * 0.95 * 0.85 + 0.20, 6);
+  });
+
+  it("default (no discount) basis is unchanged — base price + ingredient", () => {
+    const s = createState(1); // starting stock at base price
+    startRoast(s, 0, "classic_salted", 10);
+    for (let i = 0; i < 200; i++) tick(s, 600);
+    expect(s.roastedCostBasisPerLb).toBeCloseTo(0.60, 6);
+  });
+
+  it("crafted save: rawCostBasisPerLb above base price is rejected", () => {
+    const s = createState(1);
+    const env = JSON.parse(serialize(s));
+    env.sim.rawCostBasisPerLb = 0.50; // > base 0.40 → inflated valuation
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/rawCostBasisPerLb/);
+  });
+
+  it("legacy save without rawCostBasisPerLb defaults to base price", () => {
+    const s = createState(1);
+    const env = JSON.parse(serialize(s));
+    delete env.sim.rawCostBasisPerLb;
+    const loaded = deserialize(JSON.stringify(env));
+    expect(loaded.rawCostBasisPerLb).toBeCloseTo(RAW_PEANUT_BASE_PRICE, 6);
   });
 });
 

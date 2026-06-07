@@ -1660,7 +1660,7 @@ export class GameScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
-    const mW = 440, mH = 248;
+    const mW = 440, mH = 258;
     const mX = (W - mW) / 2;
     const mY = (H - mH) / 2;
 
@@ -1694,16 +1694,17 @@ export class GameScene extends Phaser.Scene {
     let lY = mY + 26;
     this.goalsModalGroup.add(this.add.text(colLX, lY, "ACHIEVEMENTS", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
     lY += 12;
+    // RT6-4: render each row, then advance by its measured height so a wrapped
+    // locked-row description can't overlap the CLOSE button at the bottom.
     for (const ach of ACHIEVEMENTS) {
       const got = earned.has(ach.id);
       const mark = got ? "✓" : "○";
       const color = got ? "#4A7C4E" : "#999977";
       // Earned rows show the name; locked rows show the requirement (a goal to chase).
       const text = got ? `${mark} ${ach.name}` : `${mark} ${ach.name} — ${ach.desc}`;
-      this.goalsModalGroup.add(
-        this.add.text(colLX, lY, text, { ...TEXT_STYLE_LABEL, color, wordWrap: { width: 244 } })
-      );
-      lY += got ? 12 : 19;
+      const t = this.add.text(colLX, lY, text, { ...TEXT_STYLE_LABEL, color, wordWrap: { width: 250 } });
+      this.goalsModalGroup.add(t);
+      lY += t.height + 2;
     }
 
     // ---- Right column: collection ----
@@ -2116,8 +2117,13 @@ export class GameScene extends Phaser.Scene {
     this.reportGroup.add(this.add.text(rX + 8, rY + 27, `Location: Farmers' Market  |  Units sold: ${r.unitsSold.toFixed(1)} lbs`, TEXT_STYLE_LABEL));
 
     // Revenue & COGS box
-    // F7: derive COGS/lb from economy constants; F8: show avg realized price (revenue/unitsSold)
-    const cogsLbDisplay = (RAW_PEANUT_BASE_PRICE + RECIPES.classic_salted.ingredientCostPerLb).toFixed(2);
+    // F8: show avg realized price (revenue/unitsSold)
+    // RT6-1: show the ACTUAL realized COGS/lb (revenue/units reflects discounts
+    // carried through inventory) rather than the undiscounted standard cost, so
+    // the supplier/bulk discount is visible as lower COGS at sale.
+    const cogsLbDisplay = (r.unitsSold > 0
+      ? r.cogs / r.unitsSold
+      : RAW_PEANUT_BASE_PRICE + RECIPES.classic_salted.ingredientCostPerLb).toFixed(2);
     const rows: Array<[string, string, Phaser.Types.GameObjects.Text.TextStyle]> = [
       [`Revenue  (${r.unitsSold.toFixed(1)} lbs @ $${r.avgRealizedPrice.toFixed(2)} avg):`, `$${r.revenue.toFixed(2)}`, TEXT_STYLE_BODY],
       [`COGS     (@ $${cogsLbDisplay}/lb):`, `–$${r.cogs.toFixed(2)}`, TEXT_STYLE_RED],
