@@ -43,6 +43,9 @@ import {
   buyBrandCampaign,
   type RescuePath,
 } from "../sim/engine.js";
+import { ACHIEVEMENTS, ACHIEVEMENT_TOTAL } from "../data/achievements.js";
+import { LORE_TOTAL_COUNT } from "../data/lore.js";
+import { COMEBACK_TIERS } from "../data/comebacks.js";
 import type { SimState, DayReport } from "../sim/types.js";
 import { tryLoad, trySave, resetSave, safeStorage, serialize, importEnvelopeText } from "../sim/persistence.js";
 import { LORE_BY_ID } from "../data/lore.js";
@@ -83,6 +86,9 @@ import {
   DAY_FACTOR,
   BRAND_CAMPAIGN_LORE_THRESHOLD,
   BRAND_CAMPAIGN_COST,
+  supplierLevelFor,
+  supplierDiscountFor,
+  SUPPLIER_LEVEL_THRESHOLDS,
   type RecipeId,
   type RoasterTier,
 } from "../data/economy.js";
@@ -248,6 +254,10 @@ export class GameScene extends Phaser.Scene {
   // Books panel (ledger + balance sheet)
   private booksModalGroup?: Phaser.GameObjects.Group;
   private booksModalOpen = false;
+
+  // Goals panel (achievements + lore/comeback collection — wave 6)
+  private goalsModalGroup?: Phaser.GameObjects.Group;
+  private goalsModalOpen = false;
 
   // Rescue aftermath beats: queued durably in state.pendingAftermath at
   // endOfDay, shown one at a time after the day report closes (and before any
@@ -587,12 +597,28 @@ export class GameScene extends Phaser.Scene {
       fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
     }).setOrigin(0.5);
     booksBtn.on("pointerdown", () => {
-      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen) {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen && !this.goalsModalOpen) {
         this.openBooksModal();
       }
     });
     booksBtn.on("pointerover", () => booksBtn.setAlpha(0.85));
     booksBtn.on("pointerout",  () => booksBtn.setAlpha(1.0));
+
+    // ---- GOALS button (achievements + lore/comeback collection — wave 6) ----
+    const goalsBtnY = booksBtnY + 24;
+    const goalsBtn = this.add.rectangle(buyBtnX + 68, goalsBtnY + 10, 137, 20, 0x556677)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.add.text(buyBtnX + 68, goalsBtnY + 10, "GOALS", {
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+    }).setOrigin(0.5);
+    goalsBtn.on("pointerdown", () => {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen && !this.booksModalOpen) {
+        this.openGoalsModal();
+      }
+    });
+    goalsBtn.on("pointerover", () => goalsBtn.setAlpha(0.85));
+    goalsBtn.on("pointerout",  () => goalsBtn.setAlpha(1.0));
 
     // ---- Day progress bar --------------------------------------------------
     const dpY = H - 18;
@@ -677,7 +703,7 @@ export class GameScene extends Phaser.Scene {
     // Track wall-clock playtime (excludes offline time; used by trySave meta)
     this.playtimeSeconds += delta / 1_000;
 
-    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen || this.booksModalOpen || this.aftermathModalOpen || this.inPostReportChain) return;
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen || this.booksModalOpen || this.goalsModalOpen || this.aftermathModalOpen || this.inPostReportChain) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -1622,6 +1648,138 @@ export class GameScene extends Phaser.Scene {
     this.updateHUD();
   }
 
+  // ---------------------------------------------------------------------------
+  // Goals panel (wave 6) — achievements + lore/comeback collection.
+  // Goals grant NO mechanical bonus (kept off the dark-pattern surface): they
+  // surface the player's own progress toward the GDD's plural win-states.
+  // ---------------------------------------------------------------------------
+
+  private openGoalsModal(): void {
+    if (this.goalsModalOpen || this.inPostReportChain || this.aftermathModalOpen || this.reportOpen) return;
+    this.goalsModalOpen = true;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const mW = 440, mH = 248;
+    const mX = (W - mW) / 2;
+    const mY = (H - mH) / 2;
+
+    this.goalsModalGroup = this.add.group();
+
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.55)
+      .setInteractive();
+    this.goalsModalGroup.add(backdrop);
+    this.goalsModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG)
+        .setStrokeStyle(2, P.PANEL_BORDER)
+    );
+
+    const earned = new Set(this.state.achievementsUnlocked);
+    this.goalsModalGroup.add(
+      this.add.text(mX + 6, mY + 5, `GOALS & MASTERY — ${earned.size}/${ACHIEVEMENT_TOTAL} achievements`, TEXT_STYLE_HEADER)
+    );
+
+    // Close [×]
+    const closeBtn = this.add.rectangle(mX + mW - 12, mY + 11, 16, 14, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.goalsModalGroup.add(closeBtn);
+    this.goalsModalGroup.add(
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    closeBtn.on("pointerdown", () => this.closeGoalsModal());
+    this.goalsModalGroup.add(this.add.rectangle(mX + mW / 2, mY + 21, mW - 8, 1, P.PANEL_BORDER));
+
+    // ---- Left column: achievements ----
+    const colLX = mX + 8;
+    let lY = mY + 26;
+    this.goalsModalGroup.add(this.add.text(colLX, lY, "ACHIEVEMENTS", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    lY += 12;
+    for (const ach of ACHIEVEMENTS) {
+      const got = earned.has(ach.id);
+      const mark = got ? "✓" : "○";
+      const color = got ? "#4A7C4E" : "#999977";
+      // Earned rows show the name; locked rows show the requirement (a goal to chase).
+      const text = got ? `${mark} ${ach.name}` : `${mark} ${ach.name} — ${ach.desc}`;
+      this.goalsModalGroup.add(
+        this.add.text(colLX, lY, text, { ...TEXT_STYLE_LABEL, color, wordWrap: { width: 244 } })
+      );
+      lY += got ? 12 : 19;
+    }
+
+    // ---- Right column: collection ----
+    const colRX = mX + 270;
+    let rY = mY + 26;
+    this.goalsModalGroup.add(this.add.text(colRX, rY, "COLLECTION", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    rY += 12;
+
+    // Lore progress
+    this.goalsModalGroup.add(this.add.text(colRX, rY, `Legume Lore: ${this.state.gagsSeen.size}/${LORE_TOTAL_COUNT}`, TEXT_STYLE_LABEL));
+    rY += 11;
+    // Simple progress bar
+    const barW = 150, barH = 6;
+    this.goalsModalGroup.add(this.add.rectangle(colRX + barW / 2, rY + barH / 2, barW, barH, 0xCCBB99));
+    const loreFrac = Math.min(1, this.state.gagsSeen.size / LORE_TOTAL_COUNT);
+    this.goalsModalGroup.add(this.add.rectangle(colRX + (barW * loreFrac) / 2, rY + barH / 2, barW * loreFrac, barH, P.CASH_GREEN));
+    rY += 14;
+
+    // Comeback tiers
+    this.goalsModalGroup.add(this.add.text(colRX, rY, `Comeback tiers: ${this.state.comebackTier}/${COMEBACK_TIERS.length}`, TEXT_STYLE_LABEL));
+    rY += 11;
+    for (const t of COMEBACK_TIERS) {
+      const got = this.state.comebackTier >= t.tier;
+      this.goalsModalGroup.add(
+        this.add.text(colRX + 4, rY, `${got ? "✓" : "○"} "${t.label}" (${t.threshold} lore)`, {
+          ...TEXT_STYLE_LABEL, color: got ? "#4A7C4E" : "#999977",
+        })
+      );
+      rY += 11;
+    }
+    rY += 4;
+
+    // Supplier relationship
+    const lvl = supplierLevelFor(this.state.supplierLbsPurchased);
+    const disc = supplierDiscountFor(this.state.supplierLbsPurchased);
+    this.goalsModalGroup.add(this.add.text(colRX, rY, `Supplier relationship: Level ${lvl}/3`, TEXT_STYLE_LABEL));
+    rY += 11;
+    this.goalsModalGroup.add(this.add.text(colRX + 4, rY,
+      lvl > 0 ? `−${(disc * 100).toFixed(0)}% on raw orders` : "no discount yet",
+      { ...TEXT_STYLE_LABEL, color: lvl > 0 ? "#4A7C4E" : "#999977" }));
+    rY += 11;
+    if (lvl < SUPPLIER_LEVEL_THRESHOLDS.length) {
+      const need = SUPPLIER_LEVEL_THRESHOLDS[lvl] - this.state.supplierLbsPurchased;
+      this.goalsModalGroup.add(this.add.text(colRX + 4, rY,
+        `Order ${Math.ceil(need)} more lbs for Level ${lvl + 1}`,
+        { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+      rY += 11;
+    }
+
+    // Footnote — goals are markers, not power-ups
+    this.goalsModalGroup.add(this.add.text(colRX, mY + mH - 26,
+      "Goals track your progress —\nthey grant no in-game boost.",
+      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace" }));
+
+    // Close button
+    const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.goalsModalGroup.add(doneBtn);
+    this.goalsModalGroup.add(
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    doneBtn.on("pointerdown", () => this.closeGoalsModal());
+    doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
+    doneBtn.on("pointerout",  () => doneBtn.setAlpha(1.0));
+  }
+
+  private closeGoalsModal(): void {
+    if (this.goalsModalGroup) {
+      this.goalsModalGroup.destroy(true);
+      this.goalsModalGroup = undefined;
+    }
+    this.goalsModalOpen = false;
+    this.updateHUD();
+  }
+
   /**
    * Rebuild slot UI objects after a queue slot purchase.
    * Adds the new slot's rect/label/bar to the existing slot arrays.
@@ -1697,7 +1855,7 @@ export class GameScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
-    const mW = 280, mH = 170;
+    const mW = 280, mH = 184;
     const mX = (W - mW) / 2;
     const mY = (H - mH) / 2;
 
@@ -1732,6 +1890,15 @@ export class GameScene extends Phaser.Scene {
       this.modalGroup.add(t);
       ty += 12;
     }
+
+    // Wave 6: supplier-relationship status (loyalty discount, stacks with bulk)
+    const supLvl = supplierLevelFor(this.state.supplierLbsPurchased);
+    const supDisc = supplierDiscountFor(this.state.supplierLbsPurchased);
+    const supLine = supLvl > 0
+      ? `Supplier Lv${supLvl}: extra –${(supDisc * 100).toFixed(0)}% (loyalty, stacks)`
+      : `Supplier Lv0: order more to earn loyalty discounts`;
+    this.modalGroup.add(this.add.text(mX + 6, ty, supLine, { ...TEXT_STYLE_LABEL, color: supLvl > 0 ? "#4A7C4E" : "#8B6F47" }));
+    ty += 12;
 
     // Qty controls
     const qLabel = this.add.text(mX + 6, ty + 4, "Qty:", TEXT_STYLE_BODY);
@@ -1801,7 +1968,15 @@ export class GameScene extends Phaser.Scene {
       if (!ev) {
         this.showToast("Not enough cash!");
       } else {
+        // Wave 6: this order may have crossed a supplier-relationship threshold.
+        const levelUp = ev.detail.supplierLevelUp as number | null;
         this.closeSupplyModal();
+        if (levelUp) {
+          const disc = supplierDiscountFor(this.state.supplierLbsPurchased);
+          this.showToast(`Supplier relationship → Level ${levelUp}! Now –${(disc * 100).toFixed(0)}% on raw orders. Repeat business earns better terms.`);
+        }
+        // Save after a purchase so the supplier counter survives a crash mid-day.
+        this.saveGame();
       }
       this.updateHUD();
     });
@@ -1814,8 +1989,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private calcSupplyCost(qty: number): number {
-    // F7: use exported bulkDiscountFor — single source of truth
-    return qty * RAW_PEANUT_BASE_PRICE * (1 - bulkDiscountFor(qty));
+    // F7: use exported bulkDiscountFor — single source of truth.
+    // Wave 6: also apply the supplier-relationship discount so the preview
+    // matches what buyRaw actually charges (they stack multiplicatively).
+    return qty * RAW_PEANUT_BASE_PRICE
+      * (1 - bulkDiscountFor(qty))
+      * (1 - supplierDiscountFor(this.state.supplierLbsPurchased));
   }
 
   private closeSupplyModal(): void {
@@ -1863,6 +2042,15 @@ export class GameScene extends Phaser.Scene {
       }
       // Aftermath beats are queued durably by the engine in
       // state.pendingAftermath (RT5-1) — no scene-local collection needed here.
+    }
+
+    // Wave 6: achievement-unlock toasts (earned milestones — celebratory, no pressure).
+    let achDelay = 700;
+    for (const ev of report.achievementEvents) {
+      const name = ev.detail.name as string;
+      const desc = ev.detail.desc as string;
+      this.time.delayedCall(achDelay, () => this.showToast(`★ Achievement: ${name} — ${desc}`));
+      achDelay += 400;
     }
 
     // Show recipe-unlock toasts for any newly unlocked recipes.

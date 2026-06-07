@@ -170,6 +170,23 @@ export interface SimState {
    */
   pendingAftermath: string[];
 
+  // ---- Achievements (wave 6 — additive-optional, no schema bump) --------
+  /**
+   * Ids of achievements earned so far (data/achievements.ts). Recorded by
+   * checkAchievements(); already-earned ones are derived silently on load.
+   * Additive-optional: absent on v4 saves → [] (then re-derived, no toasts).
+   */
+  achievementsUnlocked: string[];
+
+  // ---- Supplier relationship (wave 6 — GDD C4) --------------------------
+  /**
+   * Cumulative raw lbs ordered across the whole game. Drives the supplier
+   * relationship level (economy.ts supplierLevelFor). Additive-optional:
+   * absent on v4 saves → 0 (relationship starts fresh, which is honest —
+   * pre-wave-6 saves never tracked this).
+   */
+  supplierLbsPurchased: number;
+
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
   rngState: number;
@@ -331,6 +348,11 @@ export interface DayReport {
    * Factual totals only (DARK_PATTERN_GATE-compliant — no streak framing).
    */
   weekRecap: WeekRecap | null;
+  /**
+   * Wave 6: achievements newly earned as of this day's close. Empty when none.
+   * Consumed by the scene for one-time unlock toasts.
+   */
+  achievementEvents: SimEvent[];
 }
 
 // ---------------------------------------------------------------------------
@@ -357,7 +379,10 @@ export type SimEventKind =
   | "preorder_partial"
   // Ledger/lore wave: comeback unlocks + one-time rescue aftermath beats
   | "comeback_unlocked"
-  | "debt_aftermath";
+  | "debt_aftermath"
+  // Wave 6: achievement earned + supplier level up
+  | "achievement_unlocked"
+  | "supplier_level_up";
   // NOTE W15: "recipe_unlocked" SimEvent was specced in RECIPE_BATCH_UI.md §3e but
   // never emitted from endOfDay(). GameScene detects new unlocks via Set-diff
   // (unlockedBefore snapshot vs post-endOfDay state.recipesUnlocked) — that is

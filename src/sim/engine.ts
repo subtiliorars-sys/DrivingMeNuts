@@ -63,6 +63,8 @@ import {
   BRAND_CAMPAIGN_LORE_THRESHOLD,
   BRAND_CAMPAIGN_COST,
   BRAND_CAMPAIGN_PRICE_TOLERANCE,
+  supplierDiscountFor,
+  supplierLevelFor,
 } from "../data/economy.js";
 
 // default blended multiplier = classic_salted = 1.0
@@ -70,6 +72,7 @@ const DEFAULT_DEMAND_MULT_BLENDED = RECIPE_DEMAND_MULT["classic_salted"];
 
 import { LORE_LINES, LORE_TIER_DAY_GATE } from "../data/lore.js";
 import { comebackTierFor, comebackPoolForTier, COMEBACK_TIERS } from "../data/comebacks.js";
+import { ACHIEVEMENTS } from "../data/achievements.js";
 
 import type {
   SimState,
@@ -265,6 +268,8 @@ export function createState(seed = 1): SimState {
     brandCampaignActive: false,
     aftermathSeen: [],
     pendingAftermath: [],
+    achievementsUnlocked: [],
+    supplierLbsPurchased: 0,
     rngState: seed >>> 0,
   };
 }
@@ -370,22 +375,69 @@ export function buyRaw(state: SimState, lbs: number): SimEvent | null {
   // F10: reject orders below the minimum (no silent rounding up)
   if (lbs < RAW_ORDER_MIN_LBS) return null;
   const qty = clamp(Math.floor(lbs), RAW_ORDER_MIN_LBS, RAW_ORDER_MAX_LBS);
-  const discount = bulkDiscountFor(qty);
-  const pricePerLb = RAW_PEANUT_BASE_PRICE * (1 - discount);
+  const bulkDiscount = bulkDiscountFor(qty);
+  // Wave 6: supplier-relationship discount stacks multiplicatively with bulk
+  // (different real levers: order size vs. loyalty). Both are < 1, so the
+  // combined factor is strictly positive — raw cost can never reach zero.
+  const supplierDiscount = supplierDiscountFor(state.supplierLbsPurchased);
+  const pricePerLb = RAW_PEANUT_BASE_PRICE * (1 - bulkDiscount) * (1 - supplierDiscount);
   const totalCost = qty * pricePerLb;
 
   if (totalCost > state.cash) return null; // insufficient funds — no state change
 
+  // Relationship is built by ordering; capture the level before/after so we can
+  // report a level-up. The cumulative counter is updated AFTER the cost is
+  // computed, so this order's discount reflects the relationship as it stood.
+  const levelBefore = supplierLevelFor(state.supplierLbsPurchased);
   state.cash -= totalCost;
   state.rawStockLbs += qty;
+  state.supplierLbsPurchased += qty;
   applyCashFloor(state);
+  const levelAfter = supplierLevelFor(state.supplierLbsPurchased);
 
   return {
     kind: "supply_purchased",
     dayNumber: state.dayNumber,
     daySecond: state.dayElapsedSeconds,
-    detail: { lbs: qty, pricePerLb, totalCost, discount },
+    detail: {
+      lbs: qty, pricePerLb, totalCost,
+      discount: bulkDiscount, supplierDiscount,
+      // Non-null when this order crossed a supplier threshold (UI toast).
+      supplierLevelUp: levelAfter > levelBefore ? levelAfter : null,
+    },
   };
+}
+
+// ---------------------------------------------------------------------------
+// checkAchievements(state) → SimEvent[]
+// Evaluate all achievement predicates; record + emit any newly-earned ones.
+// Pure over data/achievements.ts. Safe to call on every endOfDay and after
+// any state change (idempotent — only fires once per achievement).
+//
+// `silent` (used on load): record newly-true achievements WITHOUT emitting
+// events, so a returning player doesn't get a burst of unlock toasts for
+// milestones they passed in a previous session.
+// ---------------------------------------------------------------------------
+
+export function checkAchievements(state: SimState, silent = false): SimEvent[] {
+  const events: SimEvent[] = [];
+  const have = new Set(state.achievementsUnlocked);
+  for (const ach of ACHIEVEMENTS) {
+    if (have.has(ach.id)) continue;
+    if (ach.earned(state)) {
+      state.achievementsUnlocked.push(ach.id);
+      have.add(ach.id);
+      if (!silent) {
+        events.push({
+          kind: "achievement_unlocked",
+          dayNumber: state.dayNumber,
+          daySecond: state.dayElapsedSeconds,
+          detail: { id: ach.id, name: ach.name, desc: ach.desc },
+        });
+      }
+    }
+  }
+  return events;
 }
 
 // ---------------------------------------------------------------------------
@@ -732,6 +784,9 @@ export function endOfDay(state: SimState): DayReport {
     }
   }
 
+  // Wave 6: evaluate achievements after all state is settled for the day.
+  const achievementEvents = checkAchievements(state);
+
   return {
     dayNumber: state.dayNumber - 1, // report is for the day just ended
     unitsSold,
@@ -751,6 +806,7 @@ export function endOfDay(state: SimState): DayReport {
     rescueEvents,
     debtService,
     weekRecap,
+    achievementEvents,
   };
 }
 

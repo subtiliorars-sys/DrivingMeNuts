@@ -395,3 +395,49 @@ export const BRAND_CAMPAIGN_COST = 250;
 
 /** Fractional shift in the demand curve's base (reference) price. */
 export const BRAND_CAMPAIGN_PRICE_TOLERANCE = 0.05;
+
+// ---------------------------------------------------------------------------
+// Supplier relationship  (GDD C4 — "Supplier relationship Level 1→3, time")
+//
+// The relationship is built by ORDERING, not by spending a lump sum (GDD marks
+// the cost as "time", not cash). Cumulative raw lbs purchased crosses
+// thresholds to raise the level; each level discounts future raw-peanut
+// purchases. Teaches: reliable, repeat business earns better supplier terms
+// (working-capital + relationships). The discount STACKS with the bulk
+// discount — they model different real levers (order size vs. loyalty).
+//
+// Discounts are deliberately modest so they can't drive raw cost to/below zero
+// even combined with the 12% bulk tier (max combined ≈ 1 − 0.88×0.85 = 25.2%).
+// ---------------------------------------------------------------------------
+
+/** Cumulative raw lbs ordered required to reach supplier level 1, 2, 3. */
+export const SUPPLIER_LEVEL_THRESHOLDS: readonly number[] = [
+  500,   // level 1
+  2_000, // level 2
+  6_000, // level 3
+] as const;
+
+/** Discount fraction granted at supplier level 0 (none), 1, 2, 3. */
+export const SUPPLIER_LEVEL_DISCOUNT: readonly number[] = [
+  0.00, // level 0 — no relationship yet
+  0.03, // level 1 — −3%
+  0.08, // level 2 — −8%
+  0.15, // level 3 — −15%
+] as const;
+
+/**
+ * Supplier level (0–3) for a given cumulative-lbs-ordered total.
+ * Pure; exported for HUD/tests.
+ */
+export function supplierLevelFor(cumulativeLbs: number): number {
+  let level = 0;
+  for (let i = 0; i < SUPPLIER_LEVEL_THRESHOLDS.length; i++) {
+    if (cumulativeLbs >= SUPPLIER_LEVEL_THRESHOLDS[i]) level = i + 1;
+  }
+  return level;
+}
+
+/** Discount fraction for a given cumulative-lbs-ordered total. */
+export function supplierDiscountFor(cumulativeLbs: number): number {
+  return SUPPLIER_LEVEL_DISCOUNT[supplierLevelFor(cumulativeLbs)];
+}
