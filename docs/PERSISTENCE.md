@@ -224,23 +224,15 @@ gross margin display, which could otherwise accidentally imply the player under-
 ### Q9 — Offline Soft-Cap Guardrail (Cite: B.2)
 Is the offline-earnings rate 20% of peak or less, capped at $100/hr, with 24-hr cutoff?
 
-**DIVERGENCE — OPEN ESCALATION.** Three constants are implemented and enforced:
-- `OFFLINE_EARN_RATE_FRACTION = 0.20` (economy.ts) — fraction check: PASS
-- `OFFLINE_CAP_DOLLARS_PER_HOUR = 100` (economy.ts) — code is $100/hr
-- `OFFLINE_CAP_HOURS = 24` (economy.ts) — 24-hr cutoff: PASS
+**PASS.** Owner-ratified 2026-06-07. Three constants implemented and enforced:
+- `OFFLINE_EARN_RATE_FRACTION = 0.20` (economy.ts) — PASS
+- `OFFLINE_CAP_DOLLARS_PER_HOUR = 100` (economy.ts) — PASS ($100/hr, ratified canon)
+- `OFFLINE_CAP_HOURS = 24` (economy.ts) — PASS
 
-However: the gate text (DARK_PATTERN_GATE §D, GDD C5) cites "$100/min" as the cap;
-the implemented constant is `$100/hr` — 60× stricter. The code is SAFE in direction
-(stricter is not a dark pattern), but it diverges from the written spec.
+*(Historical note: pre-ratification the docs cited $100/min as a placeholder; the code
+always had $100/hr. The code was always safe; the docs now match.)*
 
-**This is an OPEN owner decision per gate §D.** Do not mark as PASS without owner
-ratification of which value ($100/min or $100/hr) is the intended canon. Once ratified,
-update both the GDD and this cert, then mark PASS.
-
-**Interim ruling:** implementation proceeds with $100/hr (conservative) until owner
-decides. See economy.ts note on `OFFLINE_CAP_DOLLARS_PER_HOUR`.
-
-**Gate result: Q1/Q3/Q8 PASS. Q9 OPEN (safe direction, awaiting owner ratification).**
+**Gate result: Q1/Q3/Q8/Q9 all PASS.**
 
 ---
 

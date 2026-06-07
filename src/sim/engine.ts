@@ -18,6 +18,8 @@ import {
   RAW_ORDER_MAX_LBS,
   bulkDiscountFor,
   RECIPES,
+  RECIPE_DEMAND_MULT,
+  RECIPE_UNLOCK_THRESHOLD,
   ROASTER_EFFICIENCY,
   STARTING_QUEUE_SLOTS,
   BATCH_MIN_LBS,
@@ -40,7 +42,10 @@ import {
   GAG_EVERY_N_LBS_SOLD,
 } from "../data/economy.js";
 
-import { LORE_LINES } from "../data/lore.js";
+// default blended multiplier = classic_salted = 1.0
+const DEFAULT_DEMAND_MULT_BLENDED = RECIPE_DEMAND_MULT["classic_salted"];
+
+import { LORE_LINES, LORE_TIER_DAY_GATE } from "../data/lore.js";
 
 import type {
   SimState,
@@ -79,16 +84,19 @@ function cogsPerLb(recipe: RecipeId): number {
 }
 
 /**
- * Demand in lbs/hour at a given price.
- * Formula: BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)
+ * Demand in lbs/hour at a given price, scaled by the provided demand multiplier.
+ * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × demandMult
  * Clamped to [0, DEMAND_MAX_LBS_PER_HOUR].
  * Small Gaussian-ish jitter applied via PRNG so repeat ticks aren't exactly equal.
+ *
+ * W2: tick() passes state.roastedDemandMultBlended as demandMult so the blended-pool
+ * recipe multiplier is applied to live sales. Default 1.0 preserves backward compat.
  */
-function demandLbsPerHour(price: number, state: SimState): number {
+function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0): number {
   const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - DEMAND_BASE_PRICE);
   // ±10% jitter (two uniform samples averaged → triangular distribution)
   const jitter = ((nextRand(state) + nextRand(state)) / 2 - 0.5) * 0.20;
-  return clamp(base * (1 + jitter), 0, DEMAND_MAX_LBS_PER_HOUR);
+  return clamp(base * (1 + jitter) * demandMult, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 /**
@@ -111,13 +119,18 @@ function applyCashFloor(state: SimState): void {
 
 /**
  * Pick and emit a 'gag' SimEvent using the seeded PRNG.
+ * Draws only from tiers unlocked by the current dayNumber (tier gating).
  * Selects a lore line deterministically; records it in gagsSeen.
- * Returns null only if LORE_LINES is empty (should never happen in production).
+ * Returns null only if no lines are unlocked (should never happen — early tier is always available).
  */
 function maybeGagEvent(state: SimState): SimEvent | null {
-  if (LORE_LINES.length === 0) return null;
-  const idx = Math.floor(nextRand(state) * LORE_LINES.length);
-  const line = LORE_LINES[idx];
+  // Filter to lines whose tier gate has been met by the current day.
+  const pool = LORE_LINES.filter(
+    (l) => state.dayNumber >= LORE_TIER_DAY_GATE[l.tier]
+  );
+  if (pool.length === 0) return null;
+  const idx = Math.floor(nextRand(state) * pool.length);
+  const line = pool[idx];
   state.gagsSeen.add(line.id);
   return {
     kind: "gag",
@@ -149,15 +162,18 @@ export function createState(seed = 1): SimState {
     rawStockLbs: STARTING_RAW_STOCK_LBS,
     roastedStockLbs: 0,
     roastedCostBasisPerLb: 0,
+    roastedDemandMultBlended: DEFAULT_DEMAND_MULT_BLENDED, // W2: 1.0 at start (classic_salted)
     roastSlots: slots,
     roasterTier: "tin_pan",
     sellPrice: DEFAULT_SELL_PRICE,
     dayElapsedSeconds: 0,
     dayNumber: 1,
-    dayStats: { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0 },
+    dayStats: { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0, offlineEarned: 0 },
     rescueArcPending: false,
     unitsSoldLifetime: 0,
     gagsSeen: new Set<string>(),
+    lifetimeEarned: 0,
+    recipesUnlocked: new Set<string>(["classic_salted"]),
     rngState: seed >>> 0,
   };
 }
@@ -187,6 +203,13 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
       state.roastedCostBasisPerLb = totalLbs > 0
         ? (oldLbs * state.roastedCostBasisPerLb + newLbs * batchBasis) / totalLbs
         : batchBasis;
+
+      // W2: update blended demand multiplier (weighted average, same pattern as cost basis).
+      const batchMult = slot.recipe ? RECIPE_DEMAND_MULT[slot.recipe] : DEFAULT_DEMAND_MULT_BLENDED;
+      state.roastedDemandMultBlended = totalLbs > 0
+        ? (oldLbs * state.roastedDemandMultBlended + newLbs * batchMult) / totalLbs
+        : batchMult;
+
       state.roastedStockLbs = totalLbs;
       events.push({
         kind: "batch_ready",
@@ -199,8 +222,9 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
 
   // 2. Customer purchases (if roasted stock available)
   if (state.roastedStockLbs > 0) {
-    // Convert lbs/hour demand to lbs/second, then scale by dt
-    const lbsPerSec = demandLbsPerHour(state.sellPrice, state) / 3_600;
+    // Convert lbs/hour demand to lbs/second, then scale by dt.
+    // W2: pass blended demand multiplier so mixed inventory sells at weighted velocity.
+    const lbsPerSec = demandLbsPerHour(state.sellPrice, state, state.roastedDemandMultBlended) / 3_600;
     const demandedLbs = lbsPerSec * dtSeconds;
     const soldLbs = Math.min(demandedLbs, state.roastedStockLbs);
 
@@ -348,17 +372,29 @@ export function setPrice(state: SimState, price: number): SimEvent {
 // ---------------------------------------------------------------------------
 
 export function endOfDay(state: SimState): DayReport {
-  const { revenue, cogsTotal, unitsSold, cashSpentOnProduction } = state.dayStats;
+  const { revenue, cogsTotal, unitsSold, cashSpentOnProduction, offlineEarned } = state.dayStats;
   // F1: cogsTotal is now COGS of units SOLD (recognized at sale, not production)
   const grossProfit = revenue - cogsTotal;
   const grossMarginPct = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
   // F8: average realized price = revenue / units sold
   const avgRealizedPrice = unitsSold > 0 ? revenue / unitsSold : 0;
   const fixedCosts = DAILY_FIXED_COSTS;
-  const net = grossProfit - fixedCosts;
+  // F13 fix: offline earnings are pure cash credit (no COGS); included in net post-fixed-cost
+  const net = grossProfit - fixedCosts + offlineEarned;
+
+  // Accumulate lifetime earnings BEFORE resetting dayStats (spec §6d).
+  state.lifetimeEarned += revenue;
+
+  // Evaluate recipe unlock thresholds against updated lifetimeEarned.
+  // State is mutated; GameScene detects new unlocks via state.recipesUnlocked post-call.
+  for (const recipeId of (["honey_cinnamon", "ghost_pepper"] as const)) {
+    if (!state.recipesUnlocked.has(recipeId) && state.lifetimeEarned >= RECIPE_UNLOCK_THRESHOLD[recipeId]) {
+      state.recipesUnlocked.add(recipeId);
+    }
+  }
 
   const cashBefore = state.cash;
-  // cash already includes all revenue credits (from tick) and ingredient debits
+  // cash already includes all revenue credits (from tick + applyOffline) and ingredient debits
   // (from startRoast). endOfDay only needs to deduct the fixed overhead.
   state.cash = Math.max(0, cashBefore - fixedCosts);
 
@@ -377,7 +413,7 @@ export function endOfDay(state: SimState): DayReport {
   });
 
   // Reset day stats and advance day counter
-  state.dayStats = { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0 };
+  state.dayStats = { revenue: 0, cogsTotal: 0, unitsSold: 0, cashSpentOnProduction: 0, offlineEarned: 0 };
   state.dayElapsedSeconds = 0;
   state.dayNumber += 1;
 
@@ -399,6 +435,7 @@ export function endOfDay(state: SimState): DayReport {
     grossMarginPct,
     cashSpentOnProduction,
     fixedCosts,
+    offlineEarned,
     net,
     cashBefore,
     cashAfter,
@@ -419,7 +456,11 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
 
   // Peak hourly earn rate: estimate from current price × base demand at that price.
   // We use a deterministic approximation (no jitter) so tests are predictable.
-  // F2: use new linear demand formula
+  // F2: use new linear demand formula.
+  // W2 spec §4: applyOffline conservatively uses classic_salted demand multiplier (1.0)
+  // because offline time spans multiple potential recipes and we cannot know the
+  // blend that would have applied. This over-estimates slightly, but the
+  // maxEarnFromStock cap limits actual earnings to available stock value anyway.
   const baseDemandAtPrice = clamp(
     DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (state.sellPrice - DEMAND_BASE_PRICE),
     0,
@@ -441,7 +482,9 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
 
   state.roastedStockLbs = Math.max(0, state.roastedStockLbs - stockConsumedLbs);
   state.cash += actualEarned;
-  state.dayStats.revenue += actualEarned;
+  // F13 fix: write to offlineEarned only — never blend into dayStats.revenue.
+  // This keeps on-screen revenue clean so the gross-margin lesson isn't distorted.
+  state.dayStats.offlineEarned += actualEarned;
 
   return {
     kind: "offline_applied",
@@ -464,13 +507,14 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
 // ---------------------------------------------------------------------------
 
 /**
- * Deterministic demand estimate (no jitter) at a given price.
+ * Deterministic demand estimate (no jitter) at a given price and recipe.
  * Safe to call repeatedly from UI without mutating PRNG state.
- * Formula: BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)
+ * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × RECIPE_DEMAND_MULT[recipe]
+ * Default recipe "classic_salted" preserves backward compat (mult = 1.0).
  */
-export function projectedDemand(price: number): number {
+export function projectedDemand(price: number, recipe: RecipeId = "classic_salted"): number {
   const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - DEMAND_BASE_PRICE);
-  return clamp(base, 0, DEMAND_MAX_LBS_PER_HOUR);
+  return clamp(base * RECIPE_DEMAND_MULT[recipe], 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 // ---------------------------------------------------------------------------

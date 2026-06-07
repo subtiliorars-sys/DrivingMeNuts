@@ -29,3 +29,22 @@ jobs:
 
       - name: Run verify gate
         run: npm run verify
+
+  boot-smoke:
+    runs-on: ubuntu-latest
+    # Non-blocking: a jsdom/Phaser headless flake must not break the main gate.
+    # If this job goes red, investigate but do not block merges until it is solid.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run headless boot smoke
+        run: npm run test:boot

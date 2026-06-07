@@ -87,6 +87,33 @@ export const RECIPES: Readonly<Record<RecipeId, Recipe>> = {
 } as const;
 
 // ---------------------------------------------------------------------------
+// Recipe demand multipliers  (RECIPE_BATCH_UI.md §4)
+// Applied on top of base demand curve.  Different recipes serve different
+// willingness-to-pay segments; velocity × margin tradeoff is the teaching hook.
+//
+// TUNABLE: honey_cinnamon 0.75, ghost_pepper 0.40
+// ---------------------------------------------------------------------------
+
+export const RECIPE_DEMAND_MULT: Readonly<Record<RecipeId, number>> = {
+  classic_salted: 1.00,  // baseline — broadest appeal
+  honey_cinnamon: 0.75,  // 25% fewer buyers; sweet-niche segment
+  ghost_pepper:   0.40,  // 60% fewer buyers; heat-seeking niche only
+} as const;
+
+// ---------------------------------------------------------------------------
+// Recipe unlock cash thresholds  (RECIPE_BATCH_UI.md §3)
+// Based on cumulative lifetime revenue (lifetimeEarned in SimState).
+// classic_salted is available from game start (threshold = 0).
+// TUNABLE: honey_cinnamon $500, ghost_pepper $1200
+// ---------------------------------------------------------------------------
+
+export const RECIPE_UNLOCK_THRESHOLD: Readonly<Record<RecipeId, number>> = {
+  classic_salted: 0,
+  honey_cinnamon: 500,
+  ghost_pepper:   1200,
+} as const;
+
+// ---------------------------------------------------------------------------
 // Roaster tiers  (GDD C4)
 // Efficiency multiplier applied to roastSecondsPerLbTinPan:
 //   Tin Pan = 1.0x (baseline), Copper = 0.6x, Industrial = 0.2x.
@@ -197,9 +224,8 @@ export const OFFLINE_EARN_RATE_FRACTION = 0.20;
 
 /**
  * Absolute ceiling on offline earnings per hour ($).
- * NOTE: canon docs (GDD C5) cite "$100/min" as the ceiling; this constant is
- * deliberately 60× stricter ($100/hr) to limit offline catch-up at P1 scale.
- * Reconcile with canon before P2 wires the full offline system.
+ * RATIFIED 2026-06-07 by owner (GDD C5 + DARK_PATTERN_GATE B.2): $100/hr is canon.
+ * docs/PERSISTENCE.md Q9 and docs/GDD.md C5 both reference this value.
  */
 export const OFFLINE_CAP_DOLLARS_PER_HOUR = 100;
 

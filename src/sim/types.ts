@@ -27,10 +27,12 @@ export interface RoastSlot {
 // ---------------------------------------------------------------------------
 
 export interface DayStats {
-  revenue: number;              // $ total sales this day
+  revenue: number;              // $ total sales this day (on-screen only; excludes offline)
   cogsTotal: number;            // $ COGS of units SOLD this day (recognized at sale)
   unitsSold: number;            // lbs sold this day
   cashSpentOnProduction: number;// $ cash outflow for roasting today (recognized at production)
+  /** $ earned while the truck was offline resting (not blended into revenue — F13 fix). */
+  offlineEarned: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,6 +47,13 @@ export interface SimState {
   roastedStockLbs: number;      // lbs of roasted peanuts ready to sell
   /** Weighted-average COGS per lb of current roasted stock (for COGS-at-sale). */
   roastedCostBasisPerLb: number;
+  /**
+   * W2 blended-pool: weighted-average RECIPE_DEMAND_MULT of roasted stock.
+   * Updated exactly like roastedCostBasisPerLb when a batch completes.
+   * tick() multiplies demand by this value. Default 1.0 (classic_salted baseline).
+   * applyOffline conservatively uses classic_salted (1.0) per spec §4.
+   */
+  roastedDemandMultBlended: number;
 
   // ---- Roast queue ----------------------------------------------------
   roastSlots: RoastSlot[];      // length = current number of unlocked slots
@@ -79,6 +88,18 @@ export interface SimState {
    */
   gagsSeen: Set<string>;
 
+  // ---- Recipe unlocks (Wave 3 / P1.5) ---------------------------------
+  /**
+   * Cumulative revenue across all days (for recipe unlock gates).
+   * Incremented in endOfDay before dayStats reset.
+   */
+  lifetimeEarned: number;
+  /**
+   * Set of recipe ids the player has unlocked.
+   * classic_salted is always present; others unlock via lifetimeEarned thresholds.
+   */
+  recipesUnlocked: Set<string>;
+
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
   rngState: number;
@@ -92,14 +113,16 @@ export interface SimState {
 export interface DayReport {
   dayNumber: number;
   unitsSold: number;            // lbs
-  revenue: number;              // $
+  revenue: number;              // $ on-screen sales only (excludes offlineEarned)
   avgRealizedPrice: number;     // $ per lb = revenue / unitsSold (0 if no sales)
   cogs: number;                 // $ COGS of units SOLD (recognized at sale, not production)
   grossProfit: number;          // revenue - cogs
   grossMarginPct: number;       // grossProfit / revenue * 100  (0 if no revenue)
   cashSpentOnProduction: number;// $ cash outflow for roasting today (cash-flow lesson)
   fixedCosts: number;           // $
-  net: number;                  // grossProfit - fixedCosts
+  /** $ the truck earned during offline rest (separate line; not in grossProfit). */
+  offlineEarned: number;
+  net: number;                  // grossProfit - fixedCosts + offlineEarned
   cashBefore: number;           // cash at start of day
   cashAfter: number;            // cash after applying net
   /** One insight line for the HUD report card (question, not shame). */
@@ -120,6 +143,11 @@ export type SimEventKind =
   | "offline_applied"
   | "rescue_arc_triggered"
   | "gag";
+  // NOTE W15: "recipe_unlocked" SimEvent was specced in RECIPE_BATCH_UI.md §3e but
+  // never emitted from endOfDay(). GameScene detects new unlocks via Set-diff
+  // (unlockedBefore snapshot vs post-endOfDay state.recipesUnlocked) — that is
+  // the live path and it works. Emitting a redundant event was removed to keep
+  // endOfDay's event list honest. See RECIPE_BATCH_UI.md §7 deviation note.
 
 export interface SimEvent {
   kind: SimEventKind;

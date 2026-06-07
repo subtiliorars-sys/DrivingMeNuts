@@ -216,3 +216,31 @@ OPEN: Ghost Pepper — tooltip note about allergy framing? (RISK_REGISTER A1 req
 OPEN: At P2 multi-district, each district gets per-recipe demand multipliers stacked on
       top of `RECIPE_DEMAND_MULT`. Does the modal preview district-specific demand, or
       show the flat average? Defer to P2 spec.
+
+---
+
+## §8. Deviation: recipe_unlocked SimEvent (W15)
+
+The spec (§3e/6e) calls for `endOfDay()` to emit a `"recipe_unlocked"` SimEvent for each
+newly-unlocked recipe. This event was **never implemented** and the dead `SimEventKind`
+entry has been removed (W15).
+
+**Live path:** GameScene snapshots `state.recipesUnlocked` before calling `endOfDay()`,
+then diffs the set afterward to detect new unlocks and show unlock toasts. This is
+simpler and has no behavior gap. The `"recipe_unlocked"` event kind was speculative
+scaffolding that added no value over the Set-diff approach.
+
+**P2 note:** if a future analytics system needs to subscribe to unlock events via the
+event stream rather than diff state externally, re-add the event kind at that time.
+
+### §4 Blended-Pool Demand Multiplier (W2 design ruling)
+
+`tick()` demand uses a **blended-pool weighted multiplier** (`roastedDemandMultBlended`
+in `SimState`), updated exactly like `roastedCostBasisPerLb` when a batch completes.
+This reflects that mixed roasted inventory (e.g. ghost_pepper + classic_salted) sells at
+a weighted average of each recipe's demand velocity, not at the fastest recipe's rate.
+
+**P2 districts may force per-recipe pools** (each recipe queues and sells independently
+per district) rather than a single blended pool. In that case `roastedDemandMultBlended`
+would be replaced by per-recipe inventory tracking. The blended-pool is the correct P1
+simplification: one roasted stock pile, weighted demand.

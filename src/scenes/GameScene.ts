@@ -37,12 +37,22 @@ import {
   projectedDemand,
 } from "../sim/engine.js";
 import type { SimState, DayReport } from "../sim/types.js";
-import { LORE_BY_ID, LORE_LINES } from "../data/lore.js";
+import { tryLoad, trySave, resetSave, safeStorage } from "../sim/persistence.js";
+import { LORE_BY_ID } from "../data/lore.js";
+import { drawLegsy } from "./legsy.js";
+import {
+  audioInit,
+  toggleMute,
+  isMuted,
+  playCoinPop,
+  playBatchReady,
+  playDayEnd,
+  playButtonTick,
+  MUTE_KEY,
+} from "./audio.js";
 
-// Denominator for the HUD lore counter: use the count of currently-loaded lines
-// (early tier only in P1). Grows automatically as more tiers are added to lore.ts.
-// LORE_TOTAL_COUNT (40) is kept for future use when all tiers are present.
-const LORE_LOADED_COUNT = LORE_LINES.length;
+// LORE_LOADED_COUNT removed — denominator is now computed dynamically in updateHUD()
+// based on state.dayNumber and LORE_TIER_DAY_GATE (honest: shows unlocked pool size).
 import {
   DAY_DURATION_SECONDS,
   DEFAULT_SELL_PRICE,
@@ -52,9 +62,12 @@ import {
   BATCH_MAX_LBS,
   RAW_PEANUT_BASE_PRICE,
   RECIPES,
+  RECIPE_UNLOCK_THRESHOLD,
   bulkDiscountFor,
   SIM_TIME_SCALE,
+  type RecipeId,
 } from "../data/economy.js";
+import { LORE_LINES, LORE_TIER_DAY_GATE } from "../data/lore.js";
 
 // ---------------------------------------------------------------------------
 // Palette A constants (integers for Phaser's 0xRRGGBB format)
@@ -197,6 +210,13 @@ export class GameScene extends Phaser.Scene {
   private supplyModalOpen = false;
   private reportOpen = false;
 
+  // ---- Recipe/Batch modal state ------------------------------------------
+  private roastModalGroup?: Phaser.GameObjects.Group;
+  private roastModalOpen = false;
+  private roastModalSlotIndex = 0;
+  private roastModalRecipe: RecipeId = "classic_salted";
+  private roastModalBatchLbs = 10;
+
   // ---- Supply modal working qty -------------------------------------------
   private supplyQty = 50; // default qty for supply modal
 
@@ -208,6 +228,44 @@ export class GameScene extends Phaser.Scene {
 
   // ---- Active gag speech bubble (at most one at a time) -------------------
   private gagBubble?: GagBubble;
+
+  // ---- Tutorial state (Wave 3) --------------------------------------------
+  // Three-step first-run tutorial (only when no save exists).
+  // State is gated by "dmn_tutorial_seen" in localStorage (parallel key —
+  // does not touch the save envelope so existing persistence tests are safe).
+  // Each step advances on the relevant action or on tap-to-skip.
+  // Steps: 0=buy peanuts, 1=start roast, 2=watch report. After step 2 the
+  // tutorial is marked seen and never shown again. DARK_PATTERN_GATE A.6
+  // compliant: no nagging repeats, never blocks input.
+  private tutorialStep = -1;        // -1 = not active (already seen or has save)
+  private tutorialGroup?: Phaser.GameObjects.Group;
+
+  /** localStorage key for tutorial-seen flag (separate from save envelope). */
+  private readonly TUTORIAL_KEY = "dmn_tutorial_seen";
+
+  // ---- Mute button (Wave 3) -----------------------------------------------
+  private muteBtn?: Phaser.GameObjects.Rectangle;
+  private muteBtnLabel?: Phaser.GameObjects.Text;
+
+  // ---- Supply button reference (for tutorial pointer) ---------------------
+  private buyBtnRef?: Phaser.GameObjects.Rectangle;
+
+  // ---- Persistence ---------------------------------------------------------
+  /** Cumulative wall-clock seconds while this scene has been visible. */
+  private playtimeSeconds = 0;
+  /** W1: safe storage proxy (localStorage or in-memory fallback). */
+  private storage = safeStorage();
+  /** W8: fire the save-failure toast at most once per session. */
+  private saveFailed = false;
+  /** Bound reference so the same function can be removed in shutdown(). */
+  private readonly onVisibilityChange: () => void = () => {
+    if (document.visibilityState === "hidden") {
+      this.saveGame();
+    }
+  };
+  private readonly onPageHide: () => void = () => {
+    this.saveGame();
+  };
 
   constructor() {
     super({ key: "GameScene" });
@@ -221,7 +279,31 @@ export class GameScene extends Phaser.Scene {
     const W = this.scale.width;   // 480
     const H = this.scale.height;  // 270
 
-    this.state = createState(1);
+    // ---- Load save (§4 load path) ----------------------------------------
+    // W1: use safeStorage() so blocked localStorage degrades to in-memory.
+    this.storage = safeStorage();
+    const loadResult = tryLoad(this.storage);
+    this.state = loadResult.state;
+
+    if (loadResult.errorMessage) {
+      // Corruption toast — warm, non-blaming (spec §7)
+      this.time.delayedCall(400, () => this.showToast(loadResult.errorMessage!));
+    }
+    if (loadResult.offlineMessage) {
+      // Offline earnings toast — gain-framed (DARK_PATTERN_GATE §A.8 / spec §8 Q8)
+      this.time.delayedCall(600, () => this.showToast(loadResult.offlineMessage!));
+    }
+
+    // ---- Register save-on-hide listeners (spec §3) -----------------------
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
+    window.addEventListener("pagehide", this.onPageHide);
+    // W4: register cleanup via SHUTDOWN event (Phaser calls this; shutdown() is dead code).
+    this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
+      document.removeEventListener("visibilitychange", this.onVisibilityChange);
+      window.removeEventListener("pagehide", this.onPageHide);
+      this.dismissTutorial();
+    });
+
 
     // ---- Backdrop (District: Farmers' Market) — P1_SPRITE_SPEC #10 --------
     // Sky: top 130 px, #FFFFCC
@@ -253,6 +335,10 @@ export class GameScene extends Phaser.Scene {
     // Wheels: #333333, circles 10 px radius
     this.add.circle(truckX - 32, truckY + 8, 10, P.WHEELS);
     this.add.circle(truckX + 32, truckY + 8, 10, P.WHEELS);
+
+    // Legsy painted on the truck side panel (programmer-art; code-drawn).
+    // Scale 0.6 keeps it inside the panel (~19×29 px visible on the side).
+    drawLegsy(this, truckX + 16, truckY - 1, 0.6);
 
     // ---- Smoke wisps (P1_SPRITE_SPEC #2) — circles above truck ------------
     // 3 wisps; opacity / position animated in update()
@@ -302,7 +388,8 @@ export class GameScene extends Phaser.Scene {
 
     // ---- Lore counter (Wave 2: collection tease, no pressure framing) -------
     // Positioned below the top bar at the right edge; visible but unobtrusive.
-    this.txtLoreCounter = this.add.text(W - 6, 18, `Lore: 0/${LORE_LOADED_COUNT}`, {
+    // Denominator = unlocked pool size (honest; grows with dayNumber tier gates).
+    this.txtLoreCounter = this.add.text(W - 6, 18, "Lore: 0/6", {
       ...TEXT_STYLE_LABEL, color: "#C0A060",
     }).setOrigin(1, 0);
 
@@ -344,7 +431,8 @@ export class GameScene extends Phaser.Scene {
 
       const slotIndex = i;
       slotRect.on("pointerdown", () => {
-        if (!this.reportOpen && !this.supplyModalOpen) {
+        if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen) {
+          this.advanceTutorialOnAction(1); // step 1: "start a roast"
           this.handleSlotClick(slotIndex);
         }
       });
@@ -376,7 +464,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(pX + 16, pY + 35, "–", { fontSize: "10px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
-    btnMinus.on("pointerdown", () => { if (!this.reportOpen) this.adjustPrice(-this.PRICE_STEP); });
+    btnMinus.on("pointerdown", () => { if (!this.reportOpen) { playButtonTick(); this.adjustPrice(-this.PRICE_STEP); } });
     btnMinus.on("pointerover", () => btnMinus.setAlpha(0.8));
     btnMinus.on("pointerout",  () => btnMinus.setAlpha(1.0));
 
@@ -385,7 +473,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(pX + 46, pY + 35, "+", { fontSize: "10px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
-    btnPlus.on("pointerdown", () => { if (!this.reportOpen) this.adjustPrice(+this.PRICE_STEP); });
+    btnPlus.on("pointerdown", () => { if (!this.reportOpen) { playButtonTick(); this.adjustPrice(+this.PRICE_STEP); } });
     btnPlus.on("pointerover", () => btnPlus.setAlpha(0.8));
     btnPlus.on("pointerout",  () => btnPlus.setAlpha(1.0));
 
@@ -403,10 +491,16 @@ export class GameScene extends Phaser.Scene {
     const buyBtn = this.add.rectangle(buyBtnX + 68, buyBtnY + 10, 137, 20, P.AWNING)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
+    this.buyBtnRef = buyBtn; // held for tutorial pointer targeting
     this.add.text(buyBtnX + 68, buyBtnY + 10, "BUY RAW PEANUTS", {
       fontSize: "8px", color: "#2C2416", fontFamily: "monospace",
     }).setOrigin(0.5);
-    buyBtn.on("pointerdown", () => { if (!this.reportOpen) this.openSupplyModal(); });
+    buyBtn.on("pointerdown", () => {
+      if (!this.reportOpen) {
+        this.advanceTutorialOnAction(0); // step 0: "buy raw peanuts"
+        this.openSupplyModal();
+      }
+    });
     buyBtn.on("pointerover", () => buyBtn.setAlpha(0.85));
     buyBtn.on("pointerout",  () => buyBtn.setAlpha(1.0));
 
@@ -421,10 +515,60 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(W - 50, dpY + 5, "END DAY", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
-    endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen) this.triggerEndOfDay(); });
+    endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen) this.triggerEndOfDay(); });
+
+    // ---- Reset Save button (spec req; tucked in bottom-left corner) --------
+    // Player-initiated only — confirm dialog prevents accidents. (DARK_PATTERN_GATE §B.3)
+    const resetBtn = this.add.rectangle(28, dpY + 5, 48, 14, 0x664444)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.add.text(28, dpY + 5, "RESET", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
+    resetBtn.on("pointerdown", () => {
+      if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen) return;
+      this.showResetConfirm();
+    });
 
     // Initial HUD render
     this.updateHUD();
+
+    // ---- Mute button (Wave 3 — persisted preference) ----------------------
+    // Placed in the bottom-right corner of the HUD bar (next to END DAY).
+    // Mute preference is read from localStorage via audio module.
+    const dpY2 = H - 18;
+    const muteX = W - 96; // between END DAY and the right edge
+    this.muteBtn = this.add.rectangle(muteX, dpY2 + 5, 30, 14, 0x445566)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.muteBtnLabel = this.add.text(muteX, dpY2 + 5,
+      isMuted() ? "UN-MUTE" : "MUTE",
+      { fontSize: "6px", color: "#F5DEB3", fontFamily: "monospace" }
+    ).setOrigin(0.5);
+    this.muteBtn.on("pointerdown", () => {
+      audioInit(this.storage);
+      const nowMuted = toggleMute(this.storage);
+      if (this.muteBtnLabel) {
+        this.muteBtnLabel.setText(nowMuted ? "UN-MUTE" : "MUTE");
+      }
+    });
+    this.muteBtn.on("pointerover", () => this.muteBtn?.setAlpha(0.85));
+    this.muteBtn.on("pointerout",  () => this.muteBtn?.setAlpha(1.0));
+
+    // Initialise audio prefs from storage (won't play anything — just reads mute flag)
+    // Actual AudioContext creation is deferred to first pointer-down (browser policy).
+    const savedMute = this.storage.getItem(MUTE_KEY);
+    if (savedMute !== null && this.muteBtnLabel) {
+      // Reflect persisted state (audioInit not yet called, but we can read the key)
+      const persisted = savedMute === "1";
+      this.muteBtnLabel.setText(persisted ? "UN-MUTE" : "MUTE");
+    }
+
+    // ---- First-run tutorial init (Wave 3) ---------------------------------
+    // Only show tutorial if no save existed at load time (fresh player).
+    // Uses a parallel storage key so save schema is untouched.
+    if (!loadResult.ok && this.storage.getItem(this.TUTORIAL_KEY) === null) {
+      // Short delay so the backdrop finishes rendering before the first bubble
+      this.time.delayedCall(400, () => this.showTutorialStep(0));
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -432,7 +576,10 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   update(_time: number, delta: number): void {
-    if (this.reportOpen || this.supplyModalOpen) return;
+    // Track wall-clock playtime (excludes offline time; used by trySave meta)
+    this.playtimeSeconds += delta / 1_000;
+
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -450,9 +597,13 @@ export class GameScene extends Phaser.Scene {
       if (ev.kind === "gag") {
         this.showGagBubble(ev.detail.loreId as string);
       }
+      if (ev.kind === "batch_ready") {
+        playBatchReady();
+      }
     }
     if (this.coinPopAccum >= this.COIN_POP_THRESHOLD) {
       this.spawnCoinPop(this.coinPopAccum);
+      playCoinPop();
       this.coinPopAccum = 0;
     }
 
@@ -481,9 +632,13 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private updateHUD(): void {
+    // Compute unlocked lore pool size (denominator for collection counter).
+    const unlockedLoreCount = LORE_LINES.filter(
+      (l) => this.state.dayNumber >= LORE_TIER_DAY_GATE[l.tier]
+    ).length;
     this.txtCash.setText(`Cash: $${this.state.cash.toFixed(2)}`);
     this.txtDay.setText(`Day ${this.state.dayNumber}`);
-    this.txtLoreCounter.setText(`Lore: ${this.state.gagsSeen.size}/${LORE_LOADED_COUNT}`);
+    this.txtLoreCounter.setText(`Lore: ${this.state.gagsSeen.size}/${unlockedLoreCount}`);
     this.txtRawStock.setText(`Raw: ${this.state.rawStockLbs.toFixed(1)} lbs`);
     this.txtRoastedStock.setText(`Roasted: ${this.state.roastedStockLbs.toFixed(1)} lbs`);
     this.txtPrice.setText(`$${this.state.sellPrice.toFixed(2)}`);
@@ -570,22 +725,295 @@ export class GameScene extends Phaser.Scene {
   private handleSlotClick(slotIndex: number): void {
     const slot = this.state.roastSlots[slotIndex];
     if (slot.status === "empty") {
-      // P1: always classic_salted, default 10 lbs
-      // Check if we have enough raw stock and cash
       if (this.state.rawStockLbs < BATCH_MIN_LBS) {
         this.showToast("No raw stock — buy peanuts first!");
         return;
       }
-      const batchLbs = Math.min(10, this.state.rawStockLbs, BATCH_MAX_LBS);
-      const ev = startRoast(this.state, slotIndex, "classic_salted", batchLbs);
-      if (!ev) {
-        this.showToast("Not enough cash for ingredients!");
-      }
+      // Open recipe/batch selection modal (P1.5 spec §2)
+      this.openRoastModal(slotIndex);
     } else if (slot.status === "ready") {
       // Dismiss the "ready" visual — stock already added to roastedStockLbs on ready event
       // No state change needed; batch sits until end of day naturally
       this.showToast(`${slot.batchLbs} lbs ready — selling automatically!`);
     }
+    this.updateHUD();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Roast modal — Recipe/Batch selection (RECIPE_BATCH_UI.md §2)
+  // ---------------------------------------------------------------------------
+
+  private openRoastModal(slotIndex: number): void {
+    if (this.roastModalOpen) return;
+    this.roastModalOpen = true;
+    this.roastModalSlotIndex = slotIndex;
+    this.roastModalRecipe = "classic_salted";
+    this.roastModalBatchLbs = Math.min(10, this.state.rawStockLbs, BATCH_MAX_LBS);
+    if (this.roastModalBatchLbs < BATCH_MIN_LBS) this.roastModalBatchLbs = BATCH_MIN_LBS;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const mW = 300, mH = 220;
+    const mX = (W - mW) / 2;
+    const mY = (H - mH) / 2;
+
+    this.roastModalGroup = this.add.group();
+
+    // Backdrop
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.55)
+      .setInteractive();
+    this.roastModalGroup.add(backdrop);
+
+    // Panel
+    const panel = this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG)
+      .setStrokeStyle(2, P.PANEL_BORDER);
+    this.roastModalGroup.add(panel);
+
+    // Header
+    this.roastModalGroup.add(
+      this.add.text(mX + 6, mY + 6, `ROAST SLOT ${slotIndex + 1}`, TEXT_STYLE_HEADER)
+    );
+
+    // Close button [×]
+    const closeBtn = this.add.rectangle(mX + mW - 12, mY + 10, 16, 14, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.roastModalGroup.add(closeBtn);
+    this.roastModalGroup.add(
+      this.add.text(mX + mW - 12, mY + 10, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    closeBtn.on("pointerdown", () => this.closeRoastModal());
+
+    // Divider
+    this.roastModalGroup.add(this.add.rectangle(mX + mW / 2, mY + 20, mW - 8, 1, P.PANEL_BORDER));
+
+    // ---- Recipe section ----
+    this.roastModalGroup.add(this.add.text(mX + 6, mY + 24, "RECIPE", TEXT_STYLE_LABEL));
+
+    const RECIPE_IDS: RecipeId[] = ["classic_salted", "honey_cinnamon", "ghost_pepper"];
+    const RECIPE_DISPLAY: Record<RecipeId, string> = {
+      classic_salted: "Classic Salted",
+      honey_cinnamon: "Honey Cinnamon",
+      ghost_pepper:   "Ghost Pepper",
+    };
+
+    // Recipe row y-positions
+    const recipeRowY: Record<RecipeId, number> = {
+      classic_salted: mY + 34,
+      honey_cinnamon: mY + 46,
+      ghost_pepper:   mY + 58,
+    };
+
+    // Radio-style indicator circles (filled when selected)
+    const radioCircles: Record<RecipeId, Phaser.GameObjects.Arc> = {} as Record<RecipeId, Phaser.GameObjects.Arc>;
+
+    const cogsForRecipe = (id: RecipeId): number =>
+      RAW_PEANUT_BASE_PRICE + RECIPES[id].ingredientCostPerLb;
+
+    // Preview text objects (updated on recipe/batch change)
+    const previewLines: Phaser.GameObjects.Text[] = [];
+
+    const refreshPreview = (): void => {
+      const cogs = cogsForRecipe(this.roastModalRecipe);
+      const revenue1 = this.state.sellPrice * this.roastModalBatchLbs;
+      const cogsTotal = cogs * this.roastModalBatchLbs;
+      const margin1 = this.state.sellPrice > 0
+        ? ((this.state.sellPrice - cogs) / this.state.sellPrice) * 100
+        : 0;
+      // Honey Cinnamon optimal price hint from spec: p* ≈ $1.95; generic: highlight current price
+      const optPrice = this.state.sellPrice;
+      const demandHint = projectedDemand(optPrice, this.roastModalRecipe);
+      const roastMins = (RECIPES[this.roastModalRecipe].roastSecondsPerLbTinPan * this.roastModalBatchLbs) / 60;
+
+      const marginColor = margin1 >= 60 ? "#4A7C4E" : margin1 >= 45 ? "#C08A00" : "#C0392B";
+
+      if (previewLines.length >= 5) {
+        previewLines[0].setText(`COGS total: $${cogsTotal.toFixed(2)}  Roast: ${roastMins.toFixed(0)} min (sim)`);
+        previewLines[1].setText(`At $${this.state.sellPrice.toFixed(2)}/lb: Rev $${revenue1.toFixed(2)}  Margin ${margin1.toFixed(0)}%`);
+        previewLines[1].setStyle({ ...TEXT_STYLE_LABEL, color: marginColor });
+        previewLines[2].setText(`Demand hint: ~${demandHint.toFixed(0)} lbs/hr at your price`);
+        previewLines[3].setText(`COGS/lb: $${cogs.toFixed(2)}`);
+      }
+
+      // Update radio circles
+      for (const id of RECIPE_IDS) {
+        const circle = radioCircles[id];
+        if (circle) {
+          if (id === this.roastModalRecipe) {
+            circle.setFillStyle(P.AWNING);
+          } else {
+            circle.setFillStyle(0xAAAAAA);
+          }
+        }
+      }
+
+      // Update batch size text
+      if (batchSizeText) batchSizeText.setText(`${this.roastModalBatchLbs} lbs`);
+    };
+
+    // Declare batchSizeText early (used in refreshPreview closure)
+    let batchSizeText: Phaser.GameObjects.Text | null = null;
+
+    for (const id of RECIPE_IDS) {
+      const ry = recipeRowY[id];
+      const unlocked = this.state.recipesUnlocked.has(id);
+      const cogs = cogsForRecipe(id);
+      const textColor = unlocked ? "#2C2416" : "#999977";
+      const threshold = RECIPE_UNLOCK_THRESHOLD[id];
+      const lockLabel = unlocked
+        ? `$${cogs.toFixed(2)}/lb`
+        : `locked — earn $${threshold.toFixed(0)} lifetime`;
+
+      // Radio indicator
+      const radio = this.add.circle(mX + 12, ry + 4, 4, 0xAAAAAA)
+        .setStrokeStyle(1, P.PANEL_BORDER);
+      this.roastModalGroup.add(radio);
+      radioCircles[id] = radio;
+
+      const recipeTxt = this.add.text(mX + 22, ry, `${RECIPE_DISPLAY[id]}  ${lockLabel}`, {
+        ...TEXT_STYLE_LABEL, color: textColor,
+      });
+      this.roastModalGroup.add(recipeTxt);
+
+      if (unlocked) {
+        // Clickable row background for selection
+        const rowHit = this.add.rectangle(mX + mW / 2, ry + 4, mW - 12, 11, 0x000000, 0)
+          .setInteractive({ cursor: "pointer" });
+        this.roastModalGroup.add(rowHit);
+        rowHit.on("pointerdown", () => {
+          this.roastModalRecipe = id;
+          refreshPreview();
+        });
+        rowHit.on("pointerover", () => rowHit.setAlpha(0.15));
+        rowHit.on("pointerout",  () => rowHit.setAlpha(0));
+      }
+    }
+
+    // Set initial radio fill for classic_salted
+    radioCircles["classic_salted"].setFillStyle(P.AWNING);
+
+    // Divider
+    const divY1 = mY + 72;
+    this.roastModalGroup.add(this.add.rectangle(mX + mW / 2, divY1, mW - 8, 1, P.PANEL_BORDER));
+
+    // ---- Batch size section ----
+    this.roastModalGroup.add(this.add.text(mX + 6, divY1 + 4, "BATCH SIZE", TEXT_STYLE_LABEL));
+
+    const maxBatch = Math.min(BATCH_MAX_LBS, Math.floor(this.state.rawStockLbs));
+    const quickPicks = [10, 25, 50].filter(n => n <= maxBatch);
+    // Always include at least min batch
+    if (quickPicks.length === 0) quickPicks.push(BATCH_MIN_LBS);
+
+    let bx = mX + 6;
+    const batchBtnY = divY1 + 16;
+
+    for (const qty of quickPicks) {
+      const btn = this.add.rectangle(bx + 16, batchBtnY + 6, 32, 14, P.AWNING)
+        .setStrokeStyle(1, P.PANEL_BORDER)
+        .setInteractive({ cursor: "pointer" });
+      this.roastModalGroup.add(btn);
+      const t = this.add.text(bx + 16, batchBtnY + 6, `${qty}lb`, {
+        fontSize: "7px", color: "#2C2416", fontFamily: "monospace",
+      }).setOrigin(0.5);
+      this.roastModalGroup.add(t);
+      btn.on("pointerdown", () => {
+        this.roastModalBatchLbs = qty;
+        refreshPreview();
+      });
+      btn.on("pointerover", () => btn.setAlpha(0.8));
+      btn.on("pointerout",  () => btn.setAlpha(1));
+      bx += 38;
+    }
+
+    // Custom qty stepper
+    const customLabel = this.add.text(bx + 4, batchBtnY, "Custom:", TEXT_STYLE_LABEL);
+    this.roastModalGroup.add(customLabel);
+    batchSizeText = this.add.text(bx + 50, batchBtnY, `${this.roastModalBatchLbs} lbs`, TEXT_STYLE_LABEL);
+    this.roastModalGroup.add(batchSizeText);
+
+    const stepDown = this.add.rectangle(bx + 50, batchBtnY + 14, 20, 12, 0xAAAAAA)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.roastModalGroup.add(stepDown);
+    this.roastModalGroup.add(
+      this.add.text(bx + 50, batchBtnY + 14, "▼", { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    stepDown.on("pointerdown", () => {
+      this.roastModalBatchLbs = Math.max(BATCH_MIN_LBS, this.roastModalBatchLbs - 5);
+      refreshPreview();
+    });
+
+    const stepUp = this.add.rectangle(bx + 76, batchBtnY + 14, 20, 12, 0xAAAAAA)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.roastModalGroup.add(stepUp);
+    this.roastModalGroup.add(
+      this.add.text(bx + 76, batchBtnY + 14, "▲", { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    stepUp.on("pointerdown", () => {
+      this.roastModalBatchLbs = Math.min(maxBatch, this.roastModalBatchLbs + 5);
+      refreshPreview();
+    });
+
+    // Divider
+    const divY2 = divY1 + 34;
+    this.roastModalGroup.add(this.add.rectangle(mX + mW / 2, divY2, mW - 8, 1, P.PANEL_BORDER));
+
+    // ---- Preview section ----
+    this.roastModalGroup.add(this.add.text(mX + 6, divY2 + 4, "PREVIEW", TEXT_STYLE_LABEL));
+
+    const py = divY2 + 14;
+    const p0 = this.add.text(mX + 6, py, "", TEXT_STYLE_LABEL);
+    const p1 = this.add.text(mX + 6, py + 11, "", TEXT_STYLE_LABEL);
+    const p2 = this.add.text(mX + 6, py + 22, "", { ...TEXT_STYLE_LABEL, color: "#4A7C4E" });
+    const p3 = this.add.text(mX + 6, py + 33, "", TEXT_STYLE_LABEL);
+    const p4 = this.add.text(mX + 6, py + 44, "", TEXT_STYLE_LABEL); // error line
+    previewLines.push(p0, p1, p2, p3, p4);
+    for (const pl of previewLines) this.roastModalGroup.add(pl);
+
+    // Initial preview render
+    refreshPreview();
+
+    // ---- Buttons ----
+    const btnY = mY + mH - 14;
+
+    const cancelBtn = this.add.rectangle(mX + 60, btnY, 90, 18, 0x999977)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.roastModalGroup.add(cancelBtn);
+    this.roastModalGroup.add(
+      this.add.text(mX + 60, btnY, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    cancelBtn.on("pointerdown", () => this.closeRoastModal());
+
+    const startBtn = this.add.rectangle(mX + 220, btnY, 120, 18, P.AWNING)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.roastModalGroup.add(startBtn);
+    this.roastModalGroup.add(
+      this.add.text(mX + 220, btnY, "START ROAST", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    startBtn.on("pointerdown", () => {
+      const ev = startRoast(this.state, this.roastModalSlotIndex, this.roastModalRecipe, this.roastModalBatchLbs);
+      if (!ev) {
+        // Show inline error in preview area — do not close modal
+        previewLines[4].setText(
+          `Not enough cash for ingredients ($${(RECIPES[this.roastModalRecipe].ingredientCostPerLb * this.roastModalBatchLbs).toFixed(2)} needed).`
+        ).setStyle({ ...TEXT_STYLE_LABEL, color: "#C0392B" });
+      } else {
+        this.closeRoastModal();
+      }
+      this.updateHUD();
+    });
+    startBtn.on("pointerover", () => startBtn.setAlpha(0.85));
+    startBtn.on("pointerout",  () => startBtn.setAlpha(1.0));
+  }
+
+  private closeRoastModal(): void {
+    if (this.roastModalGroup) {
+      this.roastModalGroup.destroy(true);
+      this.roastModalGroup = undefined;
+    }
+    this.roastModalOpen = false;
     this.updateHUD();
   }
 
@@ -743,15 +1171,49 @@ export class GameScene extends Phaser.Scene {
     if (this.reportOpen) return;
     this.reportOpen = true;
 
+    // Audio: day-end sting (synthesized, SOUND_DESIGN.md diegetic)
+    playDayEnd();
+
+    // Tutorial: step 2 ("Watch the report tonight") completes when the
+    // report opens; mark as complete to fulfil the third tutorial beat.
+    this.advanceTutorialOnAction(2);
+
+    // Snapshot unlocked recipes before endOfDay so we can detect new unlocks.
+    const unlockedBefore = new Set(this.state.recipesUnlocked);
+
     // Pause the sim — reportOpen flag stops tick() calls
     const report = endOfDay(this.state);
+
+    // Show recipe-unlock toasts for any newly unlocked recipes.
+    const RECIPE_LABELS: Record<RecipeId, string> = {
+      classic_salted: "Classic Salted",
+      honey_cinnamon: "Honey Cinnamon",
+      ghost_pepper:   "Ghost Pepper",
+    };
+    const RECIPE_TIPS: Record<RecipeId, string> = {
+      classic_salted: "",
+      honey_cinnamon: "Higher COGS, higher ceiling — try it.",
+      ghost_pepper:   "Spicy niche: fewer buyers, big margin.",
+    };
+    for (const recipeId of this.state.recipesUnlocked) {
+      if (!unlockedBefore.has(recipeId)) {
+        this.time.delayedCall(300, () => {
+          this.showToast(
+            `New recipe unlocked: ${RECIPE_LABELS[recipeId as RecipeId]}! ${RECIPE_TIPS[recipeId as RecipeId]}`
+          );
+        });
+      }
+    }
+
     this.showDayReport(report);
   }
 
   private showDayReport(r: DayReport): void {
     const W = this.scale.width;
     const H = this.scale.height;
-    const rW = 300, rH = 224; // +14px for F1 "Cash spent on production" row
+    const rW = 300;
+    // +14px for F1 "Cash spent on production" row; +14px more when offline row present (spec §6)
+    const rH = 224 + (r.offlineEarned > 0 ? 14 : 0);
     const rX = (W - rW) / 2;
     const rY = (H - rH) / 2;
 
@@ -788,6 +1250,10 @@ export class GameScene extends Phaser.Scene {
       // F1: separate cash-flow lesson line — production outflow vs. recognized COGS
       [`Cash spent on production today:`, `–$${r.cashSpentOnProduction.toFixed(2)}`, TEXT_STYLE_RED],
       [`Fixed Costs  (permit + fuel):`, `–$${r.fixedCosts.toFixed(2)}`, TEXT_STYLE_RED],
+      // F13 fix: offline earnings shown as a distinct positive line (spec §6 / DARK_PATTERN_GATE Q8)
+      ...(r.offlineEarned > 0
+        ? [[`Offline rest earnings:`, `+$${r.offlineEarned.toFixed(2)}`, TEXT_STYLE_GREEN] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
+        : []),
       [`Net Profit:`, `$${r.net.toFixed(2)}`, r.net >= 0 ? TEXT_STYLE_GREEN : TEXT_STYLE_RED],
     ];
 
@@ -839,7 +1305,19 @@ export class GameScene extends Phaser.Scene {
       this.reportGroup = undefined;
     }
     this.reportOpen = false;
+    // Save after report is dismissed — state is fully consistent post-endOfDay (spec §3)
+    this.saveGame();
     this.updateHUD();
+  }
+
+  /** Persist current state to storage. Called at safe save points only (never mid-tick). */
+  private saveGame(): void {
+    // W8: fire one-time non-blaming toast on first save failure.
+    const onFail = this.saveFailed ? undefined : () => {
+      this.saveFailed = true;
+      this.showToast("Heads up — saving isn't working on this device; progress lasts this session only.");
+    };
+    trySave(this.storage, this.state, this.playtimeSeconds, onFail);
   }
 
   // ---------------------------------------------------------------------------
@@ -1009,5 +1487,215 @@ export class GameScene extends Phaser.Scene {
     if (b.customerLine.active) b.customerLine.destroy();
     if (b.ownerLine.active)    b.ownerLine.destroy();
     this.gagBubble = undefined;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phaser scene lifecycle — teardown
+  // ---------------------------------------------------------------------------
+
+  shutdown(): void {
+    // Remove DOM listeners added in create() — prevents leaks if scene restarts.
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    window.removeEventListener("pagehide", this.onPageHide);
+    // Clean up any active tutorial bubble
+    this.dismissTutorial();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reset Save — player-initiated with confirmation (spec req; gate-compliant §B.3)
+  // ---------------------------------------------------------------------------
+
+  private showResetConfirm(): void {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const mW = 240, mH = 80;
+    const mX = (W - mW) / 2;
+    const mY = (H - mH) / 2;
+
+    const group = this.add.group();
+
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.5)
+      .setInteractive();
+    group.add(backdrop);
+
+    const panel = this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG)
+      .setStrokeStyle(2, P.PANEL_BORDER);
+    group.add(panel);
+
+    group.add(this.add.text(mX + mW / 2, mY + 10, "Reset save?", TEXT_STYLE_HEADER).setOrigin(0.5, 0));
+    group.add(this.add.text(mX + mW / 2, mY + 28, "This wipes all progress and starts fresh.", {
+      ...TEXT_STYLE_LABEL, wordWrap: { width: mW - 16 },
+    }).setOrigin(0.5, 0));
+
+    const cancelBtn = this.add.rectangle(mX + 70, mY + mH - 14, 100, 18, 0x999977)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    group.add(cancelBtn);
+    group.add(this.add.text(mX + 70, mY + mH - 14, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5));
+    cancelBtn.on("pointerdown", () => { group.destroy(true); });
+
+    const confirmBtn = this.add.rectangle(mX + 184, mY + mH - 14, 96, 18, P.WARNING_RED)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    group.add(confirmBtn);
+    group.add(this.add.text(mX + 184, mY + mH - 14, "YES, RESET", { fontSize: "9px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    confirmBtn.on("pointerdown", () => {
+      group.destroy(true);
+      resetSave(this.storage);
+      // Also clear tutorial-seen (W9: same storage, so tutorial re-shows after any reset)
+      this.storage.removeItem(this.TUTORIAL_KEY);
+      this.state = createState(1);
+      this.playtimeSeconds = 0;
+      this.tutorialStep = -1; // reset tutorial tracking
+      this.showToast("Save reset — starting fresh.");
+      this.updateHUD();
+      // Show tutorial step 0 after reset
+      this.time.delayedCall(600, () => this.showTutorialStep(0));
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // First-run tutorial (Wave 3)
+  //
+  // Three dismissible speech-bubble steps; Legsy as guide.
+  // Never blocks input. Gate-compliant: no nagging repeats (DARK_PATTERN_GATE A.6).
+  // Steps fire only when tutorialStep >= 0 (set on fresh start only).
+  // Each step can be dismissed by clicking its "skip" area or by performing
+  // the associated action (advanceTutorialOnAction).
+  // State persisted in `dmn_tutorial_seen` key after step 2 completes.
+  // ---------------------------------------------------------------------------
+
+  private showTutorialStep(step: number): void {
+    if (this.tutorialStep === -2) return; // permanently done
+    this.dismissTutorial();
+
+    this.tutorialStep = step;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+
+    // Step definitions: message, point-at hint (x,y), arrow direction
+    type StepDef = { msg: string; hintX: number; hintY: number };
+    const steps: StepDef[] = [
+      {
+        msg: "Buy raw peanuts\nto get started! →",
+        hintX: this.buyBtnRef ? this.buyBtnRef.x : W - 100,
+        hintY: this.buyBtnRef ? this.buyBtnRef.y - 30 : H * 0.55,
+      },
+      {
+        msg: "Start a roast!\nTap an empty slot. →",
+        hintX: 90,
+        hintY: 55,
+      },
+      {
+        msg: "Watch the report\ntonight — that's where\nthe real lesson is!",
+        hintX: W - 60,
+        hintY: H - 38,
+      },
+    ];
+
+    if (step >= steps.length) {
+      this.markTutorialDone();
+      return;
+    }
+
+    const def = steps[step];
+    const bubbleW = 180;
+    const bubbleH = 54;
+
+    // Bubble position: bottom-centre of screen, slightly left
+    const bX = W / 2 - bubbleW / 2;
+    const bY = H * 0.62;
+
+    this.tutorialGroup = this.add.group();
+
+    // --- Legsy guide icon in bubble ---
+    const legsyParts = drawLegsy(this, bX + 16, bY + bubbleH - 4, 0.45);
+    for (const p of legsyParts) this.tutorialGroup.add(p as Phaser.GameObjects.GameObject);
+
+    // --- Bubble background ---
+    const bg = this.add.rectangle(
+      bX + bubbleW / 2, bY + bubbleH / 2,
+      bubbleW, bubbleH,
+      P.PANEL_BG,
+    ).setStrokeStyle(2, P.PANEL_BORDER).setAlpha(0.97);
+    this.tutorialGroup.add(bg);
+
+    // Arrow pointer toward target
+    const arrowX = def.hintX < W / 2 ? bX + 10 : bX + bubbleW - 10;
+    const arrowY = bY - 6;
+    const tail = this.add.triangle(
+      arrowX, arrowY,
+      -6, 0, 6, 0, 0, -10,
+      P.PANEL_BORDER,
+    );
+    this.tutorialGroup.add(tail);
+
+    // Step counter label
+    this.tutorialGroup.add(
+      this.add.text(bX + 30, bY + 4, `(${step + 1}/3)`, {
+        fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+      })
+    );
+
+    // Message text
+    const txt = this.add.text(bX + 30, bY + 14, def.msg, {
+      fontSize: "7px", color: "#2C2416", fontFamily: "monospace",
+      wordWrap: { width: bubbleW - 36 },
+    });
+    this.tutorialGroup.add(txt);
+
+    // Tap-to-skip label
+    const skipTxt = this.add.text(bX + bubbleW - 4, bY + bubbleH - 8, "[tap to skip]", {
+      fontSize: "5px", color: "#8B6F47", fontFamily: "monospace",
+    }).setOrigin(1, 0);
+    this.tutorialGroup.add(skipTxt);
+
+    // Invisible overlay for tap-to-skip (entire bubble is tappable)
+    const skipHit = this.add.rectangle(
+      bX + bubbleW / 2, bY + bubbleH / 2,
+      bubbleW, bubbleH,
+      0x000000, 0,
+    ).setInteractive({ cursor: "pointer" });
+    this.tutorialGroup.add(skipHit);
+    skipHit.on("pointerdown", () => {
+      // Skip to next step
+      this.advanceTutorialOnAction(this.tutorialStep);
+    });
+  }
+
+  /**
+   * If the tutorial is currently on `requiredStep`, advance to the next step
+   * (or finish if on the last step).  Called from action handlers.
+   */
+  private advanceTutorialOnAction(requiredStep: number): void {
+    if (this.tutorialStep !== requiredStep) return;
+
+    const nextStep = requiredStep + 1;
+    const TOTAL_STEPS = 3;
+
+    if (nextStep >= TOTAL_STEPS) {
+      this.markTutorialDone();
+    } else {
+      // Short delay before showing next bubble so the action's own UI appears first
+      this.time.delayedCall(300, () => this.showTutorialStep(nextStep));
+    }
+  }
+
+  private markTutorialDone(): void {
+    this.tutorialStep = -2; // sentinel: permanently done this session
+    this.dismissTutorial();
+    // W10: wrap in try/catch; storage may throw if blocked.
+    // safeStorage() normally handles this, but the in-memory fallback can't
+    // persist across sessions anyway — the try/catch prevents triggerEndOfDay
+    // from wedging if reportOpen is set before this line runs.
+    try { this.storage.setItem(this.TUTORIAL_KEY, "1"); } catch { /* best-effort */ }
+  }
+
+  private dismissTutorial(): void {
+    if (this.tutorialGroup) {
+      this.tutorialGroup.destroy(true);
+      this.tutorialGroup = undefined;
+    }
   }
 }

@@ -221,3 +221,100 @@ The game teaches *principles*; real businesses require *professional guidance*.
 ---
 
 **Questions or feedback?** This guide can be improved. Reach out if a concept wasn't clear, a discussion prompt fell flat, or your students discovered a surprising angle we missed.
+
+---
+
+## Classroom Pilot Checklist
+
+Use this checklist to prepare and run a classroom session. All steps are **practical and minimal**—nothing complex.
+
+### Before Class (10 min setup)
+
+**Environment & Tech:**
+- [ ] Load the game once on your teaching device with a stable wifi connection. Verify it loads to the main screen.
+- [ ] Close all other tabs and background apps. Clear browser cache if you suspect stale assets.
+- [ ] **Offline readiness:** Turn off wifi/unplug ethernet. Verify the game still runs (no network errors, no blank screen). Re-enable connection.
+- [ ] Projector/screen: Load the game full-screen. Check readability at the distance your students sit. The UI is 480×270 (4:3 native); if pixelated on modern projectors, that's OK—it's intentional art style.
+- [ ] Test audio off (mute): Most classrooms won't play sound. Game is fully playable silent (all info is on-screen).
+
+**Decide on Grouping:**
+- [ ] **Solo play (one per device):** Each student gets a device. Works if 1:1 laptops available. Fastest decision-making, but no peer discussion during play.
+- [ ] **Pair play (two per device, better default):** One student drives (mouse/keyboard), one navigates (reads UI, suggests next move). Rotate roles at Day 5 checkpoint. Builds communication; forces articulation of why decisions matter.
+- [ ] **Trio (three per device, if devices scarce):** Driver, Accountant (takes notes: costs, cash, profit), Strategist (suggests location/price). Most collaborative; slowest individual pace.
+
+**Optional Prep:**
+- [ ] Print or display the "Concept" table (from "What the Game Teaches" section above). Assign 2–3 concepts your class will focus on.
+- [ ] If students have laptops, have them open the **End-of-Day Report** template below (optional note-taking):
+  ```
+  Day ___
+  Location: ________
+  Lbs roasted: ____ Lbs sold: ____
+  Sell price: $___/lb   Revenue: $_____
+  COGS: $____    Gross profit: $_____
+  Cash at end of day: $_____
+  One decision I made: ________________
+  Why: __________________________
+  ```
+
+---
+
+### During Class (40–50 min play + debrief)
+
+**Intro (3–5 min):**
+- Display the game screen. Say: **"You inherit a peanut truck. You have $50 and 20 lbs of raw peanuts. You work from 6am–8pm. What's the first thing you do?"** Let students shout out ideas (roast? Price? Buy more peanuts?). Briefly explain: the goal is to survive and grow, but there's no failure state—if you run low on cash, the game gives you a rescue arc.
+
+**Play Phase 1: Days 1–5 (15–20 min)**
+- Students play at their own pace. Circulate and watch for confusion:
+  - **If stuck on pricing:** Remind them: "Higher price = fewer sales but more margin. Lower price = more sales but tight margin. Try $1.50 and see what happens."
+  - **If confused by demand:** Point to the demand formula in the UI (if visible) or simplify: "The more you charge, the fewer people buy. It's real economics."
+  - **If hoarding cash:** Gently nudge: "You're not roasting anything. Why? Do you think prices will spike? Will demand disappear?"
+
+**Checkpoint at Day 5 (2 min):**
+- Pause the class. Ask: **"What's your current cash? Did you roast? What price did you pick?"** Quick poll. No judgment—just surface the variety of strategies already visible.
+
+**Timing note:** A full in-game day ≈ 14 real minutes (SIM_TIME_SCALE=60; 14 sim-hours × 60 real-seconds each = 840 real seconds). For multi-day exercises, have students use the **END DAY** button deliberately rather than waiting for the clock to fill.
+
+**Play Phase 2: Days 6–10 (15–20 min)**
+- Resume play. Watch for the Legume Gag (should trigger 3–5 times by Day 10, depending on sales volume). When it happens, point it out: **"That's the running joke of the game. Every few sales, a customer reminds you peanuts are legumes. Keep track—it's a mechanic."**
+- If a student runs low on cash (<$25 end-of-day, planned UI), the rescue arc flag is set — no rescue screen appears in the P1 build. **(rescue-arc walkthrough is planned, not yet in P1 build)**
+
+**Final Debrief (10–15 min, whole class):**
+- **Ask (cold call or volunteers):**
+  1. "How much cash do you have now? How much did you spend on what?"
+  2. "What surprised you about pricing or demand?"
+  3. "If you played Day 11, what would you do differently?"
+  4. "Why does the game make you wait for your roasted peanuts instead of selling them instantly?"
+- **Wrap:** "Profitability isn't just selling a lot—it's managing costs and choosing the right price. You just did that."
+
+---
+
+### After Class (Collection & Reflection)
+
+**What to Collect (no screenshots, no accounts):**
+- Ask students to report **verbally or on a whiteboard:**
+  - Their **end-of-day cash** on Day 10.
+  - Their **chosen sell price** (and if they changed it during the game, why).
+  - One **business decision** they made and the outcome (e.g., "I roasted bigger batches because I thought it'd be faster. It wasn't.").
+- **Optional written reflection (1 paragraph, ~3 min):** "What was one decision you made in the game? What would you do differently if you played again?"
+- **NO screenshot requirement.** NO account login needed. NO data export. Just verbal/written responses.
+
+**What NOT to collect:**
+- Game sessions are fully local. Do not ask students to save or upload game files.
+- Do not require account creation or email submission (game doesn't support this anyway).
+- Do not capture gameplay video or analytics.
+
+---
+
+### IT Verification (Optional, for IT/network admins)
+
+**To confirm the game has zero network traffic after load:**
+1. Load the game in a browser on a school device.
+2. Open **Developer Tools** (F12 or right-click → Inspect).
+3. Go to **Network** tab.
+4. Play the game for 2–3 days. Make a sale, roast a batch, change prices.
+5. Expected result: **No new network requests appear** in the Network tab. (You may see one initial page load; everything after that is local computation.)
+6. If a network request appears during gameplay, **do not proceed**—report to the dev team.
+
+This confirms: the game is **fully offline-capable** after the initial load. No student data is transmitted. No tracking. No external calls.
+
+---

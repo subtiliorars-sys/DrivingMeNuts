@@ -100,12 +100,12 @@ These mechanics have a place in an idle game and teach real concepts, but requir
 ---
 
 ### 2. Offline Soft-Cap (Framed as Truck Rest)
-**What it is:** When the player closes the game, the truck continues earning at a reduced rate (e.g., 20% of peak on-game rate, capped at $100/min offline). Earnings accrue for up to 24 hours, then stop. (GDD C5 specifies this.)
+**What it is:** When the player closes the game, the truck continues earning at a reduced rate (e.g., 20% of peak on-game rate, capped at $100/hour offline — OWNER-RATIFIED 2026-06-07). Earnings accrue for up to 24 hours, then stop. (GDD C5 specifies this.)
 
 **Why it's allowed:** It rewards engagement without punishing offline time. It acknowledges that some players want a small "always running" passive income. The soft-cap prevents AFK botting. 24-hour limit teaches: *infinite* passive income is not sustainable.
 
 **Guardrails:**
-- Soft-cap is *soft*, not a harsh cliff. If peak on-game rate is $500/min, offline rate is ~$100/min. There's no shame in the reduction; it's presented as "truck at rest works slower."
+- Soft-cap is *soft*, not a harsh cliff. The offline rate is 20% of peak, never exceeding $100/hour. There's no shame in the reduction; it's presented as "truck at rest works slower."
 - Framing: "The truck earned $40 while resting. Stock depleted 5% due to slow spoilage." NOT "You lost $460 by not logging in."
 - 24-hour offline cutoff is non-negotiable. After 24 hours offline, *no earnings accrue further*. This prevents true AFK botting and teaches time-value.
 - No daily bonus for logging in. (Daily bonus = streak-pressure.) Offline earnings are not tied to a login calendar.
@@ -151,7 +151,7 @@ These mechanics have a place in an idle game and teach real concepts, but requir
 
 8. **Loss-Framing Test:** When a player returns after offline time, does the UI/NPC dialogue frame offline earnings as a positive gain ("Truck earned $40 while resting"), not a loss ("You left $500 on the table")? (Cite: A.8) → **YES** or **NO** (fail).
 
-9. **Offline Soft-Cap Guardrail:** Is the offline-earnings rate 20% of peak or less, capped at $100/min, with a 24-hour cutoff? (Cite: B.2) → **YES** or **NO** (fail).
+9. **Offline Soft-Cap Guardrail:** Is the offline-earnings rate 20% of peak or less, capped at $100/hour (owner-ratified 2026-06-07), with a 24-hour cutoff? (Cite: B.2) → **YES** or **NO** (fail).
 
 10. **Prestige Design Test:** If a prestige/franchise reset exists, is it *player-initiated* (menu option, not auto-triggered), and is the carry-over + reset clearly communicated *before* the player commits? (Cite: B.3) → **YES** or **NO** (fail).
 
