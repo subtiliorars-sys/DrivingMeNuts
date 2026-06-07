@@ -483,6 +483,12 @@ export function startRoast(
   // Deduct raw stock and ingredient costs immediately (cash outflow at production).
   // F1: cash-flow lesson — production spend is tracked in cashSpentOnProduction;
   // COGS is recognized in dayStats.cogsTotal only when units are SOLD (in tick).
+  // NOTE (RT6-1 follow-up): cashSpentOnProduction uses STANDARD cost
+  // (cogsPerLb = base price + ingredient), not the discounted rawCostBasisPerLb.
+  // This is an intentional simplification of the P1 cash-flow line — it shows
+  // "production cost incurred" at standard cost. The discount IS reflected
+  // correctly in COGS-at-sale (via roastedCostBasisPerLb). Reconciling the two
+  // is a P2 dual-ledger item (docs/BOOKKEEPING.md §4), not a bug.
   state.rawStockLbs -= batchLbs;
   state.cash -= ingredientCost;
   state.dayStats.cashSpentOnProduction += cogsPerLb(recipe) * batchLbs;

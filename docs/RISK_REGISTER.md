@@ -86,3 +86,29 @@ Re-review this register when:
 Each is an explicit Owner Decision per CRIT-1 mitigation; none ship without owner approval and legal/privacy review first.
 
 **Verdict:** Tier A retained. No governance re-tier required. CRIT-1 remains a standing alert; any data-touching feature re-evaluates this register before implementation.
+
+---
+
+## Standing-trigger review 2026-06-07 — waves 5–7 (ledger, comebacks, brand campaign, rescue aftermath, achievements, supplier relationship)
+
+**Triggers checked:** #4 "Any feature that touches player data" (the save schema grew) and #6/A4 "dark-pattern check" (idle/retention mechanics were added).
+
+**What shipped (waves 5–6, PRs #7/#8):**
+- *Ledger v1 + balance sheet + weekly recap* — derived from local save state; no new collection surface.
+- *Comeback Lines, brand campaign, rescue aftermath beats* — content/economy; persisted locally (schema v4).
+- *Achievements* — milestone ids persisted locally; **no mechanical reward** (markers only).
+- *Supplier relationship* — economy discount; persisted as a cumulative-lbs counter.
+- New save fields: ledger rows, comebackTier, brandCampaignActive, aftermathSeen/pendingAftermath, achievementsUnlocked, supplierLbsPurchased, rawCostBasisPerLb. All local, all game-state, **no PII**.
+
+**CRIT-1 (player data) — Tier A retained.** The save grew but the posture is unchanged: localStorage-only, no network egress, no telemetry, no accounts, no educator export, no leaderboard. Red-team greps of `src/` across both waves confirmed no new egress/analytics. The save still contains only game state (now with a P&L ledger and milestone ids — still no names/emails/identifiers). None of the five CRIT-1 re-trigger conditions (cloud sync, telemetry, educator export, leaderboards, analytics) shipped.
+
+**A4 (dark-pattern drift) — clean.** Each retention-adjacent mechanic was checked against the mechanic blacklist:
+- *Weekly recap* — factual totals only; no streaks, no "don't break it", no countdown.
+- *Achievements* — grant **no in-game bonus** (verified by test: earning all of them mutates no cash/stock/price); goals panel carries an explicit "they grant no in-game boost" footnote. No "complete to unlock power" pressure.
+- *Brand campaign* — one-time, permanent, **no timer/expiry/FOMO**; the unlock waits forever once earned.
+- *Comeback unlocks / supplier level-ups* — earned, celebratory, factual; no pressure framing.
+- *Offline cap* unchanged ($100/hr, non-punitive). Rescue aftermath is closure-only; **re-entry escalation remains owner-gated (RT-1)**.
+
+**A2 (business accuracy) — hardened this wave.** RT6-1 fixed a "simplified but never wrong" violation (discounts were creating phantom balance-sheet equity); inventory is now valued at actual cost and discounts flow to COGS at sale. The cash-flow `cashSpentOnProduction` line intentionally stays at standard cost (documented in BOOKKEEPING.md §4 as a P2 dual-ledger reconciliation item, not an error). **SME walk of the 93-claim pack remains owner-gated — no claim is marked verified here.**
+
+**Verdict:** Tier A retained; no governance re-tier. Dark-pattern gate passed for all waves-5/6 mechanics. CRIT-1 re-trigger conditions remain the tripwire for any future data-collection feature.
