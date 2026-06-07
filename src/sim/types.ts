@@ -44,6 +44,15 @@ export interface SimState {
   // ---- Economy --------------------------------------------------------
   cash: number;                 // current cash on hand ($); never < 0
   rawStockLbs: number;          // lbs of raw peanuts in inventory
+  /**
+   * Weighted-average price ACTUALLY PAID per lb of current raw stock ($).
+   * Bulk + supplier discounts lower it; it flows into the roasted cost basis at
+   * roast time so a discount is realized as lower COGS / higher margin AT SALE
+   * (RT6-1 fix) — not as phantom equity at purchase. Starting/legacy stock is
+   * valued at RAW_PEANUT_BASE_PRICE (the honest default). Additive-optional in
+   * the save (absent → base price), so it needs no schema bump.
+   */
+  rawCostBasisPerLb: number;
   roastedStockLbs: number;      // lbs of roasted peanuts ready to sell
   /** Weighted-average COGS per lb of current roasted stock (for COGS-at-sale). */
   roastedCostBasisPerLb: number;
@@ -169,6 +178,23 @@ export interface SimState {
    * only durable record of a pending beat. Drained one-at-a-time by the scene.
    */
   pendingAftermath: string[];
+
+  // ---- Achievements (wave 6 — additive-optional, no schema bump) --------
+  /**
+   * Ids of achievements earned so far (data/achievements.ts). Recorded by
+   * checkAchievements(); already-earned ones are derived silently on load.
+   * Additive-optional: absent on v4 saves → [] (then re-derived, no toasts).
+   */
+  achievementsUnlocked: string[];
+
+  // ---- Supplier relationship (wave 6 — GDD C4) --------------------------
+  /**
+   * Cumulative raw lbs ordered across the whole game. Drives the supplier
+   * relationship level (economy.ts supplierLevelFor). Additive-optional:
+   * absent on v4 saves → 0 (relationship starts fresh, which is honest —
+   * pre-wave-6 saves never tracked this).
+   */
+  supplierLbsPurchased: number;
 
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
@@ -331,6 +357,11 @@ export interface DayReport {
    * Factual totals only (DARK_PATTERN_GATE-compliant — no streak framing).
    */
   weekRecap: WeekRecap | null;
+  /**
+   * Wave 6: achievements newly earned as of this day's close. Empty when none.
+   * Consumed by the scene for one-time unlock toasts.
+   */
+  achievementEvents: SimEvent[];
 }
 
 // ---------------------------------------------------------------------------
@@ -357,7 +388,10 @@ export type SimEventKind =
   | "preorder_partial"
   // Ledger/lore wave: comeback unlocks + one-time rescue aftermath beats
   | "comeback_unlocked"
-  | "debt_aftermath";
+  | "debt_aftermath"
+  // Wave 6: achievement earned. (Supplier level-ups ride on supply_purchased's
+  // detail.supplierLevelUp — no separate event kind.)
+  | "achievement_unlocked";
   // NOTE W15: "recipe_unlocked" SimEvent was specced in RECIPE_BATCH_UI.md §3e but
   // never emitted from endOfDay(). GameScene detects new unlocks via Set-diff
   // (unlockedBefore snapshot vs post-endOfDay state.recipesUnlocked) — that is

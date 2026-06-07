@@ -22,7 +22,11 @@ Simplification ledger (A2 "simplified but never wrong"):
   repayment as debt service for clarity. The split (principal vs interest
   expense) is the headline upgrade for the P2 dual-ledger. Flagged, not wrong:
   the curriculum can call this out explicitly.
-- Inventory valuation is average-cost (matches the engine's cost-basis model).
+- Inventory valuation is weighted-average actual cost. Raw stock carries
+  `rawCostBasisPerLb` = the price actually paid (bulk + supplier discounts lower
+  it); that basis flows into the roasted cost basis at roast, so a discount is
+  realized as **lower COGS / higher margin at sale**, never as equity created at
+  purchase (RT6-1). Buying inventory is equity-neutral (cash down = inventory up).
 - No depreciation; roaster/slot purchases are expensed implicitly via cash.
   P2 dual-ledger candidate: capitalize upgrades + simple straight-line.
 

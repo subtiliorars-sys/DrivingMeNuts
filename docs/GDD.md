@@ -143,6 +143,12 @@ Upgrades are purchased with in-game earnings and compound over time. They map to
 | **Marketing campaign** | General / Premium / Loyalty | $5k / $12k / $8k | +% sales boost for 14 days; premium version unlocks new customer demos | Customer acquisition costs |
 | **Supplier relationship** | Level 1 → 3 | $1k (time) | Unlock supply discounts (–3%, –8%, –15%); at level 3, supplier offers free emergency small batches if you go low on stock | Working capital, relationships |
 
+> **Live source (P1, wave 6):** supplier discount implemented in `src/data/economy.ts`
+> (`SUPPLIER_LEVEL_THRESHOLDS` / `SUPPLIER_LEVEL_DISCOUNT`, applied in `buyRaw`). The
+> "cost" is **time/volume**, not a $1k lump — the level rises with cumulative lbs ordered
+> (500 / 2,000 / 6,000). Discount stacks multiplicatively with the bulk discount. The
+> "free emergency small batch at level 3" perk is deferred (P2 — needs a low-stock trigger).
+
 ### C5. Offline Earnings & Soft Cap
 
 When the player closes the game, the truck continues earning **passively** at a reduced rate:
@@ -277,6 +283,12 @@ Key insight:
 ---
 
 ## F. Win & Fail States
+
+> **Live source (P1, wave 6):** the P1-reachable win-states (revenue $100k, lore mastery
+> 40/40, comeback mastery, brand launch, survived-debt, etc.) are surfaced as **achievements**
+> in `src/data/achievements.ts` (predicates over SimState; GOALS panel). District/franchise
+> win-states (#1/#2/#4) are P2+ and intentionally absent. Achievements are progress markers
+> with **no mechanical reward** (kept off the dark-pattern surface, RISK_REGISTER A4).
 
 ### Win States (Plurality)
 1. **Act III completion:** Defeat the corporate threat, unlock Franchise mode.

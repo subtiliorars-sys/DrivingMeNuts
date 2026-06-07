@@ -16,11 +16,12 @@
  */
 
 import type { SimState, RescueDebt, PreorderObligation, LedgerEntry } from "./types.js";
-import { createState, applyOffline } from "./engine.js";
-import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS } from "../data/economy.js";
+import { createState, applyOffline, checkAchievements } from "./engine.js";
+import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS, RAW_PEANUT_BASE_PRICE } from "../data/economy.js";
 import type { RecipeId, RoasterTier } from "../data/economy.js";
 import { RECIPES, ROASTER_EFFICIENCY } from "../data/economy.js";
 import { comebackTierFor, COMEBACK_TIERS } from "../data/comebacks.js";
+import { ACHIEVEMENT_BY_ID } from "../data/achievements.js";
 
 // ---------------------------------------------------------------------------
 // Public constants
@@ -125,6 +126,12 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   aftermathSeen?: string[];
   /** Schema v4: aftermath beats queued but not yet displayed (RT5-1). */
   pendingAftermath?: string[];
+  /** Wave 6 (additive-optional): achievement ids earned. Absent → derived on load. */
+  achievementsUnlocked?: string[];
+  /** Wave 6 (additive-optional): cumulative raw lbs ordered. Absent → 0. */
+  supplierLbsPurchased?: number;
+  /** RT6-1 (additive-optional): weighted-avg price paid per lb of raw stock. Absent → base price. */
+  rawCostBasisPerLb?: number;
 };
 
 interface SaveMeta {
@@ -387,6 +394,30 @@ function sanityCheck(env: SaveEnvelope): string | null {
     }
   }
 
+  // Wave 6: achievementsUnlocked must be an array of strings when present.
+  if (ss.achievementsUnlocked !== undefined) {
+    if (!Array.isArray(ss.achievementsUnlocked))
+      return `achievementsUnlocked must be an array`;
+    for (const a of ss.achievementsUnlocked) {
+      if (typeof a !== "string")
+        return `achievementsUnlocked entry invalid: ${String(a)}`;
+    }
+  }
+
+  // Wave 6: supplierLbsPurchased must be a finite, non-negative, bounded number.
+  if (ss.supplierLbsPurchased !== undefined) {
+    if (!Number.isFinite(ss.supplierLbsPurchased) || ss.supplierLbsPurchased < 0 || ss.supplierLbsPurchased > 1e12)
+      return `supplierLbsPurchased invalid: ${ss.supplierLbsPurchased}`;
+  }
+
+  // RT6-1: rawCostBasisPerLb must be finite, non-negative, and not above the
+  // undiscounted base price (a discount can only LOWER it; a higher value would
+  // be a crafted save trying to inflate inventory valuation / phantom equity).
+  if (ss.rawCostBasisPerLb !== undefined) {
+    if (!Number.isFinite(ss.rawCostBasisPerLb) || ss.rawCostBasisPerLb < 0 || ss.rawCostBasisPerLb > RAW_PEANUT_BASE_PRICE + 1e-9)
+      return `rawCostBasisPerLb invalid: ${ss.rawCostBasisPerLb}`;
+  }
+
   return null;
 }
 
@@ -558,9 +589,30 @@ export function deserialize(json: string): SimState {
     ? ss.pendingAftermath.filter((p): p is string => typeof p === "string" && VALID_AFTERMATH_PATHS.has(p) && aftermathSeenSet.has(p))
     : [];
 
+  // Wave 6: revive achievements (drop unknown ids + dedupe defensively, RT6-3)
+  // and the supplier counter.
+  const achievementsUnlocked: string[] = Array.isArray(ss.achievementsUnlocked)
+    ? [...new Set(ss.achievementsUnlocked.filter((a): a is string => typeof a === "string" && ACHIEVEMENT_BY_ID[a] !== undefined))]
+    : [];
+  const supplierLbsPurchased =
+    typeof ss.supplierLbsPurchased === "number" && Number.isFinite(ss.supplierLbsPurchased) && ss.supplierLbsPurchased >= 0
+      ? ss.supplierLbsPurchased
+      : 0;
+
+  // RT6-1: revive the raw cost basis; default to base price when absent
+  // (legacy/v4 saves never tracked it — base price is the honest valuation
+  // for stock bought before discounts were carried through inventory).
+  const rawCostBasisPerLb =
+    typeof (sim as SerializedSimState).rawCostBasisPerLb === "number"
+      && Number.isFinite((sim as SerializedSimState).rawCostBasisPerLb)
+      && (sim as SerializedSimState).rawCostBasisPerLb! >= 0
+      ? (sim as SerializedSimState).rawCostBasisPerLb!
+      : RAW_PEANUT_BASE_PRICE;
+
   const state: SimState = {
     cash: sim.cash,
     rawStockLbs: sim.rawStockLbs,
+    rawCostBasisPerLb,
     roastedStockLbs: sim.roastedStockLbs,
     roastedCostBasisPerLb: sim.roastedCostBasisPerLb,
     roastedDemandMultBlended,
@@ -591,8 +643,15 @@ export function deserialize(json: string): SimState {
     brandCampaignActive,
     aftermathSeen,
     pendingAftermath,
+    achievementsUnlocked,
+    supplierLbsPurchased,
     rngState: sim.rngState,
   };
+
+  // Wave 6: derive any achievements the player already earned in a prior
+  // session SILENTLY (no toast burst) — mirrors comebackTier derivation. This
+  // also back-fills v4 (and earlier) saves that never tracked achievements.
+  checkAchievements(state, true);
 
   return state;
 }
