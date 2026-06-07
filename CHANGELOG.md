@@ -6,6 +6,9 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Consolidation — multi-day invariant soak test (no new scope)
+- `src/sim/invariant_soak.test.ts`: a deterministic 30-day playthrough (buy/roast/sell/price-sweep/upgrade + a forced rescue crunch) asserting the core invariants hold after **every** day — cash ≥ 0 & finite, no NaN/Infinity anywhere, ledger P&L identity (`net = revenue − cogs − fixed + offline`), `lifetimeEarned` monotonic, balance-sheet identity (`equity = assets − liabilities`, inventories ≥ 0), and rescue-line consistency (debts finite, `rescueMode` matches outstanding lines). Plus a mid-soak save/load round-trip and a pathological all-mispriced run. Safety net for the now-intricate merged economy (ledger + supplier + brand + rescue escalation + preorder-default). Test-only; 350 unit + 5 boot green.
+
 ### Added — milestone celebration juice (stacks on Polish & Pedagogy)
 - **Celebration overlay** for earned moments — the first achievement of a day and each comeback-tier unlock get a brief, non-blocking banner with a confetti burst (scale-pop in, auto-dismiss). Never gates input, never pauses the sim, no countdown/pressure (DARK_PATTERN_GATE-clean).
 - **Respects reduced motion** (from the accessibility wave): static banner, no particle burst, no scale-pop when reduced-motion is on. UI-only — no sim/economy/persistence changes. 348 unit + 5 boot green.
