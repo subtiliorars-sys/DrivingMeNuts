@@ -1,5 +1,9 @@
 # Driving Me Nuts — HQ (private)
 
+> **New here / coming back? → see [`START_HERE.md`](START_HERE.md).**
+> TL;DR: `npm start` plays the game (auto-opens your browser); or open Claude Code
+> here and say *"continue the peanut game."* No commands to memorize.
+
 Pixel-art RPG + idle game about running a roasted-peanut food truck called
 **Driving Me Nuts** — and a stealth small-business curriculum. The canon
 running gag: customers inform the owner that "peanuts aren't nuts, they're

@@ -2,6 +2,18 @@
 
 Repo-specifics only; unified doctrine cascades from `~/CLAUDE.md`.
 
+## ▶ RESUMING (read this first — the owner doesn't memorize commands)
+When the owner says anything like "continue / resume the peanut game" (or just opens
+this repo), self-orient and pick up — don't make them recall state or commands:
+1. Read your auto-memory `drivingmenuts-project.md` + `~/fleet/status/drivingmenuts.md`
+   for current version, what's done, and the **RESUME POINTER** (the agreed next step).
+2. `git checkout main && git pull --ff-only`; if you'll build, branch `work/<topic>`.
+3. The owner runs **no commands**. You run them. Plain-language aliases the owner may say:
+   - "play / run the game" → tell them `npm start` (auto-opens browser), or you launch it.
+   - "run the checks" → `npm run verify` (tsc + vitest + vite build); report pass/fail plainly.
+4. Workflow is **build → PR**; merging to main is the owner's call (offer, with option #1 =
+   your recommendation). Human-facing entry point is `START_HERE.md` at the repo root.
+
 ## What this repo is
 Private HQ for **Driving Me Nuts**: pixel-art RPG + idle game about a roasted-peanut
 food truck that teaches real small-business concepts. Public twin =
