@@ -6,6 +6,9 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added — larger-text accessibility (pragmatic, overflow-free)
+- Settings shows a **"Bigger text? Use your browser zoom: Ctrl +/− (⌘ on Mac)"** hint — the FIT-scaled canvas means browser zoom enlarges everything uniformly with zero overflow (the standard web-game path; documented in the EDUCATOR_GUIDE). Bumped a few unambiguously-safe tiny labels 6px→7px (save-file header, the upgrades→settings pointer, the tutorial step counter). A built-in font-scale toggle is deferred to the P2 UI pass (the fixed pixel panels need flexible layout first; a blind 1.25× would overflow them). UI/docs-only; 374 unit + 5 boot green.
+
 ### Added — weather wired into demand (GDD C3; the foundation is now a real mechanic)
 - The weather calendar (shipped inert as v0.8.1) now **affects demand**: rainy −20% / hot-sunny +15%, multiplied into live demand in `tick()` alongside the weekday factor. The HUD day line shows today's weather **+ a 1-day forecast** (predictable, no FOMO — DARK_PATTERN_GATE-clean); the demand hint + roast-modal previews are weather-aware so they stay truthful.
 - **Non-breaking:** all prior tests stayed green — most are supply-bound (a 14h day clears its stock regardless of ±20% velocity), so weather changes *velocity*, not totals, when demand > supply. The §D2 walkthrough numbers assume clear weather (noted in the GDD). 6 new tests; 374 unit + 5 boot green.

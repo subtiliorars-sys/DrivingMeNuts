@@ -1511,7 +1511,7 @@ export class GameScene extends Phaser.Scene {
     // (Save Export/Import relocated to the Settings panel — declutters this modal.)
     this.upgradesModalGroup.add(this.add.text(mX + 6, rowY + 4,
       "Save export/import is now in ⚙ MENU › Settings.",
-      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace" }));
+      { fontSize: "7px", color: "#8B6F47", fontFamily: "monospace" }));
 
     // Close button at bottom
     const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
@@ -1797,7 +1797,7 @@ export class GameScene extends Phaser.Scene {
     this.settingsModalOpen = true;
 
     const W = this.scale.width, H = this.scale.height;
-    const mW = 300, mH = 230; // grown for the relocated Save Export/Import row
+    const mW = 300, mH = 248; // grown for Save I/O row + the browser-zoom hint
     const mX = (W - mW) / 2, mY = (H - mH) / 2;
 
     this.settingsModalGroup = this.add.group();
@@ -1850,6 +1850,13 @@ export class GameScene extends Phaser.Scene {
     glossBtn.on("pointerout",  () => glossBtn.setAlpha(1.0));
     y += 22;
 
+    // Larger text: the canvas is FIT-scaled, so browser zoom enlarges
+    // everything uniformly (the standard, overflow-free path on web).
+    this.settingsModalGroup.add(this.add.text(mX + 10, y,
+      "Bigger text? Use your browser zoom:  Ctrl + / Ctrl −  (⌘ on Mac).",
+      { ...TEXT_STYLE_LABEL, color: "#5A3A1A", wordWrap: { width: mW - 20 } }));
+    y += 14;
+
     // A2 accuracy disclaimer (brief; full text lives atop the glossary).
     this.settingsModalGroup.add(this.add.text(mX + 10, y,
       "This game simplifies real business — see the Glossary for details.",
@@ -1887,7 +1894,7 @@ export class GameScene extends Phaser.Scene {
   private addSaveIORow(group: Phaser.GameObjects.Group, mX: number, mW: number, rowY: number, onClose: () => void): void {
     group.add(this.add.rectangle(mX + mW / 2, rowY, mW - 8, 1, P.PANEL_BORDER));
     group.add(this.add.text(mX + 8, rowY + 4, "SAVE FILE (local, no server)",
-      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace" }));
+      { fontSize: "7px", color: "#8B6F47", fontFamily: "monospace" }));
     const by = rowY + 18;
 
     const exportBtn = this.add.rectangle(mX + 72, by, 116, 14, 0x445566)
@@ -3374,7 +3381,7 @@ export class GameScene extends Phaser.Scene {
     // Step counter label
     this.tutorialGroup.add(
       this.add.text(bX + 30, bY + 4, `(${step + 1}/3)`, {
-        fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+        fontSize: "7px", color: "#8B6F47", fontFamily: "monospace",
       })
     );
 
