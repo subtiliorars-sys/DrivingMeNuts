@@ -46,6 +46,8 @@ import {
   GAG_EVERY_N_LBS_SOLD,
   DAY_FACTOR,
   DAY_NAMES,
+  WEATHER_FACTOR,
+  weatherForDay,
   RESCUE_LOAN_PRINCIPAL,
   RESCUE_LOAN_FEE_RATE,
   RESCUE_LOAN_DUE_DAYS,
@@ -123,6 +125,15 @@ function cogsPerLb(recipe: RecipeId): number {
  * Demand curve's reference price, shifted upward when the brand campaign is
  * active (GDD B4: +5% price tolerance — customers accept a higher base price).
  */
+/**
+ * Weather demand multiplier for the state's current day (GDD C3).
+ * Pure (weatherForDay is a pure hash). Exported so the HUD can show today's
+ * weather + a 1-day forecast and the previews stay truthful.
+ */
+export function weatherFactorFor(state: SimState): number {
+  return WEATHER_FACTOR[weatherForDay(state.dayNumber, state.weatherSeed)];
+}
+
 function effectiveBasePrice(brandCampaignActive: boolean): number {
   return brandCampaignActive
     ? DEMAND_BASE_PRICE * (1 + BRAND_CAMPAIGN_PRICE_TOLERANCE)
@@ -141,11 +152,11 @@ function effectiveBasePrice(brandCampaignActive: boolean): number {
  * W4: tick() passes dayFactorFor(state.dayNumber) so weekday patterns apply.
  * Brand campaign: BASE_PRICE shifts up 5% when state.brandCampaignActive.
  */
-function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0, dayFactor = 1.0): number {
+function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0, dayFactor = 1.0, weatherFactor = 1.0): number {
   const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - effectiveBasePrice(state.brandCampaignActive));
   // ±10% jitter (two uniform samples averaged → triangular distribution)
   const jitter = ((nextRand(state) + nextRand(state)) / 2 - 0.5) * 0.20;
-  return clamp(base * (1 + jitter) * demandMult * dayFactor, 0, DEMAND_MAX_LBS_PER_HOUR);
+  return clamp(base * (1 + jitter) * demandMult * dayFactor * weatherFactor, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 /**
@@ -338,7 +349,7 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
     // Convert lbs/hour demand to lbs/second, then scale by dt.
     // W2: pass blended demand multiplier so mixed inventory sells at weighted velocity.
     // W4: apply day-of-week factor (visible/predictable; no FOMO framing).
-    const lbsPerSec = demandLbsPerHour(state.sellPrice, state, state.roastedDemandMultBlended, dayFactorFor(state.dayNumber)) / 3_600;
+    const lbsPerSec = demandLbsPerHour(state.sellPrice, state, state.roastedDemandMultBlended, dayFactorFor(state.dayNumber), weatherFactorFor(state)) / 3_600;
     const demandedLbs = lbsPerSec * dtSeconds;
     const soldLbs = Math.min(demandedLbs, state.roastedStockLbs);
 
@@ -1303,9 +1314,9 @@ export function optimumPrice(recipe: RecipeId, campaignActive = false): number {
  * Default recipe "classic_salted" preserves backward compat (mult = 1.0).
  * Brand campaign: pass campaignActive so the HUD hint matches live demand.
  */
-export function projectedDemand(price: number, recipe: RecipeId = "classic_salted", campaignActive = false): number {
+export function projectedDemand(price: number, recipe: RecipeId = "classic_salted", campaignActive = false, weatherFactor = 1.0): number {
   const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - effectiveBasePrice(campaignActive));
-  return clamp(base * RECIPE_DEMAND_MULT[recipe], 0, DEMAND_MAX_LBS_PER_HOUR);
+  return clamp(base * RECIPE_DEMAND_MULT[recipe] * weatherFactor, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 // ---------------------------------------------------------------------------

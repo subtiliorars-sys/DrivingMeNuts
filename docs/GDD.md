@@ -120,7 +120,11 @@ Demand (lbs/hr) = Base Demand − Slope × (Price − Base Price)
 
 **District-level demand modifiers:**
 - Location foot traffic (time of day, day of week, season)
-- Weather (rainy: –20%, hot sunny: +15%)
+- **Weather (rainy: –20%, hot sunny: +15%) — SHIPPED & WIRED (2026-06-07).** A deterministic
+  per-day calendar (`weatherForDay` over `state.weatherSeed`) multiplies live demand alongside
+  the weekday factor; the HUD shows today's weather + a 1-day forecast (predictable, no FOMO).
+  Pure/forecastable (no PRNG consumption). Note: the §D2 day-cycle walkthrough numbers below
+  assume **clear** weather (×1.0).
 - NPC relationship levels (Derek at 100 friendship: +10% Office Quarter demand)
 - Rival presence (Sal present: –15% same district, same day)
 - Marketing campaigns (post-gag flip: +5% price tolerance across all districts)

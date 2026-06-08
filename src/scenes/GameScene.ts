@@ -42,8 +42,10 @@ import {
   balanceSheet,
   buyBrandCampaign,
   buyAutoSell,
+  weatherFactorFor,
   type RescuePath,
 } from "../sim/engine.js";
+import { weatherForDay, WEATHER_LABEL } from "../data/economy.js";
 import { ACHIEVEMENTS, ACHIEVEMENT_TOTAL } from "../data/achievements.js";
 import { LORE_TOTAL_COUNT } from "../data/lore.js";
 import { COMEBACK_TIERS } from "../data/comebacks.js";
@@ -795,15 +797,18 @@ export class GameScene extends Phaser.Scene {
     const dowIdx = ((this.state.dayNumber - 1) % 7 + 7) % 7;
     const dayFactor = DAY_FACTOR[dowIdx];
     const dowLabel = DAY_NAMES[dowIdx];
-    // Show factor as a neutral context hint (not "peak!" or "slow day!")
-    this.txtDayOfWeek.setText(`${dowLabel} (×${dayFactor.toFixed(2)})`);
+    // Show factor + today's weather + a 1-day forecast (predictable, never
+    // pressuring — DARK_PATTERN_GATE §A.1; the forecast means no surprise/FOMO).
+    const todayW = WEATHER_LABEL[weatherForDay(this.state.dayNumber, this.state.weatherSeed)];
+    const tomorrowW = WEATHER_LABEL[weatherForDay(this.state.dayNumber + 1, this.state.weatherSeed)];
+    this.txtDayOfWeek.setText(`${dowLabel} ×${dayFactor.toFixed(2)} · ${todayW}  (tmrw: ${tomorrowW})`);
     this.txtLoreCounter.setText(`Lore: ${this.state.gagsSeen.size}/${unlockedLoreCount}`);
     this.txtRawStock.setText(`Raw: ${this.state.rawStockLbs.toFixed(1)} lbs`);
     this.txtRoastedStock.setText(`Roasted: ${this.state.roastedStockLbs.toFixed(1)} lbs`);
     this.txtPrice.setText(`$${this.state.sellPrice.toFixed(2)}`);
 
-    // Demand hint at current price
-    const demandLbsHr = projectedDemand(this.state.sellPrice, "classic_salted", this.state.brandCampaignActive);
+    // Demand hint at current price (now weather-aware so it matches live demand)
+    const demandLbsHr = projectedDemand(this.state.sellPrice, "classic_salted", this.state.brandCampaignActive, weatherFactorFor(this.state));
     // F7: derive COGS from economy constants, not a hardcoded literal
     const cogsPerLbClassic = RAW_PEANUT_BASE_PRICE + RECIPES.classic_salted.ingredientCostPerLb;
     const marginPct = this.state.sellPrice > 0
@@ -1019,13 +1024,13 @@ export class GameScene extends Phaser.Scene {
       // Row A: at current price
       const curPrice  = this.state.sellPrice;
       const margin1   = curPrice > 0 ? ((curPrice - cogs) / curPrice) * 100 : 0;
-      const demand1   = projectedDemand(curPrice, this.roastModalRecipe, this.state.brandCampaignActive);
+      const demand1   = projectedDemand(curPrice, this.roastModalRecipe, this.state.brandCampaignActive, weatherFactorFor(this.state));
       const marginColor = margin1 >= 60 ? "#4A7C4E" : margin1 >= 45 ? "#C08A00" : "#C0392B";
 
       // Row B: at optimum price (item 6 — two-row preview)
       const optPrice  = optimumPrice(this.roastModalRecipe, this.state.brandCampaignActive);
       const marginOpt = optPrice > 0 ? ((optPrice - cogs) / optPrice) * 100 : 0;
-      const demandOpt = projectedDemand(optPrice, this.roastModalRecipe, this.state.brandCampaignActive);
+      const demandOpt = projectedDemand(optPrice, this.roastModalRecipe, this.state.brandCampaignActive, weatherFactorFor(this.state));
 
       if (previewLines.length >= 5) {
         previewLines[0].setText(`COGS total: $${cogsTotal.toFixed(2)}  Roast: ${roastMins.toFixed(0)} min (sim)`);

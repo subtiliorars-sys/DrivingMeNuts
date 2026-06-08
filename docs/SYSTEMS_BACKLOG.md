@@ -15,7 +15,14 @@
 
 ---
 
-## 1. Weather demand modifier (GDD §C3)
+## 1. Weather demand modifier (GDD §C3) — ✅ DONE (2026-06-07, attended)
+
+> **SHIPPED & WIRED.** Foundation (constants + pure `weatherForDay` + `weatherSeed`) merged as
+> v0.8.1; demand wiring done attended (owner present): `weatherFactorFor(state)` multiplies live
+> demand in `tick()` alongside the weekday factor; `projectedDemand` takes an optional weather
+> factor so the HUD demand hint + roast-modal previews stay truthful; the HUD shows today's
+> weather + a 1-day forecast. Non-breaking (all prior tests stayed green — most are supply-bound,
+> so weather changes velocity not totals). Tests: `src/sim/weather_demand.test.ts`. Spec retained below.
 
 **Goal.** A per-day weather state that nudges demand — rainy −20%, hot-sunny
 +15% (GDD numbers) — teaching that some revenue drivers are *external and
