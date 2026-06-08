@@ -82,8 +82,8 @@ export interface SimState {
   /**
    * Per-save seed for the deterministic weather calendar (economy.weatherForDay).
    * Stable for a save, varies between saves. Additive-optional in the save
-   * (absent → WEATHER_DEFAULT_SEED). Has NO gameplay effect until weather is
-   * wired into the demand curve (deferred to an attended session).
+   * (absent → WEATHER_DEFAULT_SEED). Wired into live demand via tick()
+   * (weatherFactorFor) — rainy −20% / hot-sunny +15%.
    */
   weatherSeed: number;
 

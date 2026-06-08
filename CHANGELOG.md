@@ -6,6 +6,10 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added — weather wired into demand (GDD C3; the foundation is now a real mechanic)
+- The weather calendar (shipped inert as v0.8.1) now **affects demand**: rainy −20% / hot-sunny +15%, multiplied into live demand in `tick()` alongside the weekday factor. The HUD day line shows today's weather **+ a 1-day forecast** (predictable, no FOMO — DARK_PATTERN_GATE-clean); the demand hint + roast-modal previews are weather-aware so they stay truthful.
+- **Non-breaking:** all prior tests stayed green — most are supply-bound (a 14h day clears its stock regardless of ±20% velocity), so weather changes *velocity*, not totals, when demand > supply. The §D2 walkthrough numbers assume clear weather (noted in the GDD). 6 new tests; 374 unit + 5 boot green.
+
 ### Added — weather foundation (GDD C3; foundation only, NOT wired into demand)
 - `WEATHER_FACTOR {clear:1.0, hot_sunny:1.15, rainy:0.80}` + `WEATHER_LABEL` + a **pure, deterministic** `weatherForDay(dayNumber, seed)` (integer hash → ~50/25/25 buckets, no PRNG-stream consumption) + per-save `weatherSeed` (additive-optional persistence, default `WEATHER_DEFAULT_SEED` for legacy saves). **Zero gameplay effect** — weather is not read by the demand curve; this just makes the predictable, forecastable calendar available so the eventual demand-wiring + a forecast UI are a small, safe step (wiring deferred to an attended session per docs/SYSTEMS_BACKLOG.md §1, since it ripples the economy tests). Red-team PASS (inert + additive-safe confirmed). 9 new tests (determinism, distribution, forecast, persistence/crafted-save); 357 unit + 5 boot green.
 ### Added — auto-sell off-peak upgrade (GDD C4; owner-approved, $1,500)
