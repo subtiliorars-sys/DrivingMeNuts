@@ -1236,7 +1236,7 @@ export class GameScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
-    const mW = 320, mH = 268; // grown for the auto-sell row
+    const mW = 320, mH = 234; // auto-sell row added; Save I/O moved to Settings
     const mX = (W - mW) / 2;
     const mY = (H - mH) / 2;
 
@@ -1508,77 +1508,12 @@ export class GameScene extends Phaser.Scene {
       })
     );
 
-    // ---- Save Export / Import buttons (item 2) ----
-    // All local — CRIT-1 compliant (zero server).
-    rowY += 10;
-    this.upgradesModalGroup.add(this.add.rectangle(mX + mW / 2, rowY + 2, mW - 8, 1, P.PANEL_BORDER));
-    rowY += 8;
-
-    const exportBtn = this.add.rectangle(mX + 60, rowY + 6, 90, 14, 0x445566)
-      .setStrokeStyle(1, P.PANEL_BORDER)
-      .setInteractive({ cursor: "pointer" });
-    this.upgradesModalGroup.add(exportBtn);
-    this.upgradesModalGroup.add(
-      this.add.text(mX + 60, rowY + 6, "EXPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
-    );
-    exportBtn.on("pointerdown", () => {
-      const json = serialize(this.state, this.playtimeSeconds);
-      const blob = new Blob([json], { type: "application/json" });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href     = url;
-      a.download = "driving-me-nuts-save.json";
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-    exportBtn.on("pointerover", () => exportBtn.setAlpha(0.85));
-    exportBtn.on("pointerout",  () => exportBtn.setAlpha(1.0));
-
-    const importBtn = this.add.rectangle(mX + 170, rowY + 6, 90, 14, 0x445566)
-      .setStrokeStyle(1, P.PANEL_BORDER)
-      .setInteractive({ cursor: "pointer" });
-    this.upgradesModalGroup.add(importBtn);
-    this.upgradesModalGroup.add(
-      this.add.text(mX + 170, rowY + 6, "IMPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
-    );
-    importBtn.on("pointerdown", () => {
-      const fileInput = document.createElement("input");
-      fileInput.type   = "file";
-      fileInput.accept = ".json,application/json";
-      fileInput.onchange = () => {
-        const file = fileInput.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          const text = ev.target?.result as string | undefined;
-          if (!text) {
-            this.showToast("Import failed: could not read file.");
-            return;
-          }
-          const result = importEnvelopeText(text, this.storage);
-          if (!result.ok || !result.state) {
-            this.showToast(result.errorMessage ?? "Import failed: unknown error.");
-          } else {
-            this.state = result.state;
-            // RT-2: imported save may have a different queue-slot count than the
-            // scene was built with — reconcile UI rows BEFORE updateHUD touches them.
-            this.syncSlotUI();
-            this.closeUpgradesModal();
-            this.updateHUD();
-            this.showToast(result.previousSaveBackedUp
-              ? "Save imported. (Your previous save was backed up automatically.)"
-              : "Save imported — game state restored.");
-          }
-        };
-        reader.readAsText(file);
-      };
-      fileInput.click();
-    });
-    importBtn.on("pointerover", () => importBtn.setAlpha(0.85));
-    importBtn.on("pointerout",  () => importBtn.setAlpha(1.0));
+    // (Save Export/Import relocated to the Settings panel — declutters this modal.)
+    this.upgradesModalGroup.add(this.add.text(mX + 6, rowY + 4,
+      "Save export/import is now in ⚙ MENU › Settings.",
+      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace" }));
 
     // Close button at bottom
-    rowY += 14;
     const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
@@ -1862,7 +1797,7 @@ export class GameScene extends Phaser.Scene {
     this.settingsModalOpen = true;
 
     const W = this.scale.width, H = this.scale.height;
-    const mW = 300, mH = 200;
+    const mW = 300, mH = 230; // grown for the relocated Save Export/Import row
     const mX = (W - mW) / 2, mY = (H - mH) / 2;
 
     this.settingsModalGroup = this.add.group();
@@ -1919,6 +1854,10 @@ export class GameScene extends Phaser.Scene {
     this.settingsModalGroup.add(this.add.text(mX + 10, y,
       "This game simplifies real business — see the Glossary for details.",
       { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace", wordWrap: { width: mW - 20 } }));
+    y += 14;
+
+    // Save Export / Import (relocated here from the upgrades modal).
+    this.addSaveIORow(this.settingsModalGroup, mX, mW, y, () => this.closeSettingsModal());
 
     // Close
     const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
@@ -1938,6 +1877,68 @@ export class GameScene extends Phaser.Scene {
     }
     this.settingsModalOpen = false;
     this.updateHUD();
+  }
+
+  /**
+   * Reusable Save Export / Import row (local file; CRIT-1 compliant — zero
+   * server). Lives in Settings now (relocated out of the crowded upgrades
+   * modal). `onClose` closes whichever modal hosts it after a successful import.
+   */
+  private addSaveIORow(group: Phaser.GameObjects.Group, mX: number, mW: number, rowY: number, onClose: () => void): void {
+    group.add(this.add.rectangle(mX + mW / 2, rowY, mW - 8, 1, P.PANEL_BORDER));
+    group.add(this.add.text(mX + 8, rowY + 4, "SAVE FILE (local, no server)",
+      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace" }));
+    const by = rowY + 18;
+
+    const exportBtn = this.add.rectangle(mX + 72, by, 116, 14, 0x445566)
+      .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
+    group.add(exportBtn);
+    group.add(this.add.text(mX + 72, by, "EXPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    exportBtn.on("pointerdown", () => {
+      const json = serialize(this.state, this.playtimeSeconds);
+      const blob = new Blob([json], { type: "application/json" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url; a.download = "driving-me-nuts-save.json"; a.click();
+      URL.revokeObjectURL(url);
+    });
+    exportBtn.on("pointerover", () => exportBtn.setAlpha(0.85));
+    exportBtn.on("pointerout",  () => exportBtn.setAlpha(1.0));
+
+    const importBtn = this.add.rectangle(mX + mW - 72, by, 116, 14, 0x445566)
+      .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
+    group.add(importBtn);
+    group.add(this.add.text(mX + mW - 72, by, "IMPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    importBtn.on("pointerdown", () => {
+      const fileInput = document.createElement("input");
+      fileInput.type = "file"; fileInput.accept = ".json,application/json";
+      fileInput.onchange = () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const text = ev.target?.result as string | undefined;
+          if (!text) { this.showToast("Import failed: could not read file."); return; }
+          const result = importEnvelopeText(text, this.storage);
+          if (!result.ok || !result.state) {
+            this.showToast(result.errorMessage ?? "Import failed: unknown error.");
+          } else {
+            this.state = result.state;
+            // RT-2: imported save may have a different queue-slot count — reconcile first.
+            this.syncSlotUI();
+            onClose();
+            this.updateHUD();
+            this.showToast(result.previousSaveBackedUp
+              ? "Save imported. (Your previous save was backed up automatically.)"
+              : "Save imported — game state restored.");
+          }
+        };
+        reader.readAsText(file);
+      };
+      fileInput.click();
+    });
+    importBtn.on("pointerover", () => importBtn.setAlpha(0.85));
+    importBtn.on("pointerout",  () => importBtn.setAlpha(1.0));
   }
 
   // ---------------------------------------------------------------------------
