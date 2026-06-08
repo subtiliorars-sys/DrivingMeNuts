@@ -339,6 +339,9 @@ The **⚙ MENU** button (bottom-right) opens Settings, which holds:
 - **Accessibility** — **Reduced motion** (stops ambient animation for motion-sensitive
   players) and **Colour-blind cues** (adds a word — "healthy/tight/low" — to the
   colour-coded margin so colour is never the only signal). Both persist per-device.
+- **Larger text** — the game fills the window (FIT-scaled), so **browser zoom** enlarges
+  everything cleanly: **Ctrl + / Ctrl −** (⌘ on Mac). Settings shows this hint in-game.
+  (A built-in font-scale toggle is deferred to the P2 UI pass, where panels get flexible layout.)
 
 These preferences are stored locally on the device only — no accounts, no transmission.
 
