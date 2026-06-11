@@ -301,6 +301,78 @@ export const DEMAND_SLOPE = 10;
 export const DEMAND_MAX_LBS_PER_HOUR = 40;
 
 // ---------------------------------------------------------------------------
+// Districts  (GDD B2 — Office Quarter as second district)
+// ---------------------------------------------------------------------------
+
+/** Unique identifier for each playable district. */
+export type DistrictId = "farmers_market" | "office_quarter";
+
+/** Per-district configuration for demand curves, permit costs, and lunch rush. */
+export interface DistrictConfig {
+  readonly id: DistrictId;
+  readonly label: string;
+  readonly baseDemandLbsPerHour: number;
+  readonly basePrice: number;
+  readonly demandSlope: number;
+  readonly permitCost: number;
+  /** Simulated hour (0–14) of the lunch-rush peak; 12 = noon for Office Quarter. */
+  readonly lunchRushHour: number;
+  /** Demand multiplier applied at the lunch-rush peak hour. */
+  readonly lunchRushBoost: number;
+}
+
+export const DISTRICT_CONFIGS: Readonly<Record<DistrictId, DistrictConfig>> = {
+  farmers_market: {
+    id: "farmers_market",
+    label: "Farmers' Market",
+    baseDemandLbsPerHour: 20,
+    basePrice: 1.20,
+    demandSlope: 10,
+    permitCost: 0,          // free — starting district
+    lunchRushHour: 0,       // no lunch rush at the farmers' market
+    lunchRushBoost: 1.0,
+  },
+  office_quarter: {
+    id: "office_quarter",
+    label: "Office Quarter",
+    baseDemandLbsPerHour: 14,
+    basePrice: 1.50,
+    demandSlope: 8,
+    permitCost: 300,
+    lunchRushHour: 12,      // noon spike
+    lunchRushBoost: 1.3,
+  },
+} as const;
+
+/**
+ * Day-of-week demand factors for the Office Quarter.
+ * Office crowd peaks Mon–Fri (1.00–1.05), drops on weekends (0.60–0.70).
+ * Index: 0=Mon … 6=Sun (same convention as DAY_FACTOR).
+ */
+export const OFFICE_QUARTER_DAY_FACTOR: readonly number[] = [
+  1.00, // Monday   — full office day
+  1.05, // Tuesday  — peak workday
+  1.05, // Wednesday — peak workday
+  1.00, // Thursday
+  1.00, // Friday   — some leave early
+  0.70, // Saturday — skeleton crew
+  0.60, // Sunday   — mostly closed
+] as const;
+
+// ---------------------------------------------------------------------------
+// Derek consistency mechanic  (GDD B2 — Office Quarter)
+// ---------------------------------------------------------------------------
+
+/** Maximum fractional price swing Derek tolerates before he reacts. */
+export const DEREK_PRICE_TOLERANCE = 0.15;
+
+/** Derek's share of total Office Quarter demand. 15% per spec. */
+export const DEREK_DEMAND_SHARE = 0.15;
+
+/** Fraction of Derek's demand share that remains when he is unhappy. */
+export const DEREK_UNHAPPY_MULT = 0.50;
+
+// ---------------------------------------------------------------------------
 // Day clock  (GDD D2 walkthrough: 6 am open, 8 pm close)
 // All times in simulated seconds. 1 simulated hour = 60 real seconds by default,
 // but the engine is parameterised — tests run at 1:1 (1 sim-second = 1 real second).

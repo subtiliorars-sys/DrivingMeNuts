@@ -3,7 +3,7 @@
  * No Phaser imports. Pure TypeScript. Deterministic.
  */
 
-import type { RecipeId, RoasterTier } from "../data/economy.js";
+import type { RecipeId, RoasterTier, DistrictId } from "../data/economy.js";
 
 // ---------------------------------------------------------------------------
 // Roast queue
@@ -223,6 +223,42 @@ export interface SimState {
    */
   supplierLbsPurchased: number;
 
+  // ---- Districts (P1.5 — GDD B2) ---------------------------------------
+  /**
+   * The district the player is currently operating in.
+   * Affects the demand curve parameters used by tick().
+   * Additive-optional in the save (absent → "farmers_market").
+   */
+  currentDistrict: DistrictId;
+
+  /**
+   * Districts the player has unlocked (permit purchased).
+   * Always includes "farmers_market" (the starting district).
+   * Additive-optional in the save (absent → ["farmers_market"]).
+   */
+  unlockedDistricts: DistrictId[];
+
+  // ---- Derek consistency mechanic (P1.5 — GDD B2) ----------------------
+  /**
+   * Tracks the number of consecutive days Derek has bought from the truck.
+   * Resets to 0 when price variance from his last purchase exceeds tolerance.
+   * Additive-optional in the save (absent → 0).
+   */
+  derekConsistencyCounter: number;
+
+  /**
+   * The sell price Derek last paid (for variance tracking).
+   * null if Derek has never bought. Additive-optional (absent → null).
+   */
+  derekLastPrice: number | null;
+
+  /**
+   * The last game day on which Derek made a purchase.
+   * Used to gate Derek's purchase to at most once per day.
+   * Additive-optional in the save (absent → 0).
+   */
+  derekLastPurchaseDay: number;
+
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
   rngState: number;
@@ -430,7 +466,9 @@ export type SimEventKind =
   | "debt_aftermath"
   // Wave 6: achievement earned. (Supplier level-ups ride on supply_purchased's
   // detail.supplierLevelUp — no separate event kind.)
-  | "achievement_unlocked";
+  | "achievement_unlocked"
+  // P1.5: Derek consistency mechanic
+  | "derek_mood";
   // NOTE W15: "recipe_unlocked" SimEvent was specced in RECIPE_BATCH_UI.md §3e but
   // never emitted from endOfDay(). GameScene detects new unlocks via Set-diff
   // (unlockedBefore snapshot vs post-endOfDay state.recipesUnlocked) — that is

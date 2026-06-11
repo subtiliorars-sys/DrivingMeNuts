@@ -72,7 +72,11 @@ import {
   AUTO_SELL_COST,
   supplierDiscountFor,
   supplierLevelFor,
+  DISTRICT_CONFIGS,
+  OFFICE_QUARTER_DAY_FACTOR,
+  DEREK_PRICE_TOLERANCE,
 } from "../data/economy.js";
+import type { DistrictId } from "../data/economy.js";
 
 // default blended multiplier = classic_salted = 1.0
 const DEFAULT_DEMAND_MULT_BLENDED = RECIPE_DEMAND_MULT["classic_salted"];
@@ -141,9 +145,43 @@ function effectiveBasePrice(brandCampaignActive: boolean): number {
 }
 
 /**
+ * District-adjusted base demand lbs/hr.
+ * When a district is provided, uses the district's config instead of the global defaults.
+ * Exported so tests and UI can query it without duplicating logic.
+ */
+export function districtParamsFor(district: DistrictId): {
+  baseLbsPerHour: number;
+  basePrice: number;
+  slope: number;
+} {
+  const cfg = DISTRICT_CONFIGS[district];
+  return {
+    baseLbsPerHour: cfg.baseDemandLbsPerHour,
+    basePrice: cfg.basePrice,
+    slope: cfg.demandSlope,
+  };
+}
+
+/**
+ * Compute the lunch-rush demand multiplier for the current time in a district.
+ * If the district has a lunchRushHour > 0 and the current hour is within 1 hour
+ * of that peak, the boost applies. Otherwise returns 1.0.
+ */
+function lunchRushFactor(state: SimState, district?: DistrictId): number {
+  if (!district) return 1.0;
+  const cfg = DISTRICT_CONFIGS[district];
+  if (cfg.lunchRushHour <= 0 || cfg.lunchRushBoost <= 0) return 1.0;
+  // Day starts at 6am; hour 0 = 6am, hour 13 = 7pm (14-hour day)
+  const currentHour = state.dayElapsedSeconds / 3_600;
+  const diff = Math.abs(currentHour - cfg.lunchRushHour);
+  if (diff <= 1.0) return cfg.lunchRushBoost;
+  return 1.0;
+}
+
+/**
  * Demand in lbs/hour at a given price, scaled by the provided demand multiplier
  * and the day-of-week factor.
- * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × demandMult × dayFactor
+ * Formula: (BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)) × demandMult × dayFactor × weatherFactor × lunchRushFactor
  * Clamped to [0, DEMAND_MAX_LBS_PER_HOUR].
  * Small Gaussian-ish jitter applied via PRNG so repeat ticks aren't exactly equal.
  *
@@ -151,12 +189,21 @@ function effectiveBasePrice(brandCampaignActive: boolean): number {
  * recipe multiplier is applied to live sales. Default 1.0 preserves backward compat.
  * W4: tick() passes dayFactorFor(state.dayNumber) so weekday patterns apply.
  * Brand campaign: BASE_PRICE shifts up 5% when state.brandCampaignActive.
+ * P1.5: when district is provided, uses district-specific curve constants.
+ * P1.5: lunch-rush boost applied when district has a configured lunchRushHour.
  */
-function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0, dayFactor = 1.0, weatherFactor = 1.0): number {
-  const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - effectiveBasePrice(state.brandCampaignActive));
+function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0, dayFactor = 1.0, weatherFactor = 1.0, district?: DistrictId): number {
+  const params = district ? districtParamsFor(district) : null;
+  const baseLbs = params ? params.baseLbsPerHour : DEMAND_BASE_LBS_PER_HOUR;
+  const basePrice = params ? params.basePrice : DEMAND_BASE_PRICE;
+  const slope = params ? params.slope : DEMAND_SLOPE;
+  const brandShift = state.brandCampaignActive ? DEMAND_BASE_PRICE * BRAND_CAMPAIGN_PRICE_TOLERANCE : 0;
+  const effectiveBase = basePrice + brandShift;
+  const base = baseLbs - slope * (price - effectiveBase);
   // ±10% jitter (two uniform samples averaged → triangular distribution)
   const jitter = ((nextRand(state) + nextRand(state)) / 2 - 0.5) * 0.20;
-  return clamp(base * (1 + jitter) * demandMult * dayFactor * weatherFactor, 0, DEMAND_MAX_LBS_PER_HOUR);
+  const lunchRush = lunchRushFactor(state, district);
+  return clamp(base * (1 + jitter) * demandMult * dayFactor * weatherFactor * lunchRush, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 /**
@@ -292,6 +339,13 @@ export function createState(seed = 1): SimState {
     pendingAftermath: [],
     achievementsUnlocked: [],
     supplierLbsPurchased: 0,
+    // P1.5: districts
+    currentDistrict: "farmers_market",
+    unlockedDistricts: ["farmers_market"],
+    // P1.5: Derek consistency mechanic
+    derekConsistencyCounter: 0,
+    derekLastPrice: null,
+    derekLastPurchaseDay: 0,
     rngState: seed >>> 0,
   };
 }
@@ -349,7 +403,7 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
     // Convert lbs/hour demand to lbs/second, then scale by dt.
     // W2: pass blended demand multiplier so mixed inventory sells at weighted velocity.
     // W4: apply day-of-week factor (visible/predictable; no FOMO framing).
-    const lbsPerSec = demandLbsPerHour(state.sellPrice, state, state.roastedDemandMultBlended, dayFactorFor(state.dayNumber), weatherFactorFor(state)) / 3_600;
+    const lbsPerSec = demandLbsPerHour(state.sellPrice, state, state.roastedDemandMultBlended, dayFactorFor(state.dayNumber, state.currentDistrict ?? "farmers_market"), weatherFactorFor(state), state.currentDistrict ?? "farmers_market") / 3_600;
     const demandedLbs = lbsPerSec * dtSeconds;
     const soldLbs = Math.min(demandedLbs, state.roastedStockLbs);
 
@@ -379,6 +433,33 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
         daySecond: state.dayElapsedSeconds,
         detail: { lbs: soldLbs, revenue, price: state.sellPrice },
       });
+
+      // ---- P1.5: Derek consistency mechanic (Office Quarter only) ----
+      if (state.currentDistrict === "office_quarter") {
+        // Derek buys at most once per day
+        if (state.derekLastPurchaseDay < state.dayNumber) {
+          const derekHappy = state.derekLastPrice === null ||
+            Math.abs(state.sellPrice - state.derekLastPrice) / Math.max(state.derekLastPrice, 0.01) <= DEREK_PRICE_TOLERANCE;
+
+          if (derekHappy) {
+            // Derek buys — increment counter, record price and day
+            state.derekConsistencyCounter += 1;
+            state.derekLastPrice = state.sellPrice;
+            state.derekLastPurchaseDay = state.dayNumber;
+          } else {
+            // Derek is unhappy — reset counter, emit derek_mood event
+            state.derekConsistencyCounter = 0;
+            state.derekLastPrice = state.sellPrice;
+            state.derekLastPurchaseDay = state.dayNumber;
+            events.push({
+              kind: "derek_mood",
+              dayNumber: state.dayNumber,
+              daySecond: state.dayElapsedSeconds,
+              detail: { mood: "unhappy" },
+            });
+          }
+        }
+      }
     }
   }
 
@@ -548,6 +629,67 @@ export function setPrice(state: SimState, price: number): SimEvent {
     dayNumber: state.dayNumber,
     daySecond: state.dayElapsedSeconds,
     detail: { previous, current: clamped },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// setDistrict(state, district) → SimEvent
+// Change the current operating district. Must already be unlocked.
+// Returns an event (upgrade_purchased-like) with the district id.
+// ---------------------------------------------------------------------------
+
+/**
+ * Change the current operating district to a different unlocked district.
+ * @returns A SimEvent with kind "upgrade_purchased" and detail.districtChange set,
+ *          or null if the district is not yet unlocked.
+ */
+export function setDistrict(state: SimState, district: DistrictId): SimEvent | null {
+  if (!state.unlockedDistricts.includes(district)) return null;
+  const previous = state.currentDistrict;
+  state.currentDistrict = district;
+  return {
+    kind: "upgrade_purchased",
+    dayNumber: state.dayNumber,
+    daySecond: state.dayElapsedSeconds,
+    detail: {
+      upgradeType: "district_change",
+      previousDistrict: previous,
+      currentDistrict: district,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// buyPermit(state, district, expedited) → SimEvent | null
+// Purchase a permit to unlock a new district. Deducts cash on success.
+// ---------------------------------------------------------------------------
+
+/**
+ * Purchase a permit to unlock a district.
+ * @param expedited  If true, costs double the permit price (instant unlock framing).
+ * @returns An event on success, or null if already unlocked or insufficient cash.
+ */
+export function buyPermit(state: SimState, district: DistrictId, expedited = false): SimEvent | null {
+  if (state.unlockedDistricts.includes(district)) return null;
+  const cost = expedited
+    ? DISTRICT_CONFIGS[district].permitCost * 2
+    : DISTRICT_CONFIGS[district].permitCost;
+  if (cost > state.cash) return null;
+
+  state.cash -= cost;
+  applyCashFloor(state);
+  state.unlockedDistricts.push(district);
+
+  return {
+    kind: "upgrade_purchased",
+    dayNumber: state.dayNumber,
+    daySecond: state.dayElapsedSeconds,
+    detail: {
+      upgradeType: "permit",
+      district,
+      cost,
+      expedited,
+    },
   };
 }
 
@@ -1271,10 +1413,14 @@ export function applyOffline(state: SimState, elapsedHours: number): SimEvent {
  * Return the DAY_FACTOR entry for a given 1-indexed game day.
  * dayNumber 1 = Monday (index 0), 2 = Tuesday (index 1), etc.
  * Wraps weekly via modulo so it works for any day count.
+ * When a district is specified, uses the district-specific day factor if one exists.
  */
-export function dayFactorFor(dayNumber: number): number {
+export function dayFactorFor(dayNumber: number, district?: DistrictId): number {
   // dayNumber is 1-indexed; (dayNumber - 1) % 7 maps it to Mon=0 … Sun=6
   const idx = ((dayNumber - 1) % 7 + 7) % 7; // safe modulo for any integer
+  if (district && district === "office_quarter") {
+    return OFFICE_QUARTER_DAY_FACTOR[idx];
+  }
   return DAY_FACTOR[idx];
 }
 
@@ -1314,9 +1460,24 @@ export function optimumPrice(recipe: RecipeId, campaignActive = false): number {
  * Default recipe "classic_salted" preserves backward compat (mult = 1.0).
  * Brand campaign: pass campaignActive so the HUD hint matches live demand.
  */
-export function projectedDemand(price: number, recipe: RecipeId = "classic_salted", campaignActive = false, weatherFactor = 1.0): number {
-  const base = DEMAND_BASE_LBS_PER_HOUR - DEMAND_SLOPE * (price - effectiveBasePrice(campaignActive));
-  return clamp(base * RECIPE_DEMAND_MULT[recipe] * weatherFactor, 0, DEMAND_MAX_LBS_PER_HOUR);
+export function projectedDemand(price: number, recipe: RecipeId = "classic_salted", campaignActive = false, weatherFactor = 1.0, district?: DistrictId, hour?: number): number {
+  const params = district ? districtParamsFor(district) : null;
+  const baseLbs = params ? params.baseLbsPerHour : DEMAND_BASE_LBS_PER_HOUR;
+  const basePrice = params ? params.basePrice : DEMAND_BASE_PRICE;
+  const slope = params ? params.slope : DEMAND_SLOPE;
+  const brandShift = campaignActive ? DEMAND_BASE_PRICE * BRAND_CAMPAIGN_PRICE_TOLERANCE : 0;
+  const effectiveBase = basePrice + brandShift;
+  const base = baseLbs - slope * (price - effectiveBase);
+  // Lunch-rush boost: if hour is provided and district has a lunch-rush window
+  let lunchBoost = 1.0;
+  if (district && hour !== undefined) {
+    const cfg = DISTRICT_CONFIGS[district];
+    if (cfg.lunchRushHour > 0 && cfg.lunchRushBoost > 0) {
+      const diff = Math.abs(hour - cfg.lunchRushHour);
+      if (diff <= 1.0) lunchBoost = cfg.lunchRushBoost;
+    }
+  }
+  return clamp(base * RECIPE_DEMAND_MULT[recipe] * weatherFactor * lunchBoost, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 // ---------------------------------------------------------------------------
