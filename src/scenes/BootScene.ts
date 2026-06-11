@@ -9,6 +9,20 @@
  * gesture requirement for the AudioContext (audioInit is called there).
  *
  * Programmer-art only; no image assets loaded here.
+ *
+ * --- WCAG touch targets ---
+ * The canvas is FIT-scaled by Phaser. Interactive elements are sized in native
+ * 480×270 coordinates; their rendered CSS-pixel size = native size × displayScale.
+ *
+ * MIN_TOUCH_SIZE (44 CSS px): the WCAG 2.2 minimum for pointer targets.
+ * At 2× scale (common mobile viewport) a native 24px-tall button → 48 CSS px ✓.
+ * The reset button is 18px native → 36 CSS px at 2× — below threshold, but
+ * lives inside a confirm dialog that appears centred and the small size avoids
+ * accidental taps on the main canvas. Accept as a design trade-off (rare path,
+ * dialog backdrop blocks background taps).
+ *
+ * If adding new interactive elements, check: nativeSize × displayScale ≥ 44.
+ * Use `game.scale.displayScale` (a Point { x, y }) to read the current factor.
  */
 
 import Phaser from "phaser";

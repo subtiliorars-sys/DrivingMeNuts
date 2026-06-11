@@ -138,6 +138,17 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   rawCostBasisPerLb?: number;
   /** Weather foundation (additive-optional): per-save weather seed. Absent → WEATHER_DEFAULT_SEED. */
   weatherSeed?: number;
+
+  /** P1.5: current district. Additive-optional: absent → "farmers_market". */
+  currentDistrict?: string;
+  /** P1.5: unlocked districts. Additive-optional: absent → ["farmers_market"]. */
+  unlockedDistricts?: string[];
+  /** P1.5: Derek consistency counter. Additive-optional: absent → 0. */
+  derekConsistencyCounter?: number;
+  /** P1.5: Derek last purchase price. Additive-optional: absent → null. */
+  derekLastPrice?: number | null;
+  /** P1.5: Derek last purchase day. Additive-optional: absent → 0. */
+  derekLastPurchaseDay?: number;
 };
 
 interface SaveMeta {
@@ -657,6 +668,34 @@ export function deserialize(json: string): SimState {
     ? wSeed
     : WEATHER_DEFAULT_SEED;
 
+  // P1.5: revive district fields (additive-optional, absent = defaults).
+  const _ss = sim as SerializedSimState;
+  const VALID_DISTRICTS = new Set(["farmers_market", "office_quarter"]);
+  const currentDistrict =
+    typeof _ss.currentDistrict === "string" && VALID_DISTRICTS.has(_ss.currentDistrict)
+      ? (_ss.currentDistrict as "farmers_market" | "office_quarter")
+      : "farmers_market";
+  const unlockedDistricts: ("farmers_market" | "office_quarter")[] = Array.isArray(_ss.unlockedDistricts)
+    ? _ss.unlockedDistricts.filter((d): d is "farmers_market" | "office_quarter" =>
+        typeof d === "string" && VALID_DISTRICTS.has(d)
+      )
+    : ["farmers_market"];
+  if (!unlockedDistricts.includes("farmers_market")) unlockedDistricts.push("farmers_market");
+  const derekConsistencyCounter =
+    typeof _ss.derekConsistencyCounter === "number" && Number.isFinite(_ss.derekConsistencyCounter) && _ss.derekConsistencyCounter >= 0
+      ? Math.floor(_ss.derekConsistencyCounter)
+      : 0;
+  const derekLastPrice =
+    _ss.derekLastPrice === null || _ss.derekLastPrice === undefined
+      ? null
+      : typeof _ss.derekLastPrice === "number" && Number.isFinite(_ss.derekLastPrice) && _ss.derekLastPrice >= 0
+        ? _ss.derekLastPrice
+        : null;
+  const derekLastPurchaseDay =
+    typeof _ss.derekLastPurchaseDay === "number" && Number.isFinite(_ss.derekLastPurchaseDay) && _ss.derekLastPurchaseDay >= 0
+      ? Math.floor(_ss.derekLastPurchaseDay)
+      : 0;
+
   const state: SimState = {
     cash: sim.cash,
     rawStockLbs: sim.rawStockLbs,
@@ -696,6 +735,11 @@ export function deserialize(json: string): SimState {
     pendingAftermath,
     achievementsUnlocked,
     supplierLbsPurchased,
+    currentDistrict,
+    unlockedDistricts,
+    derekConsistencyCounter,
+    derekLastPrice,
+    derekLastPurchaseDay,
     rngState: sim.rngState,
   };
 
