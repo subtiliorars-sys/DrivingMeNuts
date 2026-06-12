@@ -6,6 +6,12 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added — Office Quarter backdrop palette (DMN-2 slice)
+- **Palette D** in ART_BIBLE + live backdrop swap in GameScene: grey urban sky, concrete ground, office-block silhouettes when operating in Office Quarter; Farmers' Market deco hidden. District banner/modal unchanged from DMN-1. UI-only.
+
+### Added — Office Quarter district UI (P1.5 / DMN-1)
+- **ROUTES modal** — tap the district banner in the HUD to buy the Office Quarter permit ($300), switch districts, and read each spot's demand curve. Demand hints + roast-modal previews now pass `currentDistrict` and sim-hour (lunch-rush aware). Day-of-week factor uses the office-weekend curve when operating there. Derek consistency streak shows in the HUD chip + modal when in Office Quarter. End-of-day report location line is district-aware. Sim layer was already shipped; this wires the teaching surface. UI-only; district sim tests green.
+
 ### Added — larger-text accessibility (pragmatic, overflow-free)
 - Settings shows a **"Bigger text? Use your browser zoom: Ctrl +/− (⌘ on Mac)"** hint — the FIT-scaled canvas means browser zoom enlarges everything uniformly with zero overflow (the standard web-game path; documented in the EDUCATOR_GUIDE). Bumped a few unambiguously-safe tiny labels 6px→7px (save-file header, the upgrades→settings pointer, the tutorial step counter). A built-in font-scale toggle is deferred to the P2 UI pass (the fixed pixel panels need flexible layout first; a blind 1.25× would overflow them). UI/docs-only; 374 unit + 5 boot green.
 

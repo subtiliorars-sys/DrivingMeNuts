@@ -272,6 +272,21 @@ at these values.
 
 ---
 
+### Palette D: "Office Quarter" (urban lunch district)
+
+Used when the player operates in the Office Quarter (P1.5 / DMN-2). Programmer-art
+stand-ins only until final sprites ship.
+
+| UI element | Hex | Usage |
+|------------|-----|-------|
+| Sky / backdrop | `#B8C4D0` | Overcast urban sky |
+| Ground | `#7D848C` | Concrete sidewalk |
+| Building fill | `#5A6269` | Office block silhouettes |
+| Window band | `#1C3A47` | Suit-blue accent bands (matches NPC suit) |
+| Street lamp | `#FDB813` | Warm lamp accent (borrowed from Palette B coin gold) |
+
+---
+
 ### Palette notes
 - Palette swaps happen at zone change or time-of-day event; no per-frame recoloring.
 - In each palette the "market awning / accent" color is the **"look at me" signal**

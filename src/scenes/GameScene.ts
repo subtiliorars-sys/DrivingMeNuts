@@ -42,6 +42,9 @@ import {
   balanceSheet,
   buyBrandCampaign,
   buyAutoSell,
+  buyPermit,
+  setDistrict,
+  dayFactorFor,
   weatherFactorFor,
   type RescuePath,
 } from "../sim/engine.js";
@@ -95,7 +98,6 @@ import {
   QUEUE_SLOT_COST,
   STARTING_QUEUE_SLOTS,
   DAY_NAMES,
-  DAY_FACTOR,
   BRAND_CAMPAIGN_LORE_THRESHOLD,
   BRAND_CAMPAIGN_COST,
   AUTO_SELL_COST,
@@ -110,8 +112,11 @@ import {
   RESCUE_PREORDER_CASH,
   RESCUE_PREORDER_LBS_REPEAT,
   RESCUE_PREORDER_CASH_REPEAT,
+  DISTRICT_CONFIGS,
+  DEREK_PRICE_TOLERANCE,
   type RecipeId,
   type RoasterTier,
+  type DistrictId,
 } from "../data/economy.js";
 import { LORE_LINES, LORE_TIER_DAY_GATE } from "../data/lore.js";
 
@@ -144,6 +149,15 @@ const P = {
   NPC_SUIT:     0x1C3A47,  // Office Worker
   SMOKE:        0xE8E8E8,
   MODAL_SHADOW: 0x000000,
+} as const;
+
+/** Palette D — Office Quarter (ART_BIBLE district swap; programmer-art stand-ins). */
+const P_OFFICE = {
+  SKY:      0xB8C4D0,  // overcast urban sky
+  GROUND:   0x7D848C,  // concrete sidewalk
+  BUILDING: 0x5A6269,  // office block fill
+  ACCENT:   0x1C3A47,  // suit-blue window band
+  LAMP:     0xFDB813,  // street-lamp warm accent (Palette B coin gold)
 } as const;
 
 // Text style presets (matches P1_SPRITE_SPEC: min 14pt readable)
@@ -222,6 +236,15 @@ export class GameScene extends Phaser.Scene {
   private txtCash!: Phaser.GameObjects.Text;
   private txtDay!: Phaser.GameObjects.Text;
   private txtDayOfWeek!: Phaser.GameObjects.Text;  // W4: day-of-week label
+  private txtDistrictBanner!: Phaser.GameObjects.Text;
+  private derekHudChip!: Phaser.GameObjects.Text;
+
+  // ---- District backdrop (DMN-2 palette swap) ----------------------------
+  private backdropSky!: Phaser.GameObjects.Rectangle;
+  private backdropGround!: Phaser.GameObjects.Rectangle;
+  private marketDeco: Array<Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc> = [];
+  private officeDeco: Array<Phaser.GameObjects.Rectangle | Phaser.GameObjects.Arc> = [];
+  private lastBackdropDistrict: DistrictId | null = null;
   private txtRawStock!: Phaser.GameObjects.Text;
   private txtRoastedStock!: Phaser.GameObjects.Text;
   private txtPrice!: Phaser.GameObjects.Text;
@@ -271,6 +294,10 @@ export class GameScene extends Phaser.Scene {
   // ---- Upgrades modal state (Wave 4) -------------------------------------
   private upgradesModalGroup?: Phaser.GameObjects.Group;
   private upgradesModalOpen = false;
+
+  // ---- District / routes modal (P1.5 — DMN-1) ----------------------------
+  private districtModalGroup?: Phaser.GameObjects.Group;
+  private districtModalOpen = false;
 
   // ---- Rescue arc modal state (Wave 5) ------------------------------------
   private rescueModalGroup?: Phaser.GameObjects.Group;
@@ -389,20 +416,26 @@ export class GameScene extends Phaser.Scene {
     });
 
 
-    // ---- Backdrop (District: Farmers' Market) — P1_SPRITE_SPEC #10 --------
-    // Sky: top 130 px, #FFFFCC
-    this.add.rectangle(W / 2, 65, W, 130, P.SKY);
-    // Ground: bottom 140 px, #7CB342
-    this.add.rectangle(W / 2, 195, W, 140, P.GROUND);
+    // ---- Backdrop — palette swaps per district (DMN-2 / ART_BIBLE) ----------
+    this.backdropSky = this.add.rectangle(W / 2, 65, W, 130, P.SKY);
+    this.backdropGround = this.add.rectangle(W / 2, 195, W, 140, P.GROUND);
 
-    // Market stall (mid-left) — 80×60 px brown rect + orange awning bar
-    this.add.rectangle(80, 160, 80, 60, P.STALL);
-    this.add.rectangle(80, 131, 80, 4, P.AWNING);
+    // Farmers' Market deco (stall + trees)
+    this.marketDeco.push(this.add.rectangle(80, 160, 80, 60, P.STALL));
+    this.marketDeco.push(this.add.rectangle(80, 131, 80, 4, P.AWNING));
+    this.marketDeco.push(this.add.circle(30, 100, 18, P.TREE));
+    this.marketDeco.push(this.add.circle(440, 90, 22, P.TREE));
+    this.marketDeco.push(this.add.circle(390, 110, 14, P.TREE));
 
-    // Tree circles (dark green #556B2F, 24–40 px diameter, background)
-    this.add.circle(30, 100, 18, P.TREE);
-    this.add.circle(440, 90, 22, P.TREE);
-    this.add.circle(390, 110, 14, P.TREE);
+    // Office Quarter deco (building silhouettes + lamp accent)
+    this.officeDeco.push(this.add.rectangle(55, 155, 70, 90, P_OFFICE.BUILDING));
+    this.officeDeco.push(this.add.rectangle(55, 118, 70, 8, P_OFFICE.ACCENT));
+    this.officeDeco.push(this.add.rectangle(420, 148, 90, 100, P_OFFICE.BUILDING));
+    this.officeDeco.push(this.add.rectangle(420, 108, 90, 10, P_OFFICE.ACCENT));
+    this.officeDeco.push(this.add.rectangle(250, 162, 60, 75, P_OFFICE.BUILDING));
+    this.officeDeco.push(this.add.circle(200, 175, 4, P_OFFICE.LAMP));
+    this.officeDeco.push(this.add.rectangle(198, 168, 2, 14, P_OFFICE.LAMP));
+    for (const d of this.officeDeco) d.setVisible(false);
 
     // ---- Truck (P1_SPRITE_SPEC #1) — 96×64 px, programmer art ------------
     const truckX = W / 2 + 60;
@@ -467,9 +500,16 @@ export class GameScene extends Phaser.Scene {
       ...TEXT_STYLE_LABEL, color: "#C0A060",
     });
 
-    this.add.text(W / 2, 2, "FARMERS' MARKET", {
+    this.txtDistrictBanner = this.add.text(W / 2, 2, "FARMERS' MARKET ▾", {
       ...TEXT_STYLE_LABEL, color: "#FF9800",
-    }).setOrigin(0.5, 0);
+    }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
+    this.txtDistrictBanner.on("pointerdown", () => {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen) {
+        this.openDistrictModal();
+      }
+    });
+    this.txtDistrictBanner.on("pointerover", () => this.txtDistrictBanner.setAlpha(0.85));
+    this.txtDistrictBanner.on("pointerout", () => this.txtDistrictBanner.setAlpha(1.0));
 
     this.txtCash = this.add.text(W - 6, 2, "Cash: $50.00", {
       ...TEXT_STYLE_BODY, color: "#FFD700",
@@ -486,6 +526,10 @@ export class GameScene extends Phaser.Scene {
     // Positioned below the lore counter; hidden when no active debt.
     this.rescueHudChip = this.add.text(W - 6, 28, "", {
       fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+    }).setOrigin(1, 0).setVisible(false);
+
+    this.derekHudChip = this.add.text(W - 6, 38, "", {
+      fontSize: "6px", color: "#1C3A47", fontFamily: "monospace",
     }).setOrigin(1, 0).setVisible(false);
 
     // ---- Roast Queue Panel (P1_SPRITE_SPEC #13) ----------------------------
@@ -526,7 +570,7 @@ export class GameScene extends Phaser.Scene {
 
       const slotIndex = i;
       slotRect.on("pointerdown", () => {
-        if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen) {
+        if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen) {
           this.advanceTutorialOnAction(1); // step 1: "start a roast"
           this.handleSlotClick(slotIndex);
         }
@@ -591,7 +635,7 @@ export class GameScene extends Phaser.Scene {
       fontSize: "8px", color: "#2C2416", fontFamily: "monospace",
     }).setOrigin(0.5);
     buyBtn.on("pointerdown", () => {
-      if (!this.reportOpen && !this.rescueModalOpen) {
+      if (!this.reportOpen && !this.rescueModalOpen && !this.districtModalOpen) {
         this.advanceTutorialOnAction(0); // step 0: "buy raw peanuts"
         this.openSupplyModal();
       }
@@ -608,7 +652,7 @@ export class GameScene extends Phaser.Scene {
       fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
     }).setOrigin(0.5);
     upgradesBtn.on("pointerdown", () => {
-      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.rescueModalOpen) {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.districtModalOpen && !this.rescueModalOpen) {
         this.openUpgradesModal();
       }
     });
@@ -624,7 +668,7 @@ export class GameScene extends Phaser.Scene {
       fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
     }).setOrigin(0.5);
     booksBtn.on("pointerdown", () => {
-      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen && !this.goalsModalOpen) {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen && !this.goalsModalOpen) {
         this.openBooksModal();
       }
     });
@@ -640,7 +684,7 @@ export class GameScene extends Phaser.Scene {
       fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
     }).setOrigin(0.5);
     goalsBtn.on("pointerdown", () => {
-      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen && !this.booksModalOpen) {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen && !this.booksModalOpen) {
         this.openGoalsModal();
       }
     });
@@ -658,7 +702,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(W - 50, dpY + 5, "END DAY", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
-    endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen) this.triggerEndOfDay(); });
+    endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen) this.triggerEndOfDay(); });
 
     // ---- Reset Save button (spec req; tucked in bottom-left corner) --------
     // Player-initiated only — confirm dialog prevents accidents. (DARK_PATTERN_GATE §B.3)
@@ -667,7 +711,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.add.text(28, dpY + 5, "RESET", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
     resetBtn.on("pointerdown", () => {
-      if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen) return;
+      if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen) return;
       this.showResetConfirm();
     });
 
@@ -693,7 +737,7 @@ export class GameScene extends Phaser.Scene {
       { fontSize: "6px", color: "#F5DEB3", fontFamily: "monospace" }
     ).setOrigin(0.5);
     settingsBtn.on("pointerdown", () => {
-      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) {
         this.openSettingsModal();
       }
     });
@@ -725,7 +769,7 @@ export class GameScene extends Phaser.Scene {
     // Track wall-clock playtime (excludes offline time; used by trySave meta)
     this.playtimeSeconds += delta / 1_000;
 
-    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.rescueModalOpen || this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen || this.glossaryModalOpen || this.aftermathModalOpen || this.inPostReportChain) return;
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen || this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen || this.glossaryModalOpen || this.aftermathModalOpen || this.inPostReportChain) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -795,7 +839,7 @@ export class GameScene extends Phaser.Scene {
     this.txtDay.setText(`Day ${this.state.dayNumber}`);
     // W4: day-of-week label (predictable, never framed as pressure — DARK_PATTERN_GATE §A.1)
     const dowIdx = ((this.state.dayNumber - 1) % 7 + 7) % 7;
-    const dayFactor = DAY_FACTOR[dowIdx];
+    const dayFactor = dayFactorFor(this.state.dayNumber, this.state.currentDistrict);
     const dowLabel = DAY_NAMES[dowIdx];
     // Show factor + today's weather + a 1-day forecast (predictable, never
     // pressuring — DARK_PATTERN_GATE §A.1; the forecast means no surprise/FOMO).
@@ -808,7 +852,20 @@ export class GameScene extends Phaser.Scene {
     this.txtPrice.setText(`$${this.state.sellPrice.toFixed(2)}`);
 
     // Demand hint at current price (now weather-aware so it matches live demand)
-    const demandLbsHr = projectedDemand(this.state.sellPrice, "classic_salted", this.state.brandCampaignActive, weatherFactorFor(this.state));
+    this.updateDistrictBackdrop();
+
+    const distCfg = DISTRICT_CONFIGS[this.state.currentDistrict];
+    this.txtDistrictBanner.setText(`${distCfg.label.toUpperCase()} ▾`);
+    if (this.state.currentDistrict === "office_quarter") {
+      const derekLine = this.state.derekLastPrice !== null
+        ? `Derek: ${this.state.derekConsistencyCounter}d streak · ±${(DEREK_PRICE_TOLERANCE * 100).toFixed(0)}% price`
+        : "Derek: office regular — keep price steady";
+      this.derekHudChip.setText(derekLine).setVisible(true);
+    } else {
+      this.derekHudChip.setVisible(false);
+    }
+
+    const demandLbsHr = this.projectedDemandForUI(this.state.sellPrice);
     // F7: derive COGS from economy constants, not a hardcoded literal
     const cogsPerLbClassic = RAW_PEANUT_BASE_PRICE + RECIPES.classic_salted.ingredientCostPerLb;
     const marginPct = this.state.sellPrice > 0
@@ -1024,13 +1081,13 @@ export class GameScene extends Phaser.Scene {
       // Row A: at current price
       const curPrice  = this.state.sellPrice;
       const margin1   = curPrice > 0 ? ((curPrice - cogs) / curPrice) * 100 : 0;
-      const demand1   = projectedDemand(curPrice, this.roastModalRecipe, this.state.brandCampaignActive, weatherFactorFor(this.state));
+      const demand1   = this.projectedDemandForUI(curPrice, this.roastModalRecipe);
       const marginColor = margin1 >= 60 ? "#4A7C4E" : margin1 >= 45 ? "#C08A00" : "#C0392B";
 
       // Row B: at optimum price (item 6 — two-row preview)
       const optPrice  = optimumPrice(this.roastModalRecipe, this.state.brandCampaignActive);
       const marginOpt = optPrice > 0 ? ((optPrice - cogs) / optPrice) * 100 : 0;
-      const demandOpt = projectedDemand(optPrice, this.roastModalRecipe, this.state.brandCampaignActive, weatherFactorFor(this.state));
+      const demandOpt = this.projectedDemandForUI(optPrice, this.roastModalRecipe);
 
       if (previewLines.length >= 5) {
         previewLines[0].setText(`COGS total: $${cogsTotal.toFixed(2)}  Roast: ${roastMins.toFixed(0)} min (sim)`);
@@ -1532,6 +1589,181 @@ export class GameScene extends Phaser.Scene {
       this.upgradesModalGroup = undefined;
     }
     this.upgradesModalOpen = false;
+    this.updateHUD();
+  }
+
+  // ---------------------------------------------------------------------------
+  // District / routes modal (P1.5 — DMN-1)
+  // Tap the district banner in the HUD to open. Permit purchase + district switch.
+  // ---------------------------------------------------------------------------
+
+  private simHourNow(): number {
+    return 6 + this.state.dayElapsedSeconds / 3600;
+  }
+
+  private projectedDemandForUI(price: number, recipe: RecipeId = "classic_salted"): number {
+    return projectedDemand(
+      price,
+      recipe,
+      this.state.brandCampaignActive,
+      weatherFactorFor(this.state),
+      this.state.currentDistrict,
+      this.simHourNow(),
+    );
+  }
+
+  /** Swap sky/ground palette and district deco when `currentDistrict` changes. */
+  private updateDistrictBackdrop(): void {
+    if (this.lastBackdropDistrict === this.state.currentDistrict) return;
+    this.lastBackdropDistrict = this.state.currentDistrict;
+    const isOffice = this.state.currentDistrict === "office_quarter";
+    if (isOffice) {
+      this.backdropSky.setFillStyle(P_OFFICE.SKY);
+      this.backdropGround.setFillStyle(P_OFFICE.GROUND);
+    } else {
+      this.backdropSky.setFillStyle(P.SKY);
+      this.backdropGround.setFillStyle(P.GROUND);
+    }
+    for (const d of this.marketDeco) d.setVisible(!isOffice);
+    for (const d of this.officeDeco) d.setVisible(isOffice);
+  }
+
+  private openDistrictModal(): void {
+    if (this.districtModalOpen) return;
+    this.districtModalOpen = true;
+    playButtonTick();
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const mW = 300;
+    const mH = 172;
+    const mX = (W - mW) / 2;
+    const mY = (H - mH) / 2;
+    const districtOrder: DistrictId[] = ["farmers_market", "office_quarter"];
+
+    this.districtModalGroup = this.add.group();
+
+    const backdrop = this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.55)
+      .setInteractive();
+    this.districtModalGroup.add(backdrop);
+
+    this.districtModalGroup.add(
+      this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG)
+        .setStrokeStyle(2, P.PANEL_BORDER)
+    );
+
+    this.districtModalGroup.add(
+      this.add.text(mX + 6, mY + 5, "ROUTES — Districts", TEXT_STYLE_HEADER)
+    );
+
+    const closeBtn = this.add.rectangle(mX + mW - 12, mY + 11, 16, 14, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.districtModalGroup.add(closeBtn);
+    this.districtModalGroup.add(
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    closeBtn.on("pointerdown", () => this.closeDistrictModal());
+
+    this.districtModalGroup.add(this.add.rectangle(mX + mW / 2, mY + 21, mW - 8, 1, P.PANEL_BORDER));
+
+    let rowY = mY + 27;
+    for (const id of districtOrder) {
+      const cfg = DISTRICT_CONFIGS[id];
+      const unlocked = this.state.unlockedDistricts.includes(id);
+      const here = this.state.currentDistrict === id;
+
+      this.districtModalGroup.add(this.add.text(mX + 6, rowY, cfg.label.toUpperCase(), { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+      rowY += 10;
+
+      const detailParts = [
+        `~${cfg.baseDemandLbsPerHour} lbs/hr base`,
+        `anchor $${cfg.basePrice.toFixed(2)}`,
+      ];
+      if (cfg.lunchRushHour > 0) {
+        detailParts.push(`lunch rush ~${cfg.lunchRushHour}:00`);
+      }
+      this.districtModalGroup.add(this.add.text(mX + 10, rowY, detailParts.join(" · "), TEXT_STYLE_LABEL));
+      rowY += 10;
+
+      if (here) {
+        this.districtModalGroup.add(this.add.text(mX + 10, rowY, "● Operating here today", { ...TEXT_STYLE_LABEL, color: "#4A7C4E" }));
+        if (id === "office_quarter") {
+          rowY += 10;
+          this.districtModalGroup.add(this.add.text(mX + 10, rowY,
+            `Derek likes steady prices (±${(DEREK_PRICE_TOLERANCE * 100).toFixed(0)}%). Streak: ${this.state.derekConsistencyCounter} days.`,
+            { ...TEXT_STYLE_LABEL, wordWrap: { width: mW - 20 } }));
+        }
+        rowY += 14;
+      } else if (unlocked) {
+        const switchBtn = this.add.rectangle(mX + mW - 52, rowY + 6, 88, 16, 0x556677)
+          .setStrokeStyle(1, P.PANEL_BORDER)
+          .setInteractive({ cursor: "pointer" });
+        this.districtModalGroup.add(switchBtn);
+        this.districtModalGroup.add(
+          this.add.text(mX + mW - 52, rowY + 6, "SWITCH", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+        );
+        const targetId = id;
+        switchBtn.on("pointerdown", () => {
+          const ev = setDistrict(this.state, targetId);
+          if (ev) {
+            playButtonTick();
+            this.closeDistrictModal();
+            this.showToast(`Rolled to ${cfg.label} — demand curve updated.`);
+          }
+        });
+        switchBtn.on("pointerover", () => switchBtn.setAlpha(0.85));
+        switchBtn.on("pointerout", () => switchBtn.setAlpha(1.0));
+        rowY += 18;
+      } else if (cfg.permitCost > 0) {
+        const canAfford = this.state.cash >= cfg.permitCost;
+        const permitBtn = this.add.rectangle(mX + mW - 58, rowY + 6, 100, 16, canAfford ? 0x556677 : 0x888888)
+          .setStrokeStyle(1, P.PANEL_BORDER)
+          .setInteractive({ cursor: canAfford ? "pointer" : "default" });
+        this.districtModalGroup.add(permitBtn);
+        this.districtModalGroup.add(
+          this.add.text(mX + mW - 58, rowY + 6, `PERMIT $${cfg.permitCost}`, { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+        );
+        if (canAfford) {
+          const targetId = id;
+          permitBtn.on("pointerdown", () => {
+            const ev = buyPermit(this.state, targetId);
+            if (ev) {
+              playButtonTick();
+              setDistrict(this.state, targetId);
+              this.closeDistrictModal();
+              this.showToast(`Permit secured — welcome to ${cfg.label}.`);
+            }
+          });
+          permitBtn.on("pointerover", () => permitBtn.setAlpha(0.85));
+          permitBtn.on("pointerout", () => permitBtn.setAlpha(1.0));
+        } else {
+          this.districtModalGroup.add(this.add.text(mX + 10, rowY + 18, "Need more cash for the permit.", { ...TEXT_STYLE_LABEL, color: "#C0392B" }));
+          rowY += 10;
+        }
+        rowY += 18;
+      } else {
+        rowY += 4;
+      }
+    }
+
+    const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.districtModalGroup.add(doneBtn);
+    this.districtModalGroup.add(
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+    );
+    doneBtn.on("pointerdown", () => this.closeDistrictModal());
+    doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
+    doneBtn.on("pointerout", () => doneBtn.setAlpha(1.0));
+  }
+
+  private closeDistrictModal(): void {
+    if (this.districtModalGroup) {
+      this.districtModalGroup.destroy(true);
+      this.districtModalGroup = undefined;
+    }
+    this.districtModalOpen = false;
     this.updateHUD();
   }
 
@@ -2097,7 +2329,7 @@ export class GameScene extends Phaser.Scene {
 
     const slotIndex = i;
     slotRect.on("pointerdown", () => {
-      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen) {
+      if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen) {
         this.handleSlotClick(slotIndex);
       }
     });
@@ -2380,7 +2612,8 @@ export class GameScene extends Phaser.Scene {
     this.reportGroup.add(this.add.rectangle(rX + rW / 2, rY + 22, rW - 8, 1, P.PANEL_BORDER));
 
     // Location / ops line
-    this.reportGroup.add(this.add.text(rX + 8, rY + 27, `Location: Farmers' Market  |  Units sold: ${r.unitsSold.toFixed(1)} lbs`, TEXT_STYLE_LABEL));
+    const locLabel = DISTRICT_CONFIGS[this.state.currentDistrict].label;
+    this.reportGroup.add(this.add.text(rX + 8, rY + 27, `Location: ${locLabel}  |  Units sold: ${r.unitsSold.toFixed(1)} lbs`, TEXT_STYLE_LABEL));
 
     // Revenue & COGS box
     // F8: show avg realized price (revenue/unitsSold)
