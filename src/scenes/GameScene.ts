@@ -67,6 +67,8 @@ import {
   marginCue,
 } from "./prefs.js";
 import { drawLegsy } from "./legsy.js";
+import { drawFoodTruck, SMOKE } from "./truck.js";
+import { drawNpc, type NpcArchetype } from "./npcs.js";
 import {
   audioInit,
   toggleMute,
@@ -219,10 +221,7 @@ interface NpcData {
   y: number;
   dir: number;          // +1 or -1
   speed: number;        // px per second
-  colorBody: number;
-  colorShirt: number;
-  rect: Phaser.GameObjects.Rectangle;
-  head: Phaser.GameObjects.Rectangle;
+  container: Phaser.GameObjects.Container;
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +268,12 @@ export class GameScene extends Phaser.Scene {
 
   // ---- Ambient NPC data --------------------------------------------------
   private npcs: NpcData[] = [];
+
+  // ---- Truck (DMN-2b) ----------------------------------------------------
+  private truckContainer?: Phaser.GameObjects.Container;
+  private truckBaseY = 195;
+  private truckBouncePhase = 0;
+  private smokeOriginX = 0;
 
   // ---- Smoke animation counter -------------------------------------------
   private smokeTimer = 0;
@@ -437,53 +442,41 @@ export class GameScene extends Phaser.Scene {
     this.officeDeco.push(this.add.rectangle(198, 168, 2, 14, P_OFFICE.LAMP));
     for (const d of this.officeDeco) d.setVisible(false);
 
-    // ---- Truck (P1_SPRITE_SPEC #1) — 96×64 px, programmer art ------------
+    // ---- Truck (DMN-2b — ART_BIBLE food truck + idle bounce) --------------
     const truckX = W / 2 + 60;
     const truckY = 195;
+    this.truckBaseY = truckY;
+    this.smokeOriginX = truckX;
 
-    // Body: #8B6F47
-    this.add.rectangle(truckX, truckY - 16, 96, 48, P.TRUCK_BODY);
-    // Trim bar (roof): #F5DEB3
-    this.add.rectangle(truckX, truckY - 40, 96, 6, P.TRUCK_TRIM);
-    // Cabin (right side): slightly darker
-    this.add.rectangle(truckX + 26, truckY - 20, 44, 36, 0xA0844E);
-    // Window (serving): #2C2416
-    this.add.rectangle(truckX - 18, truckY - 20, 24, 18, P.TRUCK_WINDOW);
-    // Wheels: #333333, circles 10 px radius
-    this.add.circle(truckX - 32, truckY + 8, 10, P.WHEELS);
-    this.add.circle(truckX + 32, truckY + 8, 10, P.WHEELS);
+    const truck = drawFoodTruck(this, truckX, truckY);
+    this.truckContainer = truck.container;
 
-    // Legsy painted on the truck side panel (programmer-art; code-drawn).
-    // Scale 0.6 keeps it inside the panel (~19×29 px visible on the side).
-    drawLegsy(this, truckX + 16, truckY - 1, 0.6);
+    // Legsy on side panel (scale down to fit beside peanut graphic)
+    drawLegsy(this, truckX - 8, truckY - 1, 0.55);
 
-    // ---- Smoke wisps (P1_SPRITE_SPEC #2) — circles above truck ------------
-    // 3 wisps; opacity / position animated in update()
+    // ---- Smoke wisps (P1_SPRITE_SPEC #2) ----------------------------------
     for (let i = 0; i < 3; i++) {
-      const c = this.add.circle(truckX - 10 + i * 6, truckY - 50 - i * 8, 5, P.SMOKE);
+      const anchor = truck.smokeAnchors[i];
+      const c = this.add.circle(anchor.x, anchor.y, 5, SMOKE);
       c.setAlpha(0);
       this.smokeCircles.push(c);
     }
 
-    // ---- NPC ambient customers (P1_SPRITE_SPEC #6, #7, #8) ----------------
-    // Three archetypes: Legume Lecturer (tall/thin), Concerned Parent (short/wide), Office Worker (narrow/suit)
-    const npcDefs: Array<{ x: number; y: number; colorBody: number; colorShirt: number; w: number; h: number }> = [
-      { x: 200, y: 200, colorBody: P.NPC_SKIN, colorShirt: P.NPC_SHIRT_A, w: 8, h: 16 }, // Lecturer
-      { x: 260, y: 205, colorBody: P.NPC_SKIN, colorShirt: P.NPC_SHIRT_B, w: 10, h: 14 }, // Parent
-      { x: 320, y: 202, colorBody: P.NPC_SKIN, colorShirt: P.NPC_SUIT,   w: 6,  h: 15 }, // Worker
+    // ---- NPC ambient customers (DMN-2b silhouettes) -----------------------
+    const npcDefs: Array<{ x: number; y: number; archetype: NpcArchetype; shirt: number }> = [
+      { x: 200, y: 200, archetype: "lecturer", shirt: P.NPC_SHIRT_A },
+      { x: 260, y: 205, archetype: "parent", shirt: P.NPC_SHIRT_B },
+      { x: 320, y: 202, archetype: "worker", shirt: P.NPC_SUIT },
     ];
 
     for (const def of npcDefs) {
-      const shirt = this.add.rectangle(def.x, def.y, def.w, def.h, def.colorShirt);
-      const head  = this.add.rectangle(def.x, def.y - def.h / 2 - 5, 7, 8, def.colorBody);
+      const handle = drawNpc(this, def.archetype, def.x, def.y, def.shirt);
       this.npcs.push({
-        x: def.x, y: def.y,
+        x: def.x,
+        y: def.y,
         dir: Math.random() > 0.5 ? 1 : -1,
         speed: 15 + Math.random() * 10,
-        colorBody: def.colorBody,
-        colorShirt: def.colorShirt,
-        rect: shirt,
-        head: head,
+        container: handle.container,
       });
     }
 
@@ -3026,7 +3019,9 @@ export class GameScene extends Phaser.Scene {
         // Pulse opacity and slight drift
         const phase = (this.smokeTimer * 0.8 + i * 1.1) % (Math.PI * 2);
         c.setAlpha(0.3 + 0.3 * Math.sin(phase));
-        c.y = (195 - 50 - i * 8) + Math.sin(this.smokeTimer * 0.5 + i) * 3;
+        const baseY = this.truckContainer?.y ?? this.truckBaseY;
+        c.y = (baseY - 50 - i * 8) + Math.sin(this.smokeTimer * 0.5 + i) * 3;
+        c.x = this.smokeOriginX - 10 + i * 6;
       } else {
         c.setAlpha(0);
       }
@@ -3038,14 +3033,16 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private animateNpcs(dt: number): void {
-    // Reduced motion: NPCs stand still (no ambient pacing).
     if (isReducedMotion()) return;
     const W = this.scale.width;
     for (const npc of this.npcs) {
       npc.x += npc.dir * npc.speed * dt;
       if (npc.x > W - 60 || npc.x < 150) npc.dir *= -1;
-      npc.rect.setPosition(npc.x, npc.y);
-      npc.head.setPosition(npc.x, npc.y - npc.rect.height / 2 - 5);
+      npc.container.setPosition(npc.x, npc.y);
+    }
+    if (this.truckContainer) {
+      this.truckBouncePhase += dt;
+      this.truckContainer.y = this.truckBaseY + Math.sin(this.truckBouncePhase * 2.5) * 2;
     }
   }
 
