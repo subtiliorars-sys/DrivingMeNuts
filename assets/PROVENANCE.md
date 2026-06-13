@@ -20,3 +20,6 @@ Every file committed to `assets/` gets a row in the table below.
 
 | filename | author/source | method | license/permission | date |
 |----------|--------------|--------|--------------------|------|
+| `dogs/pixelcave/*.png` | Pixelcave (itch.io) | purchased pixel art | Commercial use per Pixelcave license; credit appreciated | 2026-06-13 |
+| `dogs/luizmelo-pet-dogs/**` | LuizMelo Pet Dogs Pack | purchased/free CC0 | CC0 | 2026-06-13 |
+| `dogs/pixelcave-dog.js` | Fleet | human-written loader | internal | 2026-06-13 |

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fleet dog assets — review</title>
+  <style>
+    :root { --bg:#0f1117; --text:#e8eaef; --accent:#f59e0b; --card:#1a1d28; }
+    body { margin:0; padding:24px; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,sans-serif; max-width:960px; margin-inline:auto; }
+    h1 { color:var(--accent); font-size:1.3rem; }
+    h2 { font-size:1rem; margin-top:2rem; }
+    a { color:var(--accent); }
+    .grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+    figure { margin:0; padding:16px; background:var(--card); border-radius:8px; }
+    img, canvas { image-rendering:pixelated; max-width:100%; background:#111; border-radius:4px; }
+    figcaption { margin-top:8px; font-size:.85rem; }
+    .live { min-height:80px; display:grid; place-items:center; background:#111; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <h1>Fleet dog asset library</h1>
+  <p>Purchased Pixelcave sheets + LuizMelo CC0 pack. <a href="README.md">README</a> · <a href="ATTRIBUTION.md">Attribution</a></p>
+
+  <h2>Pixelcave — Pomeranian (Pat)</h2>
+  <figure>
+    <img src="pixelcave/pomeranianasset-grid.png" alt="Pomeranian sprite sheet" width="400">
+    <div class="live" id="pom-live"></div>
+    <figcaption>
+      <a href="pixelcave/pomeranianasset-grid.png">pomeranianasset-grid.png</a> — recolor to black + white chest/paws for Pat
+    </figcaption>
+  </figure>
+
+  <h2>Pixelcave — other breeds</h2>
+  <div class="grid">
+    <figure><img src="pixelcave/corgi-asset-notail.png" alt="Corgi"><figcaption><a href="pixelcave/corgi-asset-notail.png">corgi</a></figcaption></figure>
+    <figure><img src="pixelcave/frenchbulldogasset-grid.png" alt="French bulldog"><figcaption><a href="pixelcave/frenchbulldogasset-grid.png">french bulldog</a></figcaption></figure>
+    <figure><img src="pixelcave/poodleasset-grid.png" alt="Poodle"><figcaption><a href="pixelcave/poodleasset-grid.png">poodle</a></figcaption></figure>
+    <figure><img src="pixelcave/pugasset-grid.png" alt="Pug"><figcaption><a href="pixelcave/pugasset-grid.png">pug</a></figcaption></figure>
+    <figure><img src="pixelcave/schnauzer-grid.png" alt="Schnauzer"><figcaption><a href="pixelcave/schnauzer-grid.png">schnauzer</a></figcaption></figure>
+  </div>
+
+  <h2>LuizMelo CC0 (sample)</h2>
+  <div class="grid">
+    <figure><img src="luizmelo-pet-dogs/Pet Dogs Pack/Dog-2-Akita/Akita-sitting.png" alt="Akita sit"><figcaption>Akita sitting</figcaption></figure>
+    <figure><img src="luizmelo-pet-dogs/Pet Dogs Pack/Dog-1-Golden-Retriever/Golden-Retriever-idle.png" alt="Golden idle"><figcaption>Golden retriever idle strip</figcaption></figure>
+  </div>
+
+  <script src="pixelcave-dog.js"></script>
+  <script>
+    PixelcaveDog.mount(document.getElementById("pom-live"), {
+      sheet: "pixelcave/pomeranianasset-grid.png",
+      anim: "idle1",
+      scale: 5,
+    });
+  </script>
+</body>
+</html>
