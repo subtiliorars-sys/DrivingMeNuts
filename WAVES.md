@@ -14,6 +14,7 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 **Status:** `done`  
 **Spec:** `docs/SYSTEMS_BACKLOG.md` §3  
 **Branch:** `automation/wave-dm-w2-large-text`  
+**PR:** https://github.com/subtiliorars-sys/DrivingMeNuts/pull/29  
 **Completed:** 2026-06-13
 
 **Acceptance:**
@@ -24,13 +25,16 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 ---
 
 ### Wave DM-W3 — P1-EXIT prep docs
-**Status:** `pending`  
-**Branch:** `automation/wave-dm-w3-p1-exit-docs`
+**Status:** `done`  
+**Branch:** `automation/wave-dm-w3-p1-exit-docs`  
+**Completed:** 2026-06-13
 
 **Acceptance:**
-- [ ] SME checklist + allergy reviewer brief cross-linked in START_HERE
-- [ ] Docs only — no gameplay promises
-- [ ] `npm run verify` green
+- [x] SME checklist + allergy reviewer brief cross-linked in START_HERE
+- [x] Docs only — no gameplay promises
+- [x] `npm run verify` green
+
+---
 
 ## Blocked (queue owner — do not implement)
 - Marketing campaign tiers (A4) — owner decision
