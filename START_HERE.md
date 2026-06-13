@@ -36,9 +36,20 @@ for you.
 
 **Where we left off (so you don't have to remember):**
 - The game is at **v0.9.2** — fully playable, lots of features, everything saved.
-- **Next planned step:** get ready for the "P1 exit" review — Claude will help
-  organize the small-business-accuracy checklist for you to walk through with an
-  accountant, and draft the peanut-allergy reviewer note.
+- **Next planned step:** get ready for the **P1 exit** review — walk the accountant
+  through the business-accuracy checklist and send the allergy reviewer brief.
+
+### P1 exit review packs (start here)
+
+| Pack | File | Who |
+|------|------|-----|
+| **Business accuracy (93 claims)** | [`docs/SME_REVIEW_CHECKLIST.md`](docs/SME_REVIEW_CHECKLIST.md) | Accountant / small-business SME (2–4 hrs) |
+| **Full claim context** | [`docs/SME_REVIEW_PACK.md`](docs/SME_REVIEW_PACK.md) | Same reviewer — reference behind the checklist |
+| **Allergy mechanic review** | [`docs/ALLERGY_REVIEWER_BRIEF.md`](docs/ALLERGY_REVIEWER_BRIEF.md) | Owner-sourced allergy-aware reviewer (30–60 min) |
+
+Any `[WRONG]` on the SME checklist or a failed allergy review **blocks P1 exit**
+(see `docs/RISK_REGISTER.md` A1 / A2). These are owner-gated — automation prepares
+the packs; you schedule the humans.
 
 That's all in Claude's memory; you just have to ask it to continue.
 
