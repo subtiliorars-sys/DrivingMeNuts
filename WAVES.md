@@ -10,14 +10,7 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 
 ## Active queue
 
-### Wave DM-W5 — SYSTEMS_BACKLOG §3 sync (large-text shipped)
-**Status:** `in_review`  
-**Branch:** `automation/wave-dm-w5-backlog-sync`
-
-**Acceptance:**
-- [x] Mark large-text as shipped (PR #29); owner visual QA stays on owner queue
-- [x] Docs only — no gameplay changes
-- [x] `npm run verify` green (docs-only; unchanged)
+_Queue idle — no `pending`/`active` waves. Owner must add the next wave here or unblock a backlog item._
 
 ---
 
@@ -33,3 +26,4 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 - **DM-W2 — Large-text accessibility** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/29 (2026-06-13)
 - **DM-W3 — P1-EXIT prep docs** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/30 (2026-06-13)
 - **DM-W4 — EDUCATOR_GUIDE build-status sync** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/31 (2026-06-13)
+- **DM-W5 — SYSTEMS_BACKLOG §3 sync (large-text shipped)** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/32 (2026-06-13)
