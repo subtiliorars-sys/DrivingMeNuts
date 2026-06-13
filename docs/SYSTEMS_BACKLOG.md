@@ -123,30 +123,23 @@ keep in P2 column.
 
 ---
 
-## 3. Large-text accessibility — **needs attended visual verification**
+## 3. Large-text accessibility — ✅ SHIPPED (2026-06-13, PR #29)
 
 **Goal.** Complete the accessibility trio (reduced-motion ✓, colour-blind ✓,
 large-text). A `largeText` pref scaling font sizes for low-vision players.
 
-### Why it was deferred
-GameScene creates ~100 text objects with hardcoded `fontSize` strings, inside
-fixed-size panels. A global font scale (e.g. 1.3×) reflows every modal and HUD
-row — overflow/clipping is the dominant risk, and it is **not catchable by the
-headless boot smoke or tsc**; it needs a real FIT-scaled browser eyeball. Shipping
-it blind risks regressing layouts across the whole UI.
+### Shipped (DM-W2)
+- `largeText` pref in Settings (same pattern as reduced-motion / colour-blind).
+- `scaledFont()` helper + `txt()` wrapper apply scale in one place.
+- `npm run verify` green; unit tests cover pref persistence.
 
-### Recommended approach (for an attended session)
-- Add `largeText` to `prefs.ts` (toggle in Settings, same pattern as the others).
-- Introduce a single `scaledFont(px: number): string` helper and a `txt()` wrapper
-  (or a post-create pass) so the scale is applied in ONE place, not 100 edits.
-- Audit each panel at 1.25–1.3× for overflow; widen/auto-height the panels that
-  clip (the Glossary, BOOKS table, Settings, day-report are the dense ones).
-- Verify in `npm run dev` at FIT scale (the boot smoke can't see overflow).
-- Alternative lower-risk MVP: a **minimum-font-size floor** (bump only sub-8px
-  text to 8px) — bounded reflow, still needs a visual check.
+### Owner follow-up (visual QA — not a code blocker)
+Headless verify cannot catch panel overflow at FIT scale. Daniel: run
+`npm run dev`, toggle Large text, eyeball Glossary / BOOKS / Settings / day-report.
+Owner queue item: `agent-corps/fleet/owner-queue/items/20260613-1820-dmn-visual-check`.
 
 ### Status
-Ready to implement; **schedule for an attended fire** (visual check required).
+**Code shipped.** Attended visual verification remains on the owner queue.
 
 ---
 
@@ -158,4 +151,4 @@ Ready to implement; **schedule for an attended fire** (visual check required).
 | Auto-sell off-peak | Yes (default-off, additive) | owner confirm cost | `autoSellEnabled` additive-optional |
 | Refrigerated truck | No | **spoilage (P2) not shipped** | — |
 | Marketing tiers | No | **A4 Owner Decision** (timed boost) | additive-optional |
-| Large-text | No | **needs visual verification** | `largeText` pref |
+| Large-text | Shipped (DM-W2); owner visual QA queued | visual eyeball in owner queue | `largeText` pref |

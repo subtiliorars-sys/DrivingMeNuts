@@ -10,16 +10,14 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 
 ## Active queue
 
-### Wave DM-W4 — EDUCATOR_GUIDE build-status sync
-**Status:** `done`  
-**Branch:** `automation/wave-dm-w4-educator-guide-sync`  
-**Spec:** Align `docs/EDUCATOR_GUIDE.md` with shipped P1/P1.5 features (districts, save, rescue, weather, large-text, permits)
+### Wave DM-W5 — SYSTEMS_BACKLOG §3 sync (large-text shipped)
+**Status:** `in_review`  
+**Branch:** `automation/wave-dm-w5-backlog-sync`
 
 **Acceptance:**
-- [x] Remove stale "(planned)" / "not in P1 build" for shipped features
-- [x] PLANNED section accurate (P2-only items remain)
-- [x] Docs only — no gameplay promises
-- [x] `npm run verify` green
+- [x] Mark large-text as shipped (PR #29); owner visual QA stays on owner queue
+- [x] Docs only — no gameplay changes
+- [x] `npm run verify` green (docs-only; unchanged)
 
 ---
 
@@ -34,3 +32,4 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 - **DM-W1 — Auto-sell off-peak (GDD C4)** — merged on `main` (owner-approved $1,500 upgrade; default-off; `auto_sell.test.ts` + upgrades modal + day-report line; dark-pattern framing: "less waste / frees cash")
 - **DM-W2 — Large-text accessibility** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/29 (2026-06-13)
 - **DM-W3 — P1-EXIT prep docs** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/30 (2026-06-13)
+- **DM-W4 — EDUCATOR_GUIDE build-status sync** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/31 (2026-06-13)
