@@ -17,18 +17,24 @@
 
 export const REDUCED_MOTION_KEY = "dmn_reduced_motion";
 export const COLORBLIND_KEY = "dmn_colorblind_cues";
+export const LARGE_TEXT_KEY = "dmn_large_text";
+
+/** Multiplier applied to all UI font sizes when large-text mode is on. */
+export const LARGE_TEXT_SCALE = 1.28;
 
 type ReadStorage = Pick<Storage, "getItem">;
 type WriteStorage = Pick<Storage, "getItem" | "setItem">;
 
 let _reducedMotion = false;
 let _colorblindCues = false;
+let _largeText = false;
 
 /** Load persisted prefs (call once on scene create, before first render). */
 export function prefsInit(storage?: ReadStorage): void {
   if (!storage) return;
   _reducedMotion = storage.getItem(REDUCED_MOTION_KEY) === "1";
   _colorblindCues = storage.getItem(COLORBLIND_KEY) === "1";
+  _largeText = storage.getItem(LARGE_TEXT_KEY) === "1";
 }
 
 export function isReducedMotion(): boolean {
@@ -37,6 +43,20 @@ export function isReducedMotion(): boolean {
 
 export function isColorblindCues(): boolean {
   return _colorblindCues;
+}
+
+export function isLargeText(): boolean {
+  return _largeText;
+}
+
+/** Scale factor for font sizes (1 or LARGE_TEXT_SCALE). */
+export function fontScale(): number {
+  return _largeText ? LARGE_TEXT_SCALE : 1;
+}
+
+/** Return a Phaser fontSize string for a base pixel size. */
+export function scaledFont(basePx: number): string {
+  return `${Math.round(basePx * fontScale())}px`;
 }
 
 /** Toggle reduced-motion; persists; returns the new value. */
@@ -51,6 +71,13 @@ export function toggleColorblindCues(storage?: WriteStorage): boolean {
   _colorblindCues = !_colorblindCues;
   if (storage) storage.setItem(COLORBLIND_KEY, _colorblindCues ? "1" : "0");
   return _colorblindCues;
+}
+
+/** Toggle large-text mode; persists; returns the new value. */
+export function toggleLargeText(storage?: WriteStorage): boolean {
+  _largeText = !_largeText;
+  if (storage) storage.setItem(LARGE_TEXT_KEY, _largeText ? "1" : "0");
+  return _largeText;
 }
 
 /**
