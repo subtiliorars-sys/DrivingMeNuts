@@ -11,14 +11,17 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 ## Active queue
 
 ### Wave DM-W2 — Large-text accessibility
-**Status:** `pending`  
+**Status:** `done`  
 **Spec:** `docs/SYSTEMS_BACKLOG.md` §3  
-**Branch:** `automation/wave-dm-w2-large-text`
+**Branch:** `automation/wave-dm-w2-large-text`  
+**Completed:** 2026-06-13
 
 **Acceptance:**
-- [ ] `largeText` pref + scaled font helper
-- [ ] PR body includes **owner visual check** steps (panels to eyeball)
-- [ ] `npm run verify` green
+- [x] `largeText` pref + scaled font helper
+- [x] PR body includes **owner visual check** steps (panels to eyeball)
+- [x] `npm run verify` green
+
+---
 
 ### Wave DM-W3 — P1-EXIT prep docs
 **Status:** `pending`  

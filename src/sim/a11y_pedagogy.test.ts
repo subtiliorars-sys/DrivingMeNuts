@@ -8,11 +8,17 @@ import {
   prefsInit,
   isReducedMotion,
   isColorblindCues,
+  isLargeText,
   toggleReducedMotion,
   toggleColorblindCues,
+  toggleLargeText,
+  scaledFont,
+  fontScale,
   marginCue,
   REDUCED_MOTION_KEY,
   COLORBLIND_KEY,
+  LARGE_TEXT_KEY,
+  LARGE_TEXT_SCALE,
 } from "../scenes/prefs.js";
 import {
   GLOSSARY,
@@ -36,10 +42,16 @@ describe("accessibility prefs", () => {
     prefsInit(makeStorage()); // empty
     expect(isReducedMotion()).toBe(false);
     expect(isColorblindCues()).toBe(false);
+    expect(isLargeText()).toBe(false);
 
-    prefsInit(makeStorage({ [REDUCED_MOTION_KEY]: "1", [COLORBLIND_KEY]: "1" }));
+    prefsInit(makeStorage({
+      [REDUCED_MOTION_KEY]: "1",
+      [COLORBLIND_KEY]: "1",
+      [LARGE_TEXT_KEY]: "1",
+    }));
     expect(isReducedMotion()).toBe(true);
     expect(isColorblindCues()).toBe(true);
+    expect(isLargeText()).toBe(true);
   });
 
   it("toggles flip state and persist to storage", () => {
@@ -56,6 +68,18 @@ describe("accessibility prefs", () => {
     // round-trips through a fresh init
     prefsInit(makeStorage({ [COLORBLIND_KEY]: "1" }));
     expect(isColorblindCues()).toBe(true);
+  });
+
+  it("largeText toggle scales fonts and persists (DM-W2)", () => {
+    const s = makeStorage();
+    prefsInit(s);
+    expect(toggleLargeText(s)).toBe(true);
+    expect(s.map.get(LARGE_TEXT_KEY)).toBe("1");
+    expect(isLargeText()).toBe(true);
+    expect(fontScale()).toBe(LARGE_TEXT_SCALE);
+    expect(scaledFont(10)).toBe(`${Math.round(10 * LARGE_TEXT_SCALE)}px`);
+    expect(toggleLargeText(s)).toBe(false);
+    expect(scaledFont(10)).toBe("10px");
   });
 
   it("RT F1: loadMutePref syncs mute from storage without a gesture", () => {

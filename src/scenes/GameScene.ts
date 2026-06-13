@@ -62,10 +62,21 @@ import {
   prefsInit,
   isReducedMotion,
   isColorblindCues,
+  isLargeText,
   toggleReducedMotion,
   toggleColorblindCues,
+  toggleLargeText,
   marginCue,
+  scaledFont,
 } from "./prefs.js";
+import {
+  textStyleBody,
+  textStyleLabel,
+  textStyleHeader,
+  textStyleGreen,
+  textStyleRed,
+  monoTextStyle,
+} from "./textStyles.js";
 import { drawLegsy } from "./legsy.js";
 import { drawFoodTruck, SMOKE } from "./truck.js";
 import { drawNpc, type NpcArchetype } from "./npcs.js";
@@ -162,33 +173,7 @@ const P_OFFICE = {
   LAMP:     0xFDB813,  // street-lamp warm accent (Palette B coin gold)
 } as const;
 
-// Text style presets (matches P1_SPRITE_SPEC: min 14pt readable)
-const TEXT_STYLE_BODY: Phaser.Types.GameObjects.Text.TextStyle = {
-  fontSize: "9px",
-  color: "#2C2416",
-  fontFamily: "monospace",
-};
-const TEXT_STYLE_LABEL: Phaser.Types.GameObjects.Text.TextStyle = {
-  fontSize: "8px",
-  color: "#2C2416",
-  fontFamily: "monospace",
-};
-const TEXT_STYLE_HEADER: Phaser.Types.GameObjects.Text.TextStyle = {
-  fontSize: "10px",
-  color: "#2C2416",
-  fontFamily: "monospace",
-  fontStyle: "bold",
-};
-const TEXT_STYLE_GREEN: Phaser.Types.GameObjects.Text.TextStyle = {
-  fontSize: "9px",
-  color: "#4A7C4E",
-  fontFamily: "monospace",
-};
-const TEXT_STYLE_RED: Phaser.Types.GameObjects.Text.TextStyle = {
-  fontSize: "9px",
-  color: "#C0392B",
-  fontFamily: "monospace",
-};
+// Text style presets — scaled via textStyles.ts (DM-W2 large-text pref)
 
 // ---------------------------------------------------------------------------
 // Coin pop animation helper (fires on each sale event)
@@ -485,16 +470,16 @@ export class GameScene extends Phaser.Scene {
     this.add.rectangle(W / 2, 8, W, 16, P.PANEL_BORDER);
 
     this.txtDay = this.add.text(6, 2, "Day 1", {
-      ...TEXT_STYLE_BODY, color: "#F5DEB3",
+      ...textStyleBody(), color: "#F5DEB3",
     });
 
     // W4: day-of-week label (predictable, visible — DARK_PATTERN_GATE §A.1 compliant)
     this.txtDayOfWeek = this.add.text(48, 2, "Monday", {
-      ...TEXT_STYLE_LABEL, color: "#C0A060",
+      ...textStyleLabel(), color: "#C0A060",
     });
 
     this.txtDistrictBanner = this.add.text(W / 2, 2, "FARMERS' MARKET ▾", {
-      ...TEXT_STYLE_LABEL, color: "#FF9800",
+      ...textStyleLabel(), color: "#FF9800",
     }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
     this.txtDistrictBanner.on("pointerdown", () => {
       if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen) {
@@ -505,14 +490,14 @@ export class GameScene extends Phaser.Scene {
     this.txtDistrictBanner.on("pointerout", () => this.txtDistrictBanner.setAlpha(1.0));
 
     this.txtCash = this.add.text(W - 6, 2, "Cash: $50.00", {
-      ...TEXT_STYLE_BODY, color: "#FFD700",
+      ...textStyleBody(), color: "#FFD700",
     }).setOrigin(1, 0);
 
     // ---- Lore counter (Wave 2: collection tease, no pressure framing) -------
     // Positioned below the top bar at the right edge; visible but unobtrusive.
     // Denominator = unlocked pool size (honest; grows with dayNumber tier gates).
     this.txtLoreCounter = this.add.text(W - 6, 18, "Lore: 0/6", {
-      ...TEXT_STYLE_LABEL, color: "#C0A060",
+      ...textStyleLabel(), color: "#C0A060",
     }).setOrigin(1, 0);
 
     // ---- Rescue arc HUD chip (Wave 5) — neutral framing, visible while debt/obligation active --
@@ -531,7 +516,7 @@ export class GameScene extends Phaser.Scene {
     const qW = 160, qH = 80;
     this.add.rectangle(qX + qW / 2, qY + qH / 2, qW, qH, P.PANEL_BG)
       .setStrokeStyle(1, P.PANEL_BORDER);
-    this.add.text(qX + 4, qY + 3, "ROAST QUEUE", TEXT_STYLE_HEADER);
+    this.add.text(qX + 4, qY + 3, "ROAST QUEUE", textStyleHeader());
 
     // Slot buttons (1 slot in P1; click to start roast)
     const numSlots = this.state.roastSlots.length;
@@ -554,7 +539,7 @@ export class GameScene extends Phaser.Scene {
       bar.setVisible(false);
 
       // Slot label text
-      const slotLabel = this.add.text(sx + 3, sy + 3, `Slot ${i + 1}: [Empty] — tap to roast`, TEXT_STYLE_LABEL);
+      const slotLabel = this.add.text(sx + 3, sy + 3, `Slot ${i + 1}: [Empty] — tap to roast`, textStyleLabel());
 
       this.slotRects.push(slotRect);
       this.slotLabels.push(slotLabel);
@@ -576,8 +561,8 @@ export class GameScene extends Phaser.Scene {
     const invY = qY + qH + 3;
     this.add.rectangle(qX + qW / 2, invY + 10, qW, 20, P.PANEL_BG)
       .setStrokeStyle(1, P.PANEL_BORDER);
-    this.txtRawStock     = this.add.text(qX + 4, invY + 3, "Raw: 20 lbs", TEXT_STYLE_LABEL);
-    this.txtRoastedStock = this.add.text(qX + 84, invY + 3, "Roasted: 0 lbs", TEXT_STYLE_LABEL);
+    this.txtRawStock     = this.add.text(qX + 4, invY + 3, "Raw: 20 lbs", textStyleLabel());
+    this.txtRoastedStock = this.add.text(qX + 84, invY + 3, "Roasted: 0 lbs", textStyleLabel());
 
     // ---- Price control panel -----------------------------------------------
     // Right-side panel: x=330, y=20, 145×80
@@ -585,10 +570,10 @@ export class GameScene extends Phaser.Scene {
     const pW = 145, pH = 86;
     this.add.rectangle(pX + pW / 2, pY + pH / 2, pW, pH, P.PANEL_BG)
       .setStrokeStyle(1, P.PANEL_BORDER);
-    this.add.text(pX + 4, pY + 3, "PRICE / LB", TEXT_STYLE_HEADER);
+    this.add.text(pX + 4, pY + 3, "PRICE / LB", textStyleHeader());
 
     this.txtPrice = this.add.text(pX + 4, pY + 16, `$${DEFAULT_SELL_PRICE.toFixed(2)}`, {
-      ...TEXT_STYLE_BODY, fontSize: "11px",
+      ...textStyleBody(), fontSize: scaledFont(11),
     });
 
     // Minus button
@@ -610,13 +595,13 @@ export class GameScene extends Phaser.Scene {
     btnPlus.on("pointerout",  () => btnPlus.setAlpha(1.0));
 
     // Range hint
-    this.add.text(pX + 72, pY + 29, `$${PRICE_MIN}–$${PRICE_MAX}`, TEXT_STYLE_LABEL);
+    this.add.text(pX + 72, pY + 29, `$${PRICE_MIN}–$${PRICE_MAX}`, textStyleLabel());
 
     // Demand hint (updates with price)
-    this.txtDemandHint = this.add.text(pX + 4, pY + 50, "", TEXT_STYLE_LABEL);
+    this.txtDemandHint = this.add.text(pX + 4, pY + 50, "", textStyleLabel());
 
     // Margin hint
-    this.add.text(pX + 4, pY + 74, "HEALTHY >60%", { ...TEXT_STYLE_LABEL, color: "#4A7C4E" });
+    this.add.text(pX + 4, pY + 74, "HEALTHY >60%", { ...textStyleLabel(), color: "#4A7C4E" });
 
     // ---- Supply BUY button -------------------------------------------------
     const buyBtnX = pX + 4, buyBtnY = pY + pH + 5;
@@ -687,8 +672,8 @@ export class GameScene extends Phaser.Scene {
     // ---- Day progress bar --------------------------------------------------
     const dpY = H - 18;
     this.add.rectangle(W / 2, dpY + 5, W, 18, P.PANEL_BORDER);
-    this.add.text(6, dpY, "Day progress:", TEXT_STYLE_LABEL).setStyle({ color: "#F5DEB3" });
-    this.txtDayProgress = this.add.text(100, dpY, "0%  6am", TEXT_STYLE_LABEL).setStyle({ color: "#F5DEB3" });
+    this.add.text(6, dpY, "Day progress:", textStyleLabel()).setStyle({ color: "#F5DEB3" });
+    this.txtDayProgress = this.add.text(100, dpY, "0%  6am", textStyleLabel()).setStyle({ color: "#F5DEB3" });
 
     // End-of-day button (manual trigger for testing — day also ends when clock fills)
     const endBtn = this.add.rectangle(W - 50, dpY + 5, 88, 14, 0x556644)
@@ -873,7 +858,7 @@ export class GameScene extends Phaser.Scene {
     const cue = isColorblindCues() ? ` (${cueWord})` : "";
     this.txtDemandHint.setText(
       `~${demandLbsHr.toFixed(0)} lbs/hr  margin ${marginPct.toFixed(0)}%${cue}`
-    ).setStyle({ ...TEXT_STYLE_LABEL, color: marginColor });
+    ).setStyle({ ...textStyleLabel(), color: marginColor });
 
     // Day progress
     const pct = Math.min(100, (this.state.dayElapsedSeconds / DAY_DURATION_SECONDS) * 100);
@@ -894,7 +879,7 @@ export class GameScene extends Phaser.Scene {
 
       if (slot.status === "empty") {
         rect.setFillStyle(P.SLOT_EMPTY);
-        label.setText(`Slot ${i + 1}: [Empty] — tap to roast`).setStyle(TEXT_STYLE_LABEL);
+        label.setText(`Slot ${i + 1}: [Empty] — tap to roast`).setStyle(textStyleLabel());
         bar.setVisible(false);
         barBg.setVisible(false);
       } else if (slot.status === "roasting") {
@@ -902,7 +887,7 @@ export class GameScene extends Phaser.Scene {
         // F3: secondsRemaining is in sim-time; divide by SIM_TIME_SCALE for real-time display
         const realSecsLeft = Math.ceil(slot.secondsRemaining / SIM_TIME_SCALE);
         const progress = 1 - slot.secondsRemaining / Math.max(1, slot.totalSeconds);
-        label.setText(`Slot ${i + 1}: ${slot.batchLbs}lb roasting… ${realSecsLeft}s left`).setStyle(TEXT_STYLE_LABEL);
+        label.setText(`Slot ${i + 1}: ${slot.batchLbs}lb roasting… ${realSecsLeft}s left`).setStyle(textStyleLabel());
         barBg.setVisible(true);
         bar.setVisible(true);
         // Bar width 0–66 px
@@ -914,7 +899,7 @@ export class GameScene extends Phaser.Scene {
         barBg.setPosition(slotRect.x - 75 + 33, slotRect.y + 8);
       } else if (slot.status === "ready") {
         rect.setFillStyle(P.SLOT_READY);
-        label.setText(`Slot ${i + 1}: ${slot.batchLbs}lb READY ✓`).setStyle({ ...TEXT_STYLE_LABEL, color: "#2C6624" });
+        label.setText(`Slot ${i + 1}: ${slot.batchLbs}lb READY ✓`).setStyle({ ...textStyleLabel(), color: "#2C6624" });
         bar.setVisible(false);
         barBg.setVisible(false);
       }
@@ -922,9 +907,9 @@ export class GameScene extends Phaser.Scene {
 
     // Low-stock warning on raw peanuts (text color shift)
     if (this.state.rawStockLbs < 5) {
-      this.txtRawStock.setStyle({ ...TEXT_STYLE_LABEL, color: "#C0392B" });
+      this.txtRawStock.setStyle({ ...textStyleLabel(), color: "#C0392B" });
     } else {
-      this.txtRawStock.setStyle(TEXT_STYLE_LABEL);
+      this.txtRawStock.setStyle(textStyleLabel());
     }
 
     // Wave 5: rescue arc HUD chip — neutral, factual, never shaming
@@ -1025,7 +1010,7 @@ export class GameScene extends Phaser.Scene {
 
     // Header
     this.roastModalGroup.add(
-      this.add.text(mX + 6, mY + 6, `ROAST SLOT ${slotIndex + 1}`, TEXT_STYLE_HEADER)
+      this.add.text(mX + 6, mY + 6, `ROAST SLOT ${slotIndex + 1}`, textStyleHeader())
     );
 
     // Close button [×]
@@ -1041,7 +1026,7 @@ export class GameScene extends Phaser.Scene {
     this.roastModalGroup.add(this.add.rectangle(mX + mW / 2, mY + 20, mW - 8, 1, P.PANEL_BORDER));
 
     // ---- Recipe section ----
-    this.roastModalGroup.add(this.add.text(mX + 6, mY + 24, "RECIPE", TEXT_STYLE_LABEL));
+    this.roastModalGroup.add(this.add.text(mX + 6, mY + 24, "RECIPE", textStyleLabel()));
 
     const RECIPE_IDS: RecipeId[] = ["classic_salted", "honey_cinnamon", "ghost_pepper"];
     const RECIPE_DISPLAY: Record<RecipeId, string> = {
@@ -1085,9 +1070,9 @@ export class GameScene extends Phaser.Scene {
       if (previewLines.length >= 5) {
         previewLines[0].setText(`COGS total: $${cogsTotal.toFixed(2)}  Roast: ${roastMins.toFixed(0)} min (sim)`);
         previewLines[1].setText(`at current $${curPrice.toFixed(2)}: margin ${margin1.toFixed(0)}%  ~${demand1.toFixed(0)} lbs/hr`);
-        previewLines[1].setStyle({ ...TEXT_STYLE_LABEL, color: marginColor });
+        previewLines[1].setStyle({ ...textStyleLabel(), color: marginColor });
         previewLines[2].setText(`at optimum $${optPrice.toFixed(2)}: margin ${marginOpt.toFixed(0)}%  ~${demandOpt.toFixed(0)} lbs/hr`);
-        previewLines[2].setStyle({ ...TEXT_STYLE_LABEL, color: "#4A7C4E" });
+        previewLines[2].setStyle({ ...textStyleLabel(), color: "#4A7C4E" });
         previewLines[3].setText(`COGS/lb: $${cogs.toFixed(2)}`);
       }
 
@@ -1127,7 +1112,7 @@ export class GameScene extends Phaser.Scene {
       radioCircles[id] = radio;
 
       const recipeTxt = this.add.text(mX + 22, ry, `${RECIPE_DISPLAY[id]}  ${lockLabel}`, {
-        ...TEXT_STYLE_LABEL, color: textColor,
+        ...textStyleLabel(), color: textColor,
       });
       this.roastModalGroup.add(recipeTxt);
 
@@ -1153,7 +1138,7 @@ export class GameScene extends Phaser.Scene {
     this.roastModalGroup.add(this.add.rectangle(mX + mW / 2, divY1, mW - 8, 1, P.PANEL_BORDER));
 
     // ---- Batch size section ----
-    this.roastModalGroup.add(this.add.text(mX + 6, divY1 + 4, "BATCH SIZE", TEXT_STYLE_LABEL));
+    this.roastModalGroup.add(this.add.text(mX + 6, divY1 + 4, "BATCH SIZE", textStyleLabel()));
 
     const maxBatch = Math.min(BATCH_MAX_LBS, Math.floor(this.state.rawStockLbs));
     const quickPicks = [10, 25, 50].filter(n => n <= maxBatch);
@@ -1182,9 +1167,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Custom qty stepper
-    const customLabel = this.add.text(bx + 4, batchBtnY, "Custom:", TEXT_STYLE_LABEL);
+    const customLabel = this.add.text(bx + 4, batchBtnY, "Custom:", textStyleLabel());
     this.roastModalGroup.add(customLabel);
-    batchSizeText = this.add.text(bx + 50, batchBtnY, `${this.roastModalBatchLbs} lbs`, TEXT_STYLE_LABEL);
+    batchSizeText = this.add.text(bx + 50, batchBtnY, `${this.roastModalBatchLbs} lbs`, textStyleLabel());
     this.roastModalGroup.add(batchSizeText);
 
     const stepDown = this.add.rectangle(bx + 50, batchBtnY + 14, 20, 12, 0xAAAAAA)
@@ -1216,14 +1201,14 @@ export class GameScene extends Phaser.Scene {
     this.roastModalGroup.add(this.add.rectangle(mX + mW / 2, divY2, mW - 8, 1, P.PANEL_BORDER));
 
     // ---- Preview section ----
-    this.roastModalGroup.add(this.add.text(mX + 6, divY2 + 4, "PREVIEW", TEXT_STYLE_LABEL));
+    this.roastModalGroup.add(this.add.text(mX + 6, divY2 + 4, "PREVIEW", textStyleLabel()));
 
     const py = divY2 + 14;
-    const p0 = this.add.text(mX + 6, py, "", TEXT_STYLE_LABEL);
-    const p1 = this.add.text(mX + 6, py + 11, "", TEXT_STYLE_LABEL);
-    const p2 = this.add.text(mX + 6, py + 22, "", { ...TEXT_STYLE_LABEL, color: "#4A7C4E" });
-    const p3 = this.add.text(mX + 6, py + 33, "", TEXT_STYLE_LABEL);
-    const p4 = this.add.text(mX + 6, py + 44, "", TEXT_STYLE_LABEL); // error line
+    const p0 = this.add.text(mX + 6, py, "", textStyleLabel());
+    const p1 = this.add.text(mX + 6, py + 11, "", textStyleLabel());
+    const p2 = this.add.text(mX + 6, py + 22, "", { ...textStyleLabel(), color: "#4A7C4E" });
+    const p3 = this.add.text(mX + 6, py + 33, "", textStyleLabel());
+    const p4 = this.add.text(mX + 6, py + 44, "", textStyleLabel()); // error line
     previewLines.push(p0, p1, p2, p3, p4);
     for (const pl of previewLines) this.roastModalGroup.add(pl);
 
@@ -1255,7 +1240,7 @@ export class GameScene extends Phaser.Scene {
         // Show inline error in preview area — do not close modal
         previewLines[4].setText(
           `Not enough cash for ingredients ($${(RECIPES[this.roastModalRecipe].ingredientCostPerLb * this.roastModalBatchLbs).toFixed(2)} needed).`
-        ).setStyle({ ...TEXT_STYLE_LABEL, color: "#C0392B" });
+        ).setStyle({ ...textStyleLabel(), color: "#C0392B" });
       } else {
         this.closeRoastModal();
       }
@@ -1305,7 +1290,7 @@ export class GameScene extends Phaser.Scene {
 
     // Header
     this.upgradesModalGroup.add(
-      this.add.text(mX + 6, mY + 5, "UPGRADES — Capital Investment", TEXT_STYLE_HEADER)
+      this.add.text(mX + 6, mY + 5, "UPGRADES — Capital Investment", textStyleHeader())
     );
 
     // Close [×]
@@ -1323,7 +1308,7 @@ export class GameScene extends Phaser.Scene {
     let rowY = mY + 27;
 
     // ---- Section: Roaster Tiers ----
-    this.upgradesModalGroup.add(this.add.text(mX + 6, rowY, "ROASTER", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    this.upgradesModalGroup.add(this.add.text(mX + 6, rowY, "ROASTER", { ...textStyleLabel(), color: "#8B6F47" }));
     rowY += 12;
 
     const currentTierIdx = ROASTER_TIER_ORDER.indexOf(this.state.roasterTier as RoasterTier);
@@ -1353,7 +1338,7 @@ export class GameScene extends Phaser.Scene {
 
       const lineText = `  ${isCurrent ? "▶" : " "} ${tierLabels[tier]}  — ${tierDesc[tier]}${paybackStr}`;
       this.upgradesModalGroup.add(
-        this.add.text(mX + 6, rowY, lineText, { ...TEXT_STYLE_LABEL, color: isCurrent ? "#4A7C4E" : labelColor })
+        this.add.text(mX + 6, rowY, lineText, { ...textStyleLabel(), color: isCurrent ? "#4A7C4E" : labelColor })
       );
 
       if (isPurchasable) {
@@ -1397,7 +1382,7 @@ export class GameScene extends Phaser.Scene {
     rowY += 8;
 
     // ---- Section: Queue Slots ----
-    this.upgradesModalGroup.add(this.add.text(mX + 6, rowY, "ROAST QUEUE SLOTS", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    this.upgradesModalGroup.add(this.add.text(mX + 6, rowY, "ROAST QUEUE SLOTS", { ...textStyleLabel(), color: "#8B6F47" }));
     rowY += 12;
 
     const currentSlots = this.state.roastSlots.length;
@@ -1416,7 +1401,7 @@ export class GameScene extends Phaser.Scene {
       const lineText = `  ${prefix} ${slotCount} Slot${slotCount > 1 ? "s" : ""}  — ${slotCount === 1 ? "starter" : `parallel batch × ${slotCount}`}${paybackStr}`;
       const lineColor = isCurrent ? "#4A7C4E" : isLocked ? "#999977" : "#2C2416";
       this.upgradesModalGroup.add(
-        this.add.text(mX + 6, rowY, lineText, { ...TEXT_STYLE_LABEL, color: lineColor })
+        this.add.text(mX + 6, rowY, lineText, { ...textStyleLabel(), color: lineColor })
       );
 
       if (isPurchasable) {
@@ -1462,17 +1447,17 @@ export class GameScene extends Phaser.Scene {
     // expiry, no FOMO — the unlock waits forever once earned.
     this.upgradesModalGroup.add(this.add.rectangle(mX + mW / 2, rowY + 2, mW - 8, 1, P.PANEL_BORDER));
     rowY += 8;
-    this.upgradesModalGroup.add(this.add.text(mX + 6, rowY, "BRAND", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    this.upgradesModalGroup.add(this.add.text(mX + 6, rowY, "BRAND", { ...textStyleLabel(), color: "#8B6F47" }));
     rowY += 12;
 
     const loreCount = this.state.gagsSeen.size;
     if (this.state.brandCampaignActive) {
       this.upgradesModalGroup.add(
-        this.add.text(mX + 6, rowY, `  ▶ "Legumes. Not Nuts." campaign — active. Customers accept ~5% higher prices.`, { ...TEXT_STYLE_LABEL, color: "#4A7C4E" })
+        this.add.text(mX + 6, rowY, `  ▶ "Legumes. Not Nuts." campaign — active. Customers accept ~5% higher prices.`, { ...textStyleLabel(), color: "#4A7C4E" })
       );
     } else if (loreCount >= BRAND_CAMPAIGN_LORE_THRESHOLD) {
       this.upgradesModalGroup.add(
-        this.add.text(mX + 6, rowY, `    "Legumes. Not Nuts." — flip the gag into the brand (+5% price tolerance)`, TEXT_STYLE_LABEL)
+        this.add.text(mX + 6, rowY, `    "Legumes. Not Nuts." — flip the gag into the brand (+5% price tolerance)`, textStyleLabel())
       );
       const canAfford = this.state.cash >= BRAND_CAMPAIGN_COST;
       const btnColor = canAfford ? P.AWNING : 0x999977;
@@ -1505,7 +1490,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       // Progress hint — factual, no countdown, no pressure.
       this.upgradesModalGroup.add(
-        this.add.text(mX + 6, rowY, `    Collect ${BRAND_CAMPAIGN_LORE_THRESHOLD} unique lore entries to unlock a brand campaign (${loreCount}/${BRAND_CAMPAIGN_LORE_THRESHOLD} so far).`, { ...TEXT_STYLE_LABEL, color: "#999977" })
+        this.add.text(mX + 6, rowY, `    Collect ${BRAND_CAMPAIGN_LORE_THRESHOLD} unique lore entries to unlock a brand campaign (${loreCount}/${BRAND_CAMPAIGN_LORE_THRESHOLD} so far).`, { ...textStyleLabel(), color: "#999977" })
       );
     }
     rowY += 14;
@@ -1515,11 +1500,11 @@ export class GameScene extends Phaser.Scene {
     rowY += 8;
     if (this.state.autoSellEnabled) {
       this.upgradesModalGroup.add(
-        this.add.text(mX + 6, rowY, `  ▶ Auto-sell off-peak — leftover roasted sells −10% nightly (less waste).`, { ...TEXT_STYLE_LABEL, color: "#4A7C4E" })
+        this.add.text(mX + 6, rowY, `  ▶ Auto-sell off-peak — leftover roasted sells −10% nightly (less waste).`, { ...textStyleLabel(), color: "#4A7C4E" })
       );
     } else {
       this.upgradesModalGroup.add(
-        this.add.text(mX + 6, rowY, `    Auto-sell leftover roasted (−10% at day's end) — less waste, frees cash`, TEXT_STYLE_LABEL)
+        this.add.text(mX + 6, rowY, `    Auto-sell leftover roasted (−10% at day's end) — less waste, frees cash`, textStyleLabel())
       );
       const canAfford = this.state.cash >= AUTO_SELL_COST;
       const btnColor = canAfford ? P.AWNING : 0x999977;
@@ -1646,7 +1631,7 @@ export class GameScene extends Phaser.Scene {
     );
 
     this.districtModalGroup.add(
-      this.add.text(mX + 6, mY + 5, "ROUTES — Districts", TEXT_STYLE_HEADER)
+      this.add.text(mX + 6, mY + 5, "ROUTES — Districts", textStyleHeader())
     );
 
     const closeBtn = this.add.rectangle(mX + mW - 12, mY + 11, 16, 14, P.PANEL_BORDER)
@@ -1665,7 +1650,7 @@ export class GameScene extends Phaser.Scene {
       const unlocked = this.state.unlockedDistricts.includes(id);
       const here = this.state.currentDistrict === id;
 
-      this.districtModalGroup.add(this.add.text(mX + 6, rowY, cfg.label.toUpperCase(), { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+      this.districtModalGroup.add(this.add.text(mX + 6, rowY, cfg.label.toUpperCase(), { ...textStyleLabel(), color: "#8B6F47" }));
       rowY += 10;
 
       const detailParts = [
@@ -1675,16 +1660,16 @@ export class GameScene extends Phaser.Scene {
       if (cfg.lunchRushHour > 0) {
         detailParts.push(`lunch rush ~${cfg.lunchRushHour}:00`);
       }
-      this.districtModalGroup.add(this.add.text(mX + 10, rowY, detailParts.join(" · "), TEXT_STYLE_LABEL));
+      this.districtModalGroup.add(this.add.text(mX + 10, rowY, detailParts.join(" · "), textStyleLabel()));
       rowY += 10;
 
       if (here) {
-        this.districtModalGroup.add(this.add.text(mX + 10, rowY, "● Operating here today", { ...TEXT_STYLE_LABEL, color: "#4A7C4E" }));
+        this.districtModalGroup.add(this.add.text(mX + 10, rowY, "● Operating here today", { ...textStyleLabel(), color: "#4A7C4E" }));
         if (id === "office_quarter") {
           rowY += 10;
           this.districtModalGroup.add(this.add.text(mX + 10, rowY,
             `Derek likes steady prices (±${(DEREK_PRICE_TOLERANCE * 100).toFixed(0)}%). Streak: ${this.state.derekConsistencyCounter} days.`,
-            { ...TEXT_STYLE_LABEL, wordWrap: { width: mW - 20 } }));
+            { ...textStyleLabel(), wordWrap: { width: mW - 20 } }));
         }
         rowY += 14;
       } else if (unlocked) {
@@ -1730,7 +1715,7 @@ export class GameScene extends Phaser.Scene {
           permitBtn.on("pointerover", () => permitBtn.setAlpha(0.85));
           permitBtn.on("pointerout", () => permitBtn.setAlpha(1.0));
         } else {
-          this.districtModalGroup.add(this.add.text(mX + 10, rowY + 18, "Need more cash for the permit.", { ...TEXT_STYLE_LABEL, color: "#C0392B" }));
+          this.districtModalGroup.add(this.add.text(mX + 10, rowY + 18, "Need more cash for the permit.", { ...textStyleLabel(), color: "#C0392B" }));
           rowY += 10;
         }
         rowY += 18;
@@ -1790,7 +1775,7 @@ export class GameScene extends Phaser.Scene {
     );
 
     this.booksModalGroup.add(
-      this.add.text(mX + 6, mY + 5, "THE BOOKS — Balance Sheet & Daily Ledger", TEXT_STYLE_HEADER)
+      this.add.text(mX + 6, mY + 5, "THE BOOKS — Balance Sheet & Daily Ledger", textStyleHeader())
     );
 
     // Close [×]
@@ -1807,44 +1792,44 @@ export class GameScene extends Phaser.Scene {
     // ---- Balance sheet (computed live) ----
     const bs = balanceSheet(this.state);
     let rowY = mY + 26;
-    this.booksModalGroup.add(this.add.text(mX + 6, rowY, "BALANCE SHEET (right now)", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    this.booksModalGroup.add(this.add.text(mX + 6, rowY, "BALANCE SHEET (right now)", { ...textStyleLabel(), color: "#8B6F47" }));
     rowY += 11;
     this.booksModalGroup.add(this.add.text(mX + 10, rowY,
       `Assets:      cash $${bs.assets.cash.toFixed(2)} + raw inv $${bs.assets.rawInventoryValue.toFixed(2)} + roasted inv $${bs.assets.roastedInventoryValue.toFixed(2)} = $${bs.assets.total.toFixed(2)}`,
-      { ...TEXT_STYLE_LABEL, wordWrap: { width: mW - 20 } }));
+      { ...textStyleLabel(), wordWrap: { width: mW - 20 } }));
     rowY += 11;
     const liabDetail = bs.liabilities.total > 0
       ? `debts $${bs.liabilities.debtsOwed.toFixed(2)} + pre-paid orders $${bs.liabilities.deferredRevenue.toFixed(2)} = $${bs.liabilities.total.toFixed(2)}`
       : "$0.00 — debt-free";
-    this.booksModalGroup.add(this.add.text(mX + 10, rowY, `Liabilities: ${liabDetail}`, TEXT_STYLE_LABEL));
+    this.booksModalGroup.add(this.add.text(mX + 10, rowY, `Liabilities: ${liabDetail}`, textStyleLabel()));
     rowY += 11;
     this.booksModalGroup.add(this.add.text(mX + 10, rowY,
       `Equity (what the business is worth on paper): $${bs.equity.toFixed(2)}`,
-      { ...TEXT_STYLE_LABEL, color: bs.equity >= 0 ? "#4A7C4E" : "#C0392B" }));
+      { ...textStyleLabel(), color: bs.equity >= 0 ? "#4A7C4E" : "#C0392B" }));
     rowY += 13;
 
     this.booksModalGroup.add(this.add.rectangle(mX + mW / 2, rowY, mW - 8, 1, P.PANEL_BORDER));
     rowY += 5;
 
     // ---- Daily ledger table (last 7 closed days) ----
-    this.booksModalGroup.add(this.add.text(mX + 6, rowY, "DAILY LEDGER (last 7 closed days)", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    this.booksModalGroup.add(this.add.text(mX + 6, rowY, "DAILY LEDGER (last 7 closed days)", { ...textStyleLabel(), color: "#8B6F47" }));
     rowY += 11;
 
     const ledgerRows = this.state.ledger.slice(-7);
     if (ledgerRows.length === 0) {
-      this.booksModalGroup.add(this.add.text(mX + 10, rowY, "No closed days yet — finish a day and the ledger starts here.", TEXT_STYLE_LABEL));
+      this.booksModalGroup.add(this.add.text(mX + 10, rowY, "No closed days yet — finish a day and the ledger starts here.", textStyleLabel()));
       rowY += 12;
     } else {
       // Header row (monospace columns)
       const header = "Day  Revenue    COGS   Fixed     Net    Debt$   Cash end";
-      this.booksModalGroup.add(this.add.text(mX + 10, rowY, header, { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+      this.booksModalGroup.add(this.add.text(mX + 10, rowY, header, { ...textStyleLabel(), color: "#8B6F47" }));
       rowY += 10;
       const pad = (s: string, w: number) => s.padStart(w);
       for (const e of ledgerRows) {
         const line =
           `${pad(String(e.day), 3)}  ${pad(e.revenue.toFixed(2), 7)} ${pad(e.cogs.toFixed(2), 7)} ${pad(e.fixedCosts.toFixed(2), 7)} ${pad(e.net.toFixed(2), 7)} ${pad(e.debtService > 0 ? e.debtService.toFixed(2) : "—", 7)} ${pad(e.cashAfter.toFixed(2), 9)}`;
         this.booksModalGroup.add(this.add.text(mX + 10, rowY, line, {
-          ...TEXT_STYLE_LABEL,
+          ...textStyleLabel(),
           color: e.net >= 0 ? "#2C2416" : "#C0392B",
         }));
         rowY += 10;
@@ -1855,7 +1840,7 @@ export class GameScene extends Phaser.Scene {
     rowY += 2;
     this.booksModalGroup.add(this.add.text(mX + 10, rowY,
       "Note: Net is PROFIT. Debt$ is cash paid on debts — it lowers cash and\nliabilities, but it is not an expense. That's why profit ≠ cash.",
-      { ...TEXT_STYLE_LABEL, color: "#5A3A1A" }));
+      { ...textStyleLabel(), color: "#5A3A1A" }));
 
     // Close button at bottom
     const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
@@ -1907,7 +1892,7 @@ export class GameScene extends Phaser.Scene {
 
     const earned = new Set(this.state.achievementsUnlocked);
     this.goalsModalGroup.add(
-      this.add.text(mX + 6, mY + 5, `GOALS & MASTERY — ${earned.size}/${ACHIEVEMENT_TOTAL} achievements`, TEXT_STYLE_HEADER)
+      this.add.text(mX + 6, mY + 5, `GOALS & MASTERY — ${earned.size}/${ACHIEVEMENT_TOTAL} achievements`, textStyleHeader())
     );
 
     // Close [×]
@@ -1923,7 +1908,7 @@ export class GameScene extends Phaser.Scene {
     // ---- Left column: achievements ----
     const colLX = mX + 8;
     let lY = mY + 26;
-    this.goalsModalGroup.add(this.add.text(colLX, lY, "ACHIEVEMENTS", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    this.goalsModalGroup.add(this.add.text(colLX, lY, "ACHIEVEMENTS", { ...textStyleLabel(), color: "#8B6F47" }));
     lY += 12;
     // RT6-4: render each row, then advance by its measured height so a wrapped
     // locked-row description can't overlap the CLOSE button at the bottom.
@@ -1933,7 +1918,7 @@ export class GameScene extends Phaser.Scene {
       const color = got ? "#4A7C4E" : "#999977";
       // Earned rows show the name; locked rows show the requirement (a goal to chase).
       const text = got ? `${mark} ${ach.name}` : `${mark} ${ach.name} — ${ach.desc}`;
-      const t = this.add.text(colLX, lY, text, { ...TEXT_STYLE_LABEL, color, wordWrap: { width: 250 } });
+      const t = this.add.text(colLX, lY, text, { ...textStyleLabel(), color, wordWrap: { width: 250 } });
       this.goalsModalGroup.add(t);
       lY += t.height + 2;
     }
@@ -1941,11 +1926,11 @@ export class GameScene extends Phaser.Scene {
     // ---- Right column: collection ----
     const colRX = mX + 270;
     let rY = mY + 26;
-    this.goalsModalGroup.add(this.add.text(colRX, rY, "COLLECTION", { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+    this.goalsModalGroup.add(this.add.text(colRX, rY, "COLLECTION", { ...textStyleLabel(), color: "#8B6F47" }));
     rY += 12;
 
     // Lore progress
-    this.goalsModalGroup.add(this.add.text(colRX, rY, `Legume Lore: ${this.state.gagsSeen.size}/${LORE_TOTAL_COUNT}`, TEXT_STYLE_LABEL));
+    this.goalsModalGroup.add(this.add.text(colRX, rY, `Legume Lore: ${this.state.gagsSeen.size}/${LORE_TOTAL_COUNT}`, textStyleLabel()));
     rY += 11;
     // Simple progress bar
     const barW = 150, barH = 6;
@@ -1955,13 +1940,13 @@ export class GameScene extends Phaser.Scene {
     rY += 14;
 
     // Comeback tiers
-    this.goalsModalGroup.add(this.add.text(colRX, rY, `Comeback tiers: ${this.state.comebackTier}/${COMEBACK_TIERS.length}`, TEXT_STYLE_LABEL));
+    this.goalsModalGroup.add(this.add.text(colRX, rY, `Comeback tiers: ${this.state.comebackTier}/${COMEBACK_TIERS.length}`, textStyleLabel()));
     rY += 11;
     for (const t of COMEBACK_TIERS) {
       const got = this.state.comebackTier >= t.tier;
       this.goalsModalGroup.add(
         this.add.text(colRX + 4, rY, `${got ? "✓" : "○"} "${t.label}" (${t.threshold} lore)`, {
-          ...TEXT_STYLE_LABEL, color: got ? "#4A7C4E" : "#999977",
+          ...textStyleLabel(), color: got ? "#4A7C4E" : "#999977",
         })
       );
       rY += 11;
@@ -1971,17 +1956,17 @@ export class GameScene extends Phaser.Scene {
     // Supplier relationship
     const lvl = supplierLevelFor(this.state.supplierLbsPurchased);
     const disc = supplierDiscountFor(this.state.supplierLbsPurchased);
-    this.goalsModalGroup.add(this.add.text(colRX, rY, `Supplier relationship: Level ${lvl}/3`, TEXT_STYLE_LABEL));
+    this.goalsModalGroup.add(this.add.text(colRX, rY, `Supplier relationship: Level ${lvl}/3`, textStyleLabel()));
     rY += 11;
     this.goalsModalGroup.add(this.add.text(colRX + 4, rY,
       lvl > 0 ? `−${(disc * 100).toFixed(0)}% on raw orders` : "no discount yet",
-      { ...TEXT_STYLE_LABEL, color: lvl > 0 ? "#4A7C4E" : "#999977" }));
+      { ...textStyleLabel(), color: lvl > 0 ? "#4A7C4E" : "#999977" }));
     rY += 11;
     if (lvl < SUPPLIER_LEVEL_THRESHOLDS.length) {
       const need = SUPPLIER_LEVEL_THRESHOLDS[lvl] - this.state.supplierLbsPurchased;
       this.goalsModalGroup.add(this.add.text(colRX + 4, rY,
         `Order ${Math.ceil(need)} more lbs for Level ${lvl + 1}`,
-        { ...TEXT_STYLE_LABEL, color: "#8B6F47" }));
+        { ...textStyleLabel(), color: "#8B6F47" }));
       rY += 11;
     }
 
@@ -2022,7 +2007,7 @@ export class GameScene extends Phaser.Scene {
     this.settingsModalOpen = true;
 
     const W = this.scale.width, H = this.scale.height;
-    const mW = 300, mH = 248; // grown for Save I/O row + the browser-zoom hint
+    const mW = 300, mH = 270;
     const mX = (W - mW) / 2, mY = (H - mH) / 2;
 
     this.settingsModalGroup = this.add.group();
@@ -2032,12 +2017,12 @@ export class GameScene extends Phaser.Scene {
     this.settingsModalGroup.add(
       this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG).setStrokeStyle(2, P.PANEL_BORDER)
     );
-    this.settingsModalGroup.add(this.add.text(mX + 8, mY + 6, "SETTINGS", TEXT_STYLE_HEADER));
+    this.settingsModalGroup.add(this.add.text(mX + 8, mY + 6, "SETTINGS", textStyleHeader()));
     this.settingsModalGroup.add(this.add.rectangle(mX + mW / 2, mY + 20, mW - 8, 1, P.PANEL_BORDER));
 
     // A toggle row: label on the left, an ON/OFF pill on the right.
     const addToggle = (y: number, label: string, isOn: () => boolean, onToggle: () => void): void => {
-      this.settingsModalGroup!.add(this.add.text(mX + 10, y, label, TEXT_STYLE_LABEL));
+      this.settingsModalGroup!.add(this.add.text(mX + 10, y, label, textStyleLabel()));
       const pill = this.add.rectangle(mX + mW - 40, y + 4, 56, 14, isOn() ? P.CASH_GREEN : 0x999977)
         .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
       const lbl = this.add.text(mX + mW - 40, y + 4, isOn() ? "ON" : "OFF",
@@ -2060,6 +2045,13 @@ export class GameScene extends Phaser.Scene {
     addToggle(y, "Reduced motion", isReducedMotion, () => { toggleReducedMotion(this.storage); });
     y += 22;
     addToggle(y, "Colour-blind cues", isColorblindCues, () => { toggleColorblindCues(this.storage); this.updateHUD(); });
+    y += 22;
+    addToggle(y, "Large text", isLargeText, () => {
+      toggleLargeText(this.storage);
+      trySave(this.storage, this.state);
+      this.closeSettingsModal();
+      this.scene.restart();
+    });
     y += 26;
 
     this.settingsModalGroup.add(this.add.rectangle(mX + mW / 2, y - 4, mW - 8, 1, P.PANEL_BORDER));
@@ -2069,23 +2061,21 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
     this.settingsModalGroup.add(glossBtn);
     this.settingsModalGroup.add(this.add.text(mX + mW / 2, y + 8, "GLOSSARY — what do these words mean?",
-      { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5));
+      monoTextStyle(7)).setOrigin(0.5));
     glossBtn.on("pointerdown", () => { playButtonTick(); this.openGlossaryModal(); });
     glossBtn.on("pointerover", () => glossBtn.setAlpha(0.85));
     glossBtn.on("pointerout",  () => glossBtn.setAlpha(1.0));
     y += 22;
 
-    // Larger text: the canvas is FIT-scaled, so browser zoom enlarges
-    // everything uniformly (the standard, overflow-free path on web).
     this.settingsModalGroup.add(this.add.text(mX + 10, y,
-      "Bigger text? Use your browser zoom:  Ctrl + / Ctrl −  (⌘ on Mac).",
-      { ...TEXT_STYLE_LABEL, color: "#5A3A1A", wordWrap: { width: mW - 20 } }));
+      "Large text reloads the scene. Browser zoom (Ctrl + / −) still works too.",
+      { ...textStyleLabel(), color: "#5A3A1A", wordWrap: { width: mW - 20 } }));
     y += 14;
 
     // A2 accuracy disclaimer (brief; full text lives atop the glossary).
     this.settingsModalGroup.add(this.add.text(mX + 10, y,
       "This game simplifies real business — see the Glossary for details.",
-      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace", wordWrap: { width: mW - 20 } }));
+      { ...monoTextStyle(6, "#8B6F47"), wordWrap: { width: mW - 20 } }));
     y += 14;
 
     // Save Export / Import (relocated here from the upgrades modal).
@@ -2194,7 +2184,7 @@ export class GameScene extends Phaser.Scene {
     this.glossaryModalGroup.add(
       this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG).setStrokeStyle(2, P.PANEL_BORDER)
     );
-    this.glossaryModalGroup.add(this.add.text(mX + 8, mY + 5, "GLOSSARY", TEXT_STYLE_HEADER));
+    this.glossaryModalGroup.add(this.add.text(mX + 8, mY + 5, "GLOSSARY", textStyleHeader()));
 
     // Close [×]
     const closeBtn = this.add.rectangle(mX + mW - 12, mY + 11, 16, 14, P.PANEL_BORDER)
@@ -2212,9 +2202,9 @@ export class GameScene extends Phaser.Scene {
     const detailX = mX + 156, detailW = mW - 156 - 10;
 
     // Detail pane (updated on term tap). Start on the first entry.
-    const detailTitle = this.add.text(detailX, listTop, "", TEXT_STYLE_HEADER);
+    const detailTitle = this.add.text(detailX, listTop, "", textStyleHeader());
     const detailBody = this.add.text(detailX, listTop + 14, "",
-      { ...TEXT_STYLE_LABEL, wordWrap: { width: detailW } });
+      { ...textStyleLabel(), wordWrap: { width: detailW } });
     const detailInGame = this.add.text(detailX, listTop + 14, "",
       { fontSize: "7px", color: "#4A7C4E", fontFamily: "monospace", wordWrap: { width: detailW } });
     this.glossaryModalGroup.add(detailTitle);
@@ -2313,7 +2303,7 @@ export class GameScene extends Phaser.Scene {
     const bar = this.add.rectangle(sx + 3 + 33, sy + sh / 2 + 6, 0, 5, P.SLOT_ROAST);
     bar.setVisible(false);
 
-    const slotLabel = this.add.text(sx + 3, sy + 3, `Slot ${i + 1}: [Empty] — tap to roast`, TEXT_STYLE_LABEL);
+    const slotLabel = this.add.text(sx + 3, sy + 3, `Slot ${i + 1}: [Empty] — tap to roast`, textStyleLabel());
 
     this.slotRects.push(slotRect);
     this.slotLabels.push(slotLabel);
@@ -2358,7 +2348,7 @@ export class GameScene extends Phaser.Scene {
     this.modalGroup.add(panel);
 
     // Header
-    const hdr = this.add.text(mX + 6, mY + 6, "BUY RAW PEANUTS", TEXT_STYLE_HEADER);
+    const hdr = this.add.text(mX + 6, mY + 6, "BUY RAW PEANUTS", textStyleHeader());
     this.modalGroup.add(hdr);
 
     // F7: bulk discount table derived from economy constants (no hardcoded prices)
@@ -2372,7 +2362,7 @@ export class GameScene extends Phaser.Scene {
     ];
     let ty = mY + 22;
     for (const line of tableLines) {
-      const t = this.add.text(mX + 6, ty, line, TEXT_STYLE_LABEL);
+      const t = this.add.text(mX + 6, ty, line, textStyleLabel());
       this.modalGroup.add(t);
       ty += 12;
     }
@@ -2383,14 +2373,14 @@ export class GameScene extends Phaser.Scene {
     const supLine = supLvl > 0
       ? `Supplier Lv${supLvl}: extra –${(supDisc * 100).toFixed(0)}% (loyalty, stacks)`
       : `Supplier Lv0: order more to earn loyalty discounts`;
-    this.modalGroup.add(this.add.text(mX + 6, ty, supLine, { ...TEXT_STYLE_LABEL, color: supLvl > 0 ? "#4A7C4E" : "#8B6F47" }));
+    this.modalGroup.add(this.add.text(mX + 6, ty, supLine, { ...textStyleLabel(), color: supLvl > 0 ? "#4A7C4E" : "#8B6F47" }));
     ty += 12;
 
     // Qty controls
-    const qLabel = this.add.text(mX + 6, ty + 4, "Qty:", TEXT_STYLE_BODY);
+    const qLabel = this.add.text(mX + 6, ty + 4, "Qty:", textStyleBody());
     this.modalGroup.add(qLabel);
 
-    const qtyText = this.add.text(mX + 36, ty + 4, `${this.supplyQty} lbs`, TEXT_STYLE_BODY);
+    const qtyText = this.add.text(mX + 36, ty + 4, `${this.supplyQty} lbs`, textStyleBody());
     this.modalGroup.add(qtyText);
 
     const makeQtyBtn = (label: string, x: number, delta: number): void => {
@@ -2413,11 +2403,11 @@ export class GameScene extends Phaser.Scene {
     makeQtyBtn("+100", mX + 226, +100);
 
     // Cost preview
-    const previewText = this.add.text(mX + 6, ty + 28, this.buildSupplyPreview(), TEXT_STYLE_BODY);
+    const previewText = this.add.text(mX + 6, ty + 28, this.buildSupplyPreview(), textStyleBody());
     this.modalGroup.add(previewText);
 
     // Cash after preview
-    const cashLine = this.add.text(mX + 6, ty + 42, "", TEXT_STYLE_BODY);
+    const cashLine = this.add.text(mX + 6, ty + 42, "", textStyleBody());
     this.modalGroup.add(cashLine);
 
     // Rebuild preview with cash line
@@ -2426,7 +2416,7 @@ export class GameScene extends Phaser.Scene {
       const cost = this.calcSupplyCost(this.supplyQty);
       const after = this.state.cash - cost;
       cashLine.setText(`Cash after: $${this.state.cash.toFixed(2)} – $${cost.toFixed(2)} = $${Math.max(0, after).toFixed(2)}`);
-      cashLine.setStyle(after >= 0 ? TEXT_STYLE_GREEN : TEXT_STYLE_RED);
+      cashLine.setStyle(after >= 0 ? textStyleGreen() : textStyleRed());
     };
     rebuildPreview();
 
@@ -2598,7 +2588,7 @@ export class GameScene extends Phaser.Scene {
 
     // Header
     this.reportGroup.add(
-      this.add.text(rX + rW / 2, rY + 8, `END OF DAY — Day ${r.dayNumber} Summary`, TEXT_STYLE_HEADER).setOrigin(0.5, 0)
+      this.add.text(rX + rW / 2, rY + 8, `END OF DAY — Day ${r.dayNumber} Summary`, textStyleHeader()).setOrigin(0.5, 0)
     );
 
     // Divider
@@ -2606,7 +2596,7 @@ export class GameScene extends Phaser.Scene {
 
     // Location / ops line
     const locLabel = DISTRICT_CONFIGS[this.state.currentDistrict].label;
-    this.reportGroup.add(this.add.text(rX + 8, rY + 27, `Location: ${locLabel}  |  Units sold: ${r.unitsSold.toFixed(1)} lbs`, TEXT_STYLE_LABEL));
+    this.reportGroup.add(this.add.text(rX + 8, rY + 27, `Location: ${locLabel}  |  Units sold: ${r.unitsSold.toFixed(1)} lbs`, textStyleLabel()));
 
     // Revenue & COGS box
     // F8: show avg realized price (revenue/unitsSold)
@@ -2617,35 +2607,35 @@ export class GameScene extends Phaser.Scene {
       ? r.cogs / r.unitsSold
       : RAW_PEANUT_BASE_PRICE + RECIPES.classic_salted.ingredientCostPerLb).toFixed(2);
     const rows: Array<[string, string, Phaser.Types.GameObjects.Text.TextStyle]> = [
-      [`Revenue  (${r.unitsSold.toFixed(1)} lbs @ $${r.avgRealizedPrice.toFixed(2)} avg):`, `$${r.revenue.toFixed(2)}`, TEXT_STYLE_BODY],
+      [`Revenue  (${r.unitsSold.toFixed(1)} lbs @ $${r.avgRealizedPrice.toFixed(2)} avg):`, `$${r.revenue.toFixed(2)}`, textStyleBody()],
       // Auto-sell off-peak clarifier (revenue already counted above; this just shows the split).
       ...(r.autoSellLbs > 0
-        ? [[`  ↳ auto-sold leftover (10% off):`, `${r.autoSellLbs.toFixed(1)} lbs · $${r.autoSellRevenue.toFixed(2)}`, TEXT_STYLE_LABEL] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
+        ? [[`  ↳ auto-sold leftover (10% off):`, `${r.autoSellLbs.toFixed(1)} lbs · $${r.autoSellRevenue.toFixed(2)}`, textStyleLabel()] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
         : []),
-      [`COGS     (@ $${cogsLbDisplay}/lb):`, `–$${r.cogs.toFixed(2)}`, TEXT_STYLE_RED],
-      [`Gross Profit:`, `$${r.grossProfit.toFixed(2)}  (${r.grossMarginPct.toFixed(0)}%)`, r.grossMarginPct >= 60 ? TEXT_STYLE_GREEN : TEXT_STYLE_RED],
+      [`COGS     (@ $${cogsLbDisplay}/lb):`, `–$${r.cogs.toFixed(2)}`, textStyleRed()],
+      [`Gross Profit:`, `$${r.grossProfit.toFixed(2)}  (${r.grossMarginPct.toFixed(0)}%)`, r.grossMarginPct >= 60 ? textStyleGreen() : textStyleRed()],
       // F1: separate cash-flow lesson line — production outflow vs. recognized COGS
-      [`Cash spent on production today:`, `–$${r.cashSpentOnProduction.toFixed(2)}`, TEXT_STYLE_RED],
-      [`Fixed Costs  (permit + fuel):`, `–$${r.fixedCosts.toFixed(2)}`, TEXT_STYLE_RED],
+      [`Cash spent on production today:`, `–$${r.cashSpentOnProduction.toFixed(2)}`, textStyleRed()],
+      [`Fixed Costs  (permit + fuel):`, `–$${r.fixedCosts.toFixed(2)}`, textStyleRed()],
       // F13 fix: offline earnings shown as a distinct positive line (spec §6 / DARK_PATTERN_GATE Q8)
       ...(r.offlineEarned > 0
-        ? [[`Offline rest earnings:`, `+$${r.offlineEarned.toFixed(2)}`, TEXT_STYLE_GREEN] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
+        ? [[`Offline rest earnings:`, `+$${r.offlineEarned.toFixed(2)}`, textStyleGreen()] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
         : []),
-      [`Net Profit:`, `$${r.net.toFixed(2)}`, r.net >= 0 ? TEXT_STYLE_GREEN : TEXT_STYLE_RED],
+      [`Net Profit:`, `$${r.net.toFixed(2)}`, r.net >= 0 ? textStyleGreen() : textStyleRed()],
       // Ledger v1: debt payments are cash out but NOT an expense — net profit
       // stays untouched. Profit ≠ cash is the bookkeeping lesson.
       ...(r.debtService > 0
-        ? [[`Debt payments (cash, not expense):`, `–$${r.debtService.toFixed(2)}`, TEXT_STYLE_RED] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
+        ? [[`Debt payments (cash, not expense):`, `–$${r.debtService.toFixed(2)}`, textStyleRed()] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
         : []),
       // Wave 5: liability line — teaches liabilities vs cash (neutral, not shaming)
       ...(r.activeDebtSummary
-        ? [[`Liabilities:`, r.activeDebtSummary, TEXT_STYLE_RED] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
+        ? [[`Liabilities:`, r.activeDebtSummary, textStyleRed()] as [string, string, Phaser.Types.GameObjects.Text.TextStyle]]
         : []),
     ];
 
     let rowY = rY + 42;
     for (const [label, value, style] of rows) {
-      this.reportGroup.add(this.add.text(rX + 8, rowY, label, TEXT_STYLE_LABEL));
+      this.reportGroup.add(this.add.text(rX + 8, rowY, label, textStyleLabel()));
       this.reportGroup.add(this.add.text(rX + rW - 8, rowY, value, style).setOrigin(1, 0));
       rowY += 14;
     }
@@ -2656,7 +2646,7 @@ export class GameScene extends Phaser.Scene {
 
     // Cash flow line
     this.reportGroup.add(
-      this.add.text(rX + 8, rowY, `Cash: $${r.cashBefore.toFixed(2)} → $${r.cashAfter.toFixed(2)}`, TEXT_STYLE_BODY)
+      this.add.text(rX + 8, rowY, `Cash: $${r.cashBefore.toFixed(2)} → $${r.cashAfter.toFixed(2)}`, textStyleBody())
     );
     rowY += 16;
 
@@ -2666,7 +2656,7 @@ export class GameScene extends Phaser.Scene {
     );
     this.reportGroup.add(
       this.add.text(rX + 8, rowY + 4, `Insight: ${r.insightLine}`, {
-        ...TEXT_STYLE_LABEL,
+        ...textStyleLabel(),
         wordWrap: { width: rW - 16 },
       })
     );
@@ -2676,7 +2666,7 @@ export class GameScene extends Phaser.Scene {
     // Bookkeeping concept: factual framing only, no FOMO. Green = positive net, red = negative.
     if (hasSparkline) {
       this.reportGroup.add(
-        this.add.text(rX + 8, rowY, "Last 7 days:", TEXT_STYLE_LABEL)
+        this.add.text(rX + 8, rowY, "Last 7 days:", textStyleLabel())
       );
       const maxAbs = Math.max(1, ...sparklineHistory.map(Math.abs));
       const barMaxH = 10;
@@ -2701,14 +2691,14 @@ export class GameScene extends Phaser.Scene {
       this.reportGroup.add(this.add.rectangle(rX + rW / 2, rowY + 2, rW - 8, 1, P.PANEL_BORDER));
       rowY += 6;
       this.reportGroup.add(
-        this.add.text(rX + 8, rowY, `WEEK ${wr.weekNumber} RECAP (${wr.daysIncluded} day${wr.daysIncluded === 1 ? "" : "s"})`, { ...TEXT_STYLE_LABEL, color: "#8B6F47" })
+        this.add.text(rX + 8, rowY, `WEEK ${wr.weekNumber} RECAP (${wr.daysIncluded} day${wr.daysIncluded === 1 ? "" : "s"})`, { ...textStyleLabel(), color: "#8B6F47" })
       );
       rowY += 12;
       const bestStr = wr.bestDay ? `best Day ${wr.bestDay.day} ($${wr.bestDay.net.toFixed(2)} net)` : "";
       this.reportGroup.add(
         this.add.text(rX + 8, rowY,
           `Revenue $${wr.totalRevenue.toFixed(2)} · Net $${wr.totalNet.toFixed(2)} · Margin ${wr.grossMarginPct.toFixed(0)}% · ${bestStr}`,
-          { ...TEXT_STYLE_LABEL, wordWrap: { width: rW - 16 } })
+          { ...textStyleLabel(), wordWrap: { width: rW - 16 } })
       );
       rowY += 16;
     }
@@ -2807,7 +2797,7 @@ export class GameScene extends Phaser.Scene {
     );
 
     this.aftermathModalGroup.add(
-      this.add.text(mX + 8, mY + 6, `${beat.speaker} stops by the window`, TEXT_STYLE_HEADER)
+      this.add.text(mX + 8, mY + 6, `${beat.speaker} stops by the window`, textStyleHeader())
     );
     this.aftermathModalGroup.add(
       this.add.rectangle(mX + mW / 2, mY + 20, mW - 8, 1, P.PANEL_BORDER)
@@ -2816,7 +2806,7 @@ export class GameScene extends Phaser.Scene {
     let lineY = mY + 26;
     for (const line of beat.lines) {
       const txt = this.add.text(mX + 8, lineY, line, {
-        ...TEXT_STYLE_LABEL, color: "#5A3A1A", wordWrap: { width: mW - 16 },
+        ...textStyleLabel(), color: "#5A3A1A", wordWrap: { width: mW - 16 },
       });
       this.aftermathModalGroup.add(txt);
       lineY += txt.height + 4;
@@ -2829,7 +2819,7 @@ export class GameScene extends Phaser.Scene {
     );
     this.aftermathModalGroup.add(
       this.add.text(mX + 8, mY + mH - 46, `Takeaway: ${beat.lesson}`, {
-        ...TEXT_STYLE_LABEL, wordWrap: { width: mW - 16 },
+        ...textStyleLabel(), wordWrap: { width: mW - 16 },
       })
     );
 
@@ -2936,7 +2926,7 @@ export class GameScene extends Phaser.Scene {
 
     const panel = this.add.rectangle(cx, cy, bw, bh, P.PANEL_BG, 0.96).setStrokeStyle(2, P.AWNING);
     const t1 = this.add.text(cx, subtitle ? cy - 7 : cy, title,
-      { fontSize: "11px", color: "#2C2416", fontFamily: "monospace", fontStyle: "bold", align: "center", wordWrap: { width: bw - 12 } }
+      { fontSize: scaledFont(11), color: "#2C2416", fontFamily: "monospace", fontStyle: "bold", align: "center", wordWrap: { width: bw - 12 } }
     ).setOrigin(0.5);
     g.add(panel);
     g.add(t1);
@@ -3206,7 +3196,7 @@ export class GameScene extends Phaser.Scene {
 
     // ---- Header ----
     this.rescueModalGroup.add(
-      this.add.text(mX + 52, mY + 6, "TILL RUNS THIN — Old Joe's at the Window", TEXT_STYLE_HEADER)
+      this.add.text(mX + 52, mY + 6, "TILL RUNS THIN — Old Joe's at the Window", textStyleHeader())
     );
 
     // ---- Old Joe dialogue (varies on re-entry — never shaming) ----
@@ -3215,7 +3205,7 @@ export class GameScene extends Phaser.Scene {
       : "\"Long day? Cash-flow problems aren't shameful — that's how you learn.\nBefore tomorrow gets worse, let's talk about what gets you through the week.\"";
     this.rescueModalGroup.add(
       this.add.text(mX + 52, mY + 20, joeDialogue,
-        { ...TEXT_STYLE_LABEL, color: "#5A3A1A", wordWrap: { width: mW - 60 } }
+        { ...textStyleLabel(), color: "#5A3A1A", wordWrap: { width: mW - 60 } }
       )
     );
 
@@ -3499,9 +3489,9 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(2, P.PANEL_BORDER);
     group.add(panel);
 
-    group.add(this.add.text(mX + mW / 2, mY + 10, "Reset save?", TEXT_STYLE_HEADER).setOrigin(0.5, 0));
+    group.add(this.add.text(mX + mW / 2, mY + 10, "Reset save?", textStyleHeader()).setOrigin(0.5, 0));
     group.add(this.add.text(mX + mW / 2, mY + 28, "This wipes all progress and starts fresh.", {
-      ...TEXT_STYLE_LABEL, wordWrap: { width: mW - 16 },
+      ...textStyleLabel(), wordWrap: { width: mW - 16 },
     }).setOrigin(0.5, 0));
 
     const cancelBtn = this.add.rectangle(mX + 70, mY + mH - 14, 100, 18, 0x999977)
