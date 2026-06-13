@@ -25,10 +25,10 @@
 > | Accessibility + Settings (⚙ MENU) | Reduced-motion, colour-blind cues, sound toggle |
 > | **In-game Glossary** | Plain-language definitions (COGS, margin, APR, profit-vs-cash, deferred revenue, **peanut allergy**) + the "simplified / varies by location" disclaimer |
 > | First-run tutorial, audio/SFX + mute, milestone celebrations | Onboarding + game-feel |
+> | **Auto-sell off-peak upgrade** | Optional $1,500 upgrade: leftover roasted stock clears at 10% off at day's end (less waste, frees working capital) |
+> | **Weather demand modifier** | Rainy −20% / hot-sunny +15% demand; 1-day forecast shown (predictable, no FOMO) |
 >
-> **IN REVIEW (open PRs, not yet merged):** auto-sell off-peak upgrade; weather *foundation* (constants only — no gameplay effect until a later demand-wiring step).
->
-> **PLANNED (P2+, not yet built):** truck driving + multiple districts + NPC quests (the RPG layer); permits UI; **spoilage** (and the refrigerated-truck upgrade that depends on it); the **full** dual-ledger (interest split, accounts-payable calendar); **weather affecting demand** + seasons; large-text accessibility.
+> **PLANNED (P2+, not yet built):** truck driving + multiple districts + NPC quests (the RPG layer); permits UI; **spoilage** (and the refrigerated-truck upgrade that depends on it); the **full** dual-ledger (interest split, accounts-payable calendar); seasons; built-in large-text font-scale toggle (browser zoom hint shipped for now).
 >
 > **Use in class today:** COGS, pricing & the demand curve, break-even, the day-report and the **BOOKS** panel (profit vs. cash), the rescue arc (debt & APR), and the Glossary. The rest is on the roadmap — this guide covers it for planning.
 

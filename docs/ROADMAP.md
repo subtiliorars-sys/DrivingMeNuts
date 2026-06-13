@@ -37,7 +37,7 @@ No calendar dates; each phase gates the next. Solo dev + AI agent swarms = burst
 > (persistence v1), Ledger v1 + balance sheet (BOOKS), recipes + roaster/queue upgrades,
 > supplier relationship, brand campaign, the "Save the Truck" rescue arc + re-entry escalation,
 > achievements + goals, comeback lines, weekly recap, accessibility + settings, in-game glossary,
-> tutorial, audio. Auto-sell + a weather foundation are in open PRs. **P1-EXIT gates remain
+> tutorial, audio, auto-sell off-peak, weather demand modifier. **P1-EXIT gates remain
 > owner-gated:** SME 93-claim accuracy walk, allergy-aware mechanic review, trademark (TESS),
 > and the public Preview teaser. See docs/EDUCATOR_GUIDE.md "Build status" for the full feature
 > ledger and docs/SYSTEMS_BACKLOG.md for what's deferred.
