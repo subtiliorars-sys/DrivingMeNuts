@@ -10,6 +10,18 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 
 ## Active queue
 
+### Wave DM-W6 — Phase 2 RPG shell prep (docs)
+**Status:** `in_review`  
+**Branch:** `automation/wave-dm-w6-phase2-prep`  
+**Spec:** `docs/PHASE2_PREP.md`
+
+**Acceptance:**
+- [x] Phase 2 scope, wave breakdown, and risk reminders documented
+- [x] No gameplay code — planning only
+- [x] `npm run verify` green (docs-only)
+
+---
+
 ### Wave DM-W5 — SYSTEMS_BACKLOG §3 sync (large-text shipped)
 **Status:** `in_review`  
 **Branch:** `automation/wave-dm-w5-backlog-sync`
