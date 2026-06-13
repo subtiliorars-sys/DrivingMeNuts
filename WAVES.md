@@ -10,27 +10,14 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 
 ## Active queue
 
-### Wave DM-W2 — Large-text accessibility
+### Wave DM-W4 — EDUCATOR_GUIDE build-status sync
 **Status:** `done`  
-**Spec:** `docs/SYSTEMS_BACKLOG.md` §3  
-**Branch:** `automation/wave-dm-w2-large-text`  
-**PR:** https://github.com/subtiliorars-sys/DrivingMeNuts/pull/29  
-**Completed:** 2026-06-13
+**Branch:** `automation/wave-dm-w4-educator-guide-sync`  
+**Spec:** Align `docs/EDUCATOR_GUIDE.md` with shipped P1/P1.5 features (districts, save, rescue, weather, large-text, permits)
 
 **Acceptance:**
-- [x] `largeText` pref + scaled font helper
-- [x] PR body includes **owner visual check** steps (panels to eyeball)
-- [x] `npm run verify` green
-
----
-
-### Wave DM-W3 — P1-EXIT prep docs
-**Status:** `done`  
-**Branch:** `automation/wave-dm-w3-p1-exit-docs`  
-**Completed:** 2026-06-13
-
-**Acceptance:**
-- [x] SME checklist + allergy reviewer brief cross-linked in START_HERE
+- [x] Remove stale "(planned)" / "not in P1 build" for shipped features
+- [x] PLANNED section accurate (P2-only items remain)
 - [x] Docs only — no gameplay promises
 - [x] `npm run verify` green
 
@@ -45,3 +32,5 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 - P1 idle core + extensions shipped (see `docs/ROADMAP.md` Phase 1 status)
 - Weather modifier shipped
 - **DM-W1 — Auto-sell off-peak (GDD C4)** — merged on `main` (owner-approved $1,500 upgrade; default-off; `auto_sell.test.ts` + upgrades modal + day-report line; dark-pattern framing: "less waste / frees cash")
+- **DM-W2 — Large-text accessibility** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/29 (2026-06-13)
+- **DM-W3 — P1-EXIT prep docs** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/30 (2026-06-13)

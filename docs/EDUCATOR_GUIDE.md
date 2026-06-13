@@ -4,7 +4,7 @@
 
 ---
 
-> **Build status — read before class prep** *(refreshed 2026-06-07)*
+> **Build status — read before class prep** *(refreshed 2026-06-13)*
 >
 > This guide describes the FULL designed experience. The current P1 build has grown well
 > beyond the original idle slice. Status as of the latest build:
@@ -13,7 +13,7 @@
 >
 > | Feature | Notes |
 > |---------|-------|
-> | One district (Farmers' Market) | The full roast → price → sell → day-report loop |
+> | Two districts (Farmers' Market + Office Quarter) | Full roast → price → sell → day-report loop; ROUTES modal to buy the Office Quarter permit ($300), switch districts, and compare demand curves |
 > | Roast queue, pricing, demand curve, day cycle | Core idle loop; profit-optimum pricing |
 > | Recipes (3) + roaster/queue upgrades | Classic Salted from start; Honey Cinnamon / Ghost Pepper unlock by lifetime revenue |
 > | **Save / load** | Browser localStorage; auto-saves and reloads (corruption-safe). Save export/import to a file too. |
@@ -22,15 +22,15 @@
 > | "Save the Truck" rescue arc | No bankruptcy — a cash crunch offers a fair loan / supplier credit / pre-order / cautionary payday (with honest APR). Repeat crises escalate. |
 > | Achievements + Goals panel | Progress markers (no power rewards); Legume Lore collection; comeback-line tiers |
 > | "Legumes. Not Nuts." brand campaign | Flip the running gag into brand equity |
-> | Accessibility + Settings (⚙ MENU) | Reduced-motion, colour-blind cues, sound toggle |
+> | Accessibility + Settings (⚙ MENU) | Reduced-motion, colour-blind cues, large-text toggle (1.28×), sound toggle |
 > | **In-game Glossary** | Plain-language definitions (COGS, margin, APR, profit-vs-cash, deferred revenue, **peanut allergy**) + the "simplified / varies by location" disclaimer |
 > | First-run tutorial, audio/SFX + mute, milestone celebrations | Onboarding + game-feel |
 > | **Auto-sell off-peak upgrade** | Optional $1,500 upgrade: leftover roasted stock clears at 10% off at day's end (less waste, frees working capital) |
 > | **Weather demand modifier** | Rainy −20% / hot-sunny +15% demand; 1-day forecast shown (predictable, no FOMO) |
 >
-> **PLANNED (P2+, not yet built):** truck driving + multiple districts + NPC quests (the RPG layer); permits UI; **spoilage** (and the refrigerated-truck upgrade that depends on it); the **full** dual-ledger (interest split, accounts-payable calendar); seasons; built-in large-text font-scale toggle (browser zoom hint shipped for now).
+> **PLANNED (P2+, not yet built):** truck driving + Boardwalk/University districts + NPC quests (the RPG layer); **spoilage** (and the refrigerated-truck upgrade that depends on it); the **full** dual-ledger (interest split, accounts-payable calendar); year-round seasons; dedicated break-even goal UI; day-skip / in-game hint system.
 >
-> **Use in class today:** COGS, pricing & the demand curve, break-even, the day-report and the **BOOKS** panel (profit vs. cash), the rescue arc (debt & APR), and the Glossary. The rest is on the roadmap — this guide covers it for planning.
+> **Use in class today:** COGS, pricing & the demand curve, location strategy (Office Quarter unlock), the day-report and **BOOKS** panel (profit vs. cash), the rescue arc (debt & APR), weather/weekday demand planning, and the Glossary. Break-even is teachable via the glossary + fixed-cost math; a dedicated daily goal UI is still on the roadmap.
 
 ---
 
@@ -42,11 +42,11 @@ The game maps 10 core business concepts to playable moments. A typical 40-minute
 |---------|---|---|
 | **COGS (Cost of Goods Sold)** | The "Roasting" screen. Player buys raw peanuts ($0.40/lb), adds salt ($0.20), and roasts. Total cost per lb: $0.60. | "Why does the game make you *see* the raw ingredients leave your money pile before you sell anything?" |
 | **Gross Margin vs. Markup** | The pricing slider (left: $0.75/lb, right: $2.50/lb). As you move it, a margin % appears (green if >60%, yellow if 45–60%, red if <45%). | "At $1.50/lb, your margin is 60%. If you drop to $1.00, it's 40%. Why does a 33% price cut hurt so much worse?" |
-| **Permits & Licensing** | Day 1 gate: spend $500 and wait 3 in-game days to get a Health & Mobile Vendor permit before operating. Renewal is required or the truck closes. **(planned P2)** | "The game doesn't let you start. Why? What does a real permit cost, and what would happen if you ignored the deadline?" |
-| **Location Strategy** | Unlock screen shows 4–5 districts (Farmers' Market, Office Quarter, Boardwalk, etc.). Each has different foot traffic, seasons, and permit costs. **(planned P2)** | "Which district looks best? Revenue per day, or profit per day? Why are they different?" |
+| **Permits & Licensing** | **PARTIAL (shipped):** buy the Office Quarter permit ($300) via the ROUTES modal to operate in a second district. Full permit-renewal calendar and Day-1 health-permit gate are P2. | "Why pay $300 before you can sell downtown? What does a real permit cost, and what happens if you ignore renewal?" |
+| **Location Strategy** | **PARTIAL (shipped):** Farmers' Market (baseline) + Office Quarter (lunch-rush curve, lower base demand, Derek consistency mechanic). Boardwalk and University are P2. | "Which district looks best? Revenue per day, or profit per day? Why are they different?" |
 | **Cash Flow vs. Profit** | **SHIPPED (BOOKS panel):** live balance sheet + a day-report line showing that debt payments lower cash but are *not* an expense, so profit ≠ cash. A big roasting day can drop cash while profit stays positive. *(Full dual-ledger with interest split is P2.)* | "You made $200 this week but you're broke. Explain why those two things can both be true." |
 | **Marketing & Reputation** | Customer "Legume Gag" (customers say "peanuts aren't nuts, they're legumes"). Each time you win the gag exchange, a Legume Lore entry unlocks, and that customer becomes a repeat buyer. | "Free marketing vs. paid ads: how does the game model earning customers?" |
-| **Seasonality / cyclicality** | **PARTIAL:** weekday demand variation is shipped (Mon slow → Sat peak, shown openly). Full-year seasons + weather-affecting-demand are P2 (a weather *foundation* is in an open PR). | "If you ignore the forecast and don't save in summer, what happens in January?" |
+| **Seasonality / cyclicality** | **PARTIAL (shipped):** weekday demand variation (Mon slow → Sat peak) plus a daily weather modifier (rainy −20% / hot-sunny +15%) with a 1-day forecast — both shown openly. Full-year seasons and festival calendar are P2. | "The HUD shows tomorrow's weather. How would you plan roasting if rain is coming?" |
 | **Break-Even Analysis** | Daily goal UI shows a target: "Sell 6 lbs today to cover fixed costs." (At $1.50/lb sell price, COGS $0.60/lb, gross profit $0.90/lb: $5.00 daily fixed ÷ $0.90 = 6 lbs.) If you exceed it, the target turns green. **(planned: break-even UI not in P1)** | "What does break-even mean? Is every sale profitable?" |
 | **Unit Economics** | End-of-day report: revenue, COGS, gross profit, location costs, net profit. Weekly table shows which location/day combos were best. (P1 report card shows single-district breakdown; multi-location weekly table **(planned P2)**.) | "You sold at two locations. Same revenue, different profit. Why?" |
 | **Simple Bookkeeping** | **SHIPPED:** Ledger v1 — a 30-day daily P&L table (revenue, COGS, fixed, net, debt payments, cash) in the BOOKS panel, plus an auto weekly recap (revenue, net, margin, best day). *(A full receipt journal by income/expense type is P2.)* | "Why keep a journal? What pattern would you spot if you looked at the last 4 weeks?" |
@@ -126,7 +126,7 @@ The game teaches plausible business concepts. Some real-world details are simpli
 
 ### Permits
 - **Real:** Health permits, mobile-vendor licenses, fire certificates, zone-specific permits all vary by jurisdiction (city, county, state). Renewal schedules differ. Costs range $300–$800/year. Processing times: 2–6 weeks.
-- **Game:** One "Health & Mobile Vendor License" for $500, takes 3 in-game days (represents waiting and admin work). Renewal reminder at 30 days before expiry. **(planned P2 — no permit UI in P1 build)**
+- **Game:** Office Quarter permit costs $300 (one-time purchase via ROUTES modal). A broader permit-renewal calendar and Day-1 health-permit gate are P2 — not yet in the build.
 - **Why:** The game is jurisdiction-generic to avoid locking you into one city's rules. The principle is true (permits are unavoidable, recurring, scheduled costs).
 
 ### Pricing & Demand
@@ -136,8 +136,8 @@ The game teaches plausible business concepts. Some real-world details are simpli
 
 ### Seasonality & Weather
 - **Real:** Summer fairs and festivals are scheduled events (Pumpkin Fest Oct 15–20, Farmers' Market open Sat 8am–12pm year-round). Weather is daily. Holidays shift demand unpredictably.
-- **Game:** Seasons (Summer +40%, Winter −40%) are static bands. Festivals appear in the calendar. No daily weather randomness in P1.
-- **Why:** P1 is simplified to give you a clear baseline. Predictability helps you learn the core loop before adding chaos.
+- **Game:** Weekday demand curves and a daily weather modifier (rainy −20%, hot-sunny +15%) are shipped with a 1-day forecast. Full-year season bands and festival calendar are P2.
+- **Why:** External demand drivers are shown *ahead* so students can plan — no surprise-FOMO framing. Year-round seasons add complexity once the core loop is familiar.
 
 ### Spoilage & Inventory
 - **Real:** Roasted peanuts stay fresh ~60–90 days in sealed containers at room temperature. Real trucks rotate stock, watch expiration dates, compost old batches.
@@ -176,7 +176,7 @@ When students ask "Is that actually how it works?", here are canonical sources:
 - **No leaderboards:** Your scores aren't broadcast or compared to others online.
 - **No analytics:** The game doesn't track how long you play, which decisions you make, or where you get stuck. No data leaves your computer.
 - **Offline play:** The game runs entirely offline. You can close it, unplug, and play again later without an internet connection.
-- **Save files (planned P1.5):** In the current P1 build there is no save. Refreshing the browser restarts the game. Planned P1.5 will save to browser `localStorage` (local to that browser only — no file download, no server). **(planned)**
+- **Save files:** The game auto-saves to browser `localStorage` (local to that browser only). Save export/import to a file is available in Settings. No server upload.
 
 **The educator-export feature mentioned in the roadmap is NOT shipped yet.** Such a feature (recording class-wide gameplay transcripts) would require privacy review per our RISK_REGISTER before it ever ships. It's gated behind a conscious owner decision. Until then, the game collects zero data.
 
@@ -198,7 +198,7 @@ When students ask "Is that actually how it works?", here are canonical sources:
 ## Accessibility Notes
 
 - **Reading level:** Game text is conversational (Middle School+). Tooltips are optional; core mechanics are visual.
-- **Color:** The margin % display uses green/yellow/red color bands. Numbers are always shown alongside color, so colorblind players can read the value directly. Icon overlays for color-coded slots are **(planned)**.
+- **Color:** The margin % display uses green/yellow/red color bands. Numbers are always shown alongside color, and the **Colour-blind cues** toggle adds a word label ("healthy/tight/low") so colour is never the only signal.
 - **Pacing:** You set the pace. No time pressure, no game-over. Pause and think as long as you want.
 - **Difficulty:** No "hard mode" in P1. In-game hints and day-skip are **(planned)** — for now, teachers can pause and walk through the report card together as the natural debrief point.
 
@@ -284,7 +284,7 @@ Use this checklist to prepare and run a classroom session. All steps are **pract
 
 **Play Phase 2: Days 6–10 (15–20 min)**
 - Resume play. Watch for the Legume Gag (should trigger 3–5 times by Day 10, depending on sales volume). When it happens, point it out: **"That's the running joke of the game. Every few sales, a customer reminds you peanuts are legumes. Keep track—it's a mechanic."**
-- If a student runs low on cash (<$25 end-of-day, planned UI), the rescue arc flag is set — no rescue screen appears in the P1 build. **(rescue-arc walkthrough is planned, not yet in P1 build)**
+- If a student runs low on cash, the **Save the Truck** rescue arc offers fair choices (Old Joe loan, supplier credit, Derek pre-order, or cautionary payday loan) — no bankruptcy, no shame framing. Watch for the dialogue and discuss APR/debt terms afterward.
 
 **Final Debrief (10–15 min, whole class):**
 - **Ask (cold call or volunteers):**
@@ -339,9 +339,9 @@ The **⚙ MENU** button (bottom-right) opens Settings, which holds:
 - **Accessibility** — **Reduced motion** (stops ambient animation for motion-sensitive
   players) and **Colour-blind cues** (adds a word — "healthy/tight/low" — to the
   colour-coded margin so colour is never the only signal). Both persist per-device.
-- **Larger text** — the game fills the window (FIT-scaled), so **browser zoom** enlarges
-  everything cleanly: **Ctrl + / Ctrl −** (⌘ on Mac). Settings shows this hint in-game.
-  (A built-in font-scale toggle is deferred to the P2 UI pass, where panels get flexible layout.)
+- **Large text** — toggle in Settings scales in-game fonts (~1.28×; reloads the scene).
+  **Browser zoom** also works cleanly on the FIT-scaled canvas: **Ctrl + / Ctrl −** (⌘ on Mac).
+  Settings shows both options.
 
 These preferences are stored locally on the device only — no accounts, no transmission.
 
