@@ -4,13 +4,20 @@
 **Updated:** 2026-06-14  
 **Public volunteer link (share this):** https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/blob/main/PLAYTEST.md
 
+**Signup form (creates GitHub issue):** https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/issues/new?template=playtest-signup
+
+**Private full record (after repo invite):** https://github.com/subtiliorars-sys/DrivingMeNuts/issues/new?template=playtest-signup
+
+**Session feedback (private, after invite):** https://github.com/subtiliorars-sys/DrivingMeNuts/issues/new?template=playtest-feedback
+
 ---
 
 ## Before you play
 
-1. Read and sign the **Playtest & Confidentiality Agreement** in [`PLAYTEST.md` on the Preview repo](https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/blob/main/PLAYTEST.md) (same text below).
-2. Wait for the owner to confirm your signup and send **either** a GitHub invite to this private repo **or** a playable URL when deploy is live.
-3. Do **not** share screenshots, streams, or build files publicly unless the owner explicitly OKs it for that session.
+1. Read [PLAYTEST.md on the Preview repo](https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/blob/main/PLAYTEST.md).
+2. Submit the **[playtest signup form](https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/issues/new?template=playtest-signup)** (creates a stored GitHub issue).
+3. Wait for the owner to confirm and send **GitHub invite** or a **playable URL**.
+4. Do **not** share screenshots, streams, or build files publicly unless the owner explicitly OKs it for that session.
 
 ---
 
