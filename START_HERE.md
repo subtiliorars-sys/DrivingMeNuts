@@ -23,6 +23,17 @@ To stop it: press `Ctrl + C` in that terminal.
 
 ---
 
+## 🧪 3. Volunteer playtest (closed beta)
+
+**Signup (stored on GitHub):**  
+https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/issues/new?template=playtest-signup
+
+Read first: https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/blob/main/PLAYTEST.md
+
+After the owner invites you to this repo, run `npm start` as above. Session feedback (collaborators): use the **Playtest feedback** issue template in this repo's Issues tab.
+
+---
+
 ## 🛠️ 2. Keep building it (with Claude)
 
 You don't run build commands — **just talk to Claude.** Open Claude Code in this
