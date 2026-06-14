@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:boot": "vitest run --config vitest.boot.config.ts",
-    "verify": "tsc --noEmit && vitest run && vite build"
+    "qa:browser": "powershell -ExecutionPolicy Bypass -File ./scripts/browser-qa.ps1 -Action tutorial-smoke",
+    "verify": "tsc --noEmit && vitest run && npm run test:boot && vite build"
   },
   "dependencies": {
     "phaser": "^3.87.0"

@@ -33,6 +33,44 @@ const config: Phaser.Types.Core.GameConfig = {
 
 const game = new Phaser.Game(config);
 
+declare global {
+  interface Window {
+    __DMN_GAME__?: Phaser.Game;
+    __DMN_QA__?: {
+      flags(): ReturnType<GameScene["qaFlags"]> | null;
+      click(target: string): string;
+    };
+  }
+}
+
+window.__DMN_GAME__ = game;
+
+if (import.meta.env.DEV) {
+  const qaHandlers: Record<string, (scene: GameScene) => void> = {
+    "buy-raw": (s) => s.qaClickBuyRaw(),
+    "close-supply": (s) => s.qaCloseSupplyModal(),
+    "roast-slot-0": (s) => s.qaClickRoastSlot(0),
+    "close-roast": (s) => s.qaCloseRoastModal(),
+    "end-day": (s) => s.qaClickEndDay(),
+    "dismiss-report": (s) => s.qaCloseDayReport(),
+  };
+
+  window.__DMN_QA__ = {
+    flags() {
+      const scene = game.scene.getScene("GameScene") as GameScene | undefined;
+      return scene?.qaFlags?.() ?? null;
+    },
+    click(target: string) {
+      const scene = game.scene.getScene("GameScene") as GameScene | undefined;
+      if (!scene?.qaClickBuyRaw) return "no-scene";
+      const fn = qaHandlers[target];
+      if (!fn) return "unknown-target";
+      fn(scene);
+      return "ok";
+    },
+  };
+}
+
 // Recalculate canvas on resize/orientation change — Phaser's scale manager
 // handles the FIT maths; refresh() re-centres and re-applies the transform.
 window.addEventListener("resize", () => {
