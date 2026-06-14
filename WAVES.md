@@ -10,7 +10,19 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 
 ## Active queue
 
-_(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`.)_
+### Wave DM-W8 — Playtest volunteer docs cross-link
+**Status:** `active`  
+**Branch:** `automation/wave-dm-w8-playtest-docs`
+
+**Acceptance:**
+- [ ] `START_HERE.md` links public signup form + PLAYTEST.md
+- [ ] `OFFICE_HOURS.md` documents volunteer intake + `npm run qa:browser` gate
+- [ ] `WAVES.md` marks DM-W8 done with PR link on merge
+- [ ] Docs only — `npm run verify` green
+
+---
+
+_(Phase 2 prep: `docs/PHASE2_PREP.md` — gameplay waves blocked until P1 exit.)_
 
 ## Blocked (queue owner — do not implement)
 - Marketing campaign tiers (A4) — owner decision
