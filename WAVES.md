@@ -10,9 +10,14 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 
 ## Active queue
 
-_Queue idle — no `pending`/`active` waves. Owner must add the next wave here or unblock a backlog item._
+_(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`.)_
 
----
+### Wave DM-W7 — WAVES registry sync
+**Status:** `in_review`  
+**Branch:** `automation/wave-dm-w7-waves-sync`
+
+- [x] Mark DM-W5/W6 merged; active queue idle
+- [x] Docs only
 
 ## Blocked (queue owner — do not implement)
 - Marketing campaign tiers (A4) — owner decision
@@ -22,8 +27,9 @@ _Queue idle — no `pending`/`active` waves. Owner must add the next wave here o
 ## Completed
 - P1 idle core + extensions shipped (see `docs/ROADMAP.md` Phase 1 status)
 - Weather modifier shipped
-- **DM-W1 — Auto-sell off-peak (GDD C4)** — merged on `main` (owner-approved $1,500 upgrade; default-off; `auto_sell.test.ts` + upgrades modal + day-report line; dark-pattern framing: "less waste / frees cash")
-- **DM-W2 — Large-text accessibility** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/29 (2026-06-13)
-- **DM-W3 — P1-EXIT prep docs** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/30 (2026-06-13)
-- **DM-W4 — EDUCATOR_GUIDE build-status sync** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/31 (2026-06-13)
-- **DM-W5 — SYSTEMS_BACKLOG §3 sync (large-text shipped)** — PR https://github.com/subtiliorars-sys/DrivingMeNuts/pull/32 (2026-06-13)
+- **DM-W1 — Auto-sell off-peak (GDD C4)** — merged on `main`
+- **DM-W2 — Large-text accessibility** — PR #29 (2026-06-13)
+- **DM-W3 — P1-EXIT prep docs** — PR #30 (2026-06-13)
+- **DM-W4 — EDUCATOR_GUIDE build-status sync** — PR #31 (2026-06-13)
+- **DM-W5 — SYSTEMS_BACKLOG §3 sync** — PR #32 (2026-06-13)
+- **DM-W6 — Phase 2 RPG shell prep** — `docs/PHASE2_PREP.md` on `main`
