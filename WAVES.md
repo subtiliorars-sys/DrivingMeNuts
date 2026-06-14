@@ -12,13 +12,6 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 
 _(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`.)_
 
-### Wave DM-W7 — WAVES registry sync
-**Status:** `in_review`  
-**Branch:** `automation/wave-dm-w7-waves-sync`
-
-- [x] Mark DM-W5/W6 merged; active queue idle
-- [x] Docs only
-
 ## Blocked (queue owner — do not implement)
 - Marketing campaign tiers (A4) — owner decision
 - Refrigerated truck — needs spoilage (P2)
@@ -33,3 +26,4 @@ _(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`.)_
 - **DM-W4 — EDUCATOR_GUIDE build-status sync** — PR #31 (2026-06-13)
 - **DM-W5 — SYSTEMS_BACKLOG §3 sync** — PR #32 (2026-06-13)
 - **DM-W6 — Phase 2 RPG shell prep** — `docs/PHASE2_PREP.md` on `main`
+- **DM-W7 — WAVES registry sync** — merged PR #35 (2026-06-14)
