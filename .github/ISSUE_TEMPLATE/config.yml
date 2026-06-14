@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Public playtest signup (start here)
+    url: https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/issues/new?template=playtest-signup
+    about: Volunteer signup form — stored as a GitHub issue
+  - name: Playtest guide
+    url: https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/blob/main/PLAYTEST.md
+    about: Full onboarding + agreement text

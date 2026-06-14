@@ -3665,4 +3665,73 @@ export class GameScene extends Phaser.Scene {
       this.tutorialGroup = undefined;
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Dev QA bridge (docs/QA_CLICK_MAP.md) — same handlers as UI pointerdown
+  // ---------------------------------------------------------------------------
+
+  qaFlags(): {
+    supplyModalOpen: boolean;
+    roastModalOpen: boolean;
+    reportOpen: boolean;
+    dayNumber: number;
+    inPostReportChain: boolean;
+    aftermathModalOpen: boolean;
+  } {
+    return {
+      supplyModalOpen: this.supplyModalOpen,
+      roastModalOpen: this.roastModalOpen,
+      reportOpen: this.reportOpen,
+      dayNumber: this.state.dayNumber,
+      inPostReportChain: this.inPostReportChain,
+      aftermathModalOpen: this.aftermathModalOpen,
+    };
+  }
+
+  qaClickBuyRaw(): void {
+    if (!this.reportOpen && !this.rescueModalOpen && !this.districtModalOpen) {
+      playButtonTick();
+      this.advanceTutorialOnAction(0);
+      this.openSupplyModal();
+    }
+  }
+
+  qaCloseSupplyModal(): void {
+    if (this.supplyModalOpen) this.closeSupplyModal();
+  }
+
+  qaClickRoastSlot(slotIndex: number): void {
+    if (
+      !this.reportOpen &&
+      !this.supplyModalOpen &&
+      !this.roastModalOpen &&
+      !this.upgradesModalOpen &&
+      !this.districtModalOpen &&
+      !this.rescueModalOpen
+    ) {
+      this.advanceTutorialOnAction(1);
+      this.handleSlotClick(slotIndex);
+    }
+  }
+
+  qaCloseRoastModal(): void {
+    if (this.roastModalOpen) this.closeRoastModal();
+  }
+
+  qaClickEndDay(): void {
+    if (
+      !this.reportOpen &&
+      !this.supplyModalOpen &&
+      !this.roastModalOpen &&
+      !this.upgradesModalOpen &&
+      !this.districtModalOpen &&
+      !this.rescueModalOpen
+    ) {
+      this.triggerEndOfDay();
+    }
+  }
+
+  qaCloseDayReport(): void {
+    if (this.reportOpen) this.closeDayReport();
+  }
 }

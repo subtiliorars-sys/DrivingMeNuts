@@ -57,3 +57,29 @@ swap or add competing game frameworks without owner sign-off.
   unit-testable in a node environment. The idle simulation logic lives here.
 - All economy constants live in `src/data/economy.ts` (**single source of truth**).
   Do not hardcode prices, rates, or multipliers anywhere else; reference this file.
+
+## Fleet coordination (do not break parallel work)
+
+**Before any push or automation wave**, list in-flight PRs:
+
+```powershell
+cd ~\agent-corps
+powershell -ExecutionPolicy Bypass -File .\bin\corps-open-prs.ps1 -All
+```
+
+**Canon (AgentCorps repo):**
+
+| Doc | Role |
+|-----|------|
+| `cursor/wave-workers-fleet.md` | **PICKUP RULES** — open `automation/*` PR → `wave in flight: PR #N` → STOP |
+| `fleet/repo-registry.json` | Branch truth, ethics flags, automation schedules |
+| `FLEET_PROTOCOL.md` | Multi-session blackboard — write `~/fleet/status/drivingmenuts.md` |
+| `git-guards/PROTOCOL.md` | `work/<topic>` branches; stage only your files |
+
+**This repo:** `WAVES.md` mirrors wave pickup. Do not edit `WAVES.md` while draft PR #33
+(cursor branch) is open unless you are closing that wave.
+
+## Game iteration QA (canvas)
+
+Dev-only QA bridge on `window.__DMN_QA__`; gate: `npm run qa:browser` (needs dev server on :3000).
+See `docs/QA_BROWSER.md`, `docs/QA_CLICK_MAP.md`. Run `scripts/dev-single.ps1` before browser QA.

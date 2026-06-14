@@ -1,0 +1,62 @@
+name: Playtest session feedback
+description: Bug reports and session notes from a playtest (private issue)
+title: "[Playtest feedback] "
+labels:
+  - playtest-feedback
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use after a play session. See [PLAYTEST.md](https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/blob/main/PLAYTEST.md) for the feedback checklist.
+
+  - type: input
+    id: build
+    attributes:
+      label: Build / commit (if known)
+      placeholder: git sha or date owner sent access
+    validations:
+      required: false
+
+  - type: input
+    id: environment
+    attributes:
+      label: Browser + OS
+      placeholder: Chrome 125 / Windows 11
+    validations:
+      required: true
+
+  - type: textarea
+    id: blockers
+    attributes:
+      label: Blockers
+      placeholder: Cannot proceed because...
+    validations:
+      required: false
+
+  - type: textarea
+    id: confusing
+    attributes:
+      label: Confusing / not fun
+    validations:
+      required: false
+
+  - type: textarea
+    id: wrong_lesson
+    attributes:
+      label: Felt wrong about business / math
+    validations:
+      required: false
+
+  - type: textarea
+    id: bugs
+    attributes:
+      label: Bugs (numbered repro steps)
+    validations:
+      required: false
+
+  - type: textarea
+    id: other
+    attributes:
+      label: Other notes
+    validations:
+      required: false

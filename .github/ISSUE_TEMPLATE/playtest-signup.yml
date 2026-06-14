@@ -1,0 +1,77 @@
+name: Playtest signup (private record)
+description: Full playtest agreement — private GitHub issue (HQ repo, collaborators only)
+title: "[Playtest signup] "
+labels:
+  - playtest-signup
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Private record.** This issue is stored on the **private** DrivingMeNuts repository (not public).
+
+        You must have **collaborator access** to this repo before this form works. If you have not been invited yet, use the [public signup form](https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/issues/new?template=playtest-signup) first.
+
+        Full terms: [PLAYTEST.md](https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/blob/main/PLAYTEST.md)
+
+  - type: input
+    id: legal_name
+    attributes:
+      label: Legal name (electronic signature)
+      placeholder: Jane Doe
+    validations:
+      required: true
+
+  - type: input
+    id: email
+    attributes:
+      label: Contact email
+      placeholder: you@example.com
+    validations:
+      required: true
+
+  - type: input
+    id: github_username
+    attributes:
+      label: GitHub username
+      placeholder: octocat
+    validations:
+      required: true
+
+  - type: input
+    id: signup_date
+    attributes:
+      label: Date (YYYY-MM-DD)
+      placeholder: "2026-06-14"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Primary playtest device
+      options:
+        - Windows (desktop browser)
+        - macOS (desktop browser)
+        - Linux (desktop browser)
+        - iPhone / iPad (Safari)
+        - Android (Chrome)
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: agreements
+    attributes:
+      label: Agreement (required)
+      options:
+        - label: I have read PLAYTEST.md and agree to confidentiality, feedback license, volunteer terms, and education-not-advice.
+          required: true
+        - label: I understand this is volunteer playtesting unless a separate paid contract says otherwise.
+          required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Optional notes
+    validations:
+      required: false

@@ -58,6 +58,7 @@ const Phaser = ((PhaserAll as any).default ?? PhaserAll) as any;
 function withHeadlessGame(
   cb: (game: Phaser.Game) => void,
   done: () => void,
+  opts?: { startGameScene?: boolean },
 ): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const game = new (Phaser as any).Game({
@@ -76,6 +77,11 @@ function withHeadlessGame(
         game.step(t, 16);
         game.step(t + 16, 16);
         game.step(t + 32, 16);
+
+        if (opts?.startGameScene) {
+          game.scene.start("GameScene");
+          game.step(t + 48, 16);
+        }
 
         cb(game);
 
@@ -147,6 +153,23 @@ describe("Phaser 3 headless boot smoke", () => {
       expect(scene.slotLabels).toHaveLength(slotCount);
       expect(scene.slotBars).toHaveLength(slotCount);
       expect(scene.slotBarBgs).toHaveLength(slotCount);
-    }, done as unknown as () => void);
+    }, done as unknown as () => void, { startGameScene: true });
+  });
+
+  it("qaFlags() exposes modal state after GameScene starts", (done) => {
+    withHeadlessGame((game) => {
+      const scene = game.scene.getScene("GameScene") as GameScene;
+      const flags = scene.qaFlags();
+      expect(flags.supplyModalOpen).toBe(false);
+      expect(flags.dayNumber).toBe(1);
+    }, done as unknown as () => void, { startGameScene: true });
+  });
+
+  it("qaClickBuyRaw() opens the supply modal", (done) => {
+    withHeadlessGame((game) => {
+      const scene = game.scene.getScene("GameScene") as GameScene;
+      scene.qaClickBuyRaw();
+      expect(scene.qaFlags().supplyModalOpen).toBe(true);
+    }, done as unknown as () => void, { startGameScene: true });
   });
 });
