@@ -28,6 +28,7 @@
 import Phaser from "phaser";
 import { drawLegsy } from "./legsy.js";
 import { audioInit, playButtonTick } from "./audio.js";
+import { loadMusicPref, startMusic } from "./music.js";
 import { SAVE_KEY, safeStorage, resetSave } from "../sim/persistence.js";
 
 // Palette A constants (same subset used in GameScene)
@@ -127,6 +128,10 @@ export class BootScene extends Phaser.Scene {
     startBtn.on("pointerdown", () => {
       // First gesture — resume AudioContext (browser auto-play policy)
       audioInit(storage);
+      // Music begins here too: gesture satisfied, context live. The soundtrack
+      // is global (not scene-bound) so it carries into GameScene seamlessly.
+      loadMusicPref(storage);
+      startMusic("day");
       playButtonTick();
       this.scene.start("GameScene");
     });

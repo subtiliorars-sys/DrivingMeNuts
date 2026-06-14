@@ -6,6 +6,20 @@ All notable changes to Driving Me Nuts are documented here. This project follows
 
 ## [Unreleased]
 
+### Added — desktop / Steam shippable build (production push)
+- **Electron desktop wrapper** in `desktop/` (self-contained so the web `verify` gate never depends on Electron). `main.cjs` owns the window, native menu (F11 fullscreen), single-instance lock, and full security hardening (`contextIsolation` + `sandbox`, no `nodeIntegration`, external links → OS browser). `preload.cjs` exposes only a read-only desktop marker — the game stays fully offline (CRIT-1). electron-builder config targets **Windows NSIS installer + portable .exe**, plus Linux AppImage / macOS dmg. A code-generated roasted-peanut app icon (`scripts/make-icon.cjs`, pure-Node PNG, no external asset) is auto-converted to `.ico` at package time.
+- **Verified end-to-end**: the desktop shell launches headlessly (xvfb), renders the Phaser/WebGL game (title screen **and** live gameplay incl. the tutorial), and exits cleanly — a real launch smoke test (`DMN_SMOKE`/`DMN_SHOT`/`DMN_START`).
+- `docs/STEAM_RELEASE.md` — full runbook (build pipeline, Steamworks/depot, store assets, sysreqs, controls table, pre-ship QA gate). `desktop/README.md` — build/run/package instructions.
+
+### Added — procedural background music (SOUND_DESIGN §B realised, cost-zero)
+- New `src/scenes/music.ts`: a synthesized **Daytime Market Loop** + **Evening Variant** (cozy vi–IV–I–V bed — soft pad, warm bass, gentle fingerpicking arpeggio, light shaker, sparse twinkles) built on the existing WebAudio approach (no asset files, no provenance burden). Routes through the same master gain as SFX, so the one **Sound** toggle mutes everything; an independent **Music** toggle (persisted) controls the bed. The soundtrack **cross-fades day→evening** over the back third of the trading day. Auto-play-safe (starts on the title-screen gesture). 6 new node tests cover the pref/lifecycle contract.
+
+### Added — desktop keyboard controls
+- Full keyboard layer in `GameScene` (S/R/U/B/G/D supply·roast·upgrades·books·goals·district, `Enter` end-day, `Esc` back/menu, `M` menu, `N` sound, `J` music) — every shortcut routes through the same guards as the on-screen buttons so a key press can never stack a modal over a forced-choice flow (report/rescue/tutorial). Headless-safe.
+
+### Fixed — save-validation hardening (audit, HIGH) + cash-floor defense-in-depth
+- `sanityCheck` now validates `sellPrice` (within `[PRICE_MIN, PRICE_MAX]`), `rawStockLbs`, `roastedStockLbs`, `roastedCostBasisPerLb`, and `dayElapsedSeconds` — previously these core economy fields flowed through unvalidated, so a corrupt/hand-edited save could inject NaN/negative/out-of-range values that poison cost-basis & demand math and break the never-negative-cash invariant. `tick()` now also calls `applyCashFloor` (no-op in normal play; guarantees the invariant even past load-time validation). 6 new corruption tests.
+
 ### Added — Office Quarter backdrop palette (DMN-2 slice)
 - **Palette D** in ART_BIBLE + live backdrop swap in GameScene: grey urban sky, concrete ground, office-block silhouettes when operating in Office Quarter; Farmers' Market deco hidden. District banner/modal unchanged from DMN-1. UI-only.
 

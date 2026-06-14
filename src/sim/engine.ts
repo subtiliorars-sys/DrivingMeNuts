@@ -469,6 +469,12 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
     DAY_DURATION_SECONDS,
   );
 
+  // Defense-in-depth: with valid (clamped) prices revenue is always positive,
+  // so this is a no-op in normal play. It guarantees the never-negative-cash
+  // invariant holds even if a corrupt/hand-edited save slipped a bad price
+  // past load-time validation. (Audit hardening, P-prod.)
+  applyCashFloor(state);
+
   return events;
 }
 

@@ -1,0 +1,9 @@
+# Electron / packaging artifacts — never committed
+node_modules/
+dist/
+release/
+
+# Keep the generated icon out of git; it's reproducible via `npm run make-icon`.
+build/icon.png
+build/icon.ico
+build/icon.icns

@@ -90,6 +90,7 @@ import {
   playButtonTick,
   loadMutePref,
 } from "./audio.js";
+import { isMusicOn, toggleMusic, loadMusicPref, startMusic, setMusicMode } from "./music.js";
 
 // LORE_LOADED_COUNT removed — denominator is now computed dynamically in updateHUD()
 // based on state.dayNumber and LORE_TIER_DAY_GATE (honest: shows unlocked pool size).
@@ -699,6 +700,11 @@ export class GameScene extends Phaser.Scene {
     // RT F1: sync the saved mute pref so the Settings Sound toggle reflects it
     // (no AudioContext yet — that waits for the first gesture).
     loadMutePref(this.storage);
+    // Same for the music pref so the Settings Music toggle reflects the save.
+    // If the player arrived here without passing the title (e.g. scene.restart
+    // from the Large-text toggle), re-assert playback to match their pref.
+    loadMusicPref(this.storage);
+    if (isMusicOn()) startMusic("day");
 
     // Initial HUD render
     this.updateHUD();
@@ -737,6 +743,77 @@ export class GameScene extends Phaser.Scene {
       this.inPostReportChain = true;
       this.time.delayedCall(600, () => this.afterReportFlow());
     }
+
+    // ---- Desktop keyboard controls (Steam / Windows expectation) ----------
+    this.setupKeyboard();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Keyboard controls
+  //
+  // Desktop players expect to drive the whole game from the keyboard. Every
+  // shortcut routes through the SAME guards as the on-screen buttons so a key
+  // press can never open a modal on top of a forced-choice flow (day report,
+  // rescue arc, tutorial, aftermath). ESC is universal back/cancel for the
+  // optional info modals; it deliberately does NOT dismiss the day report or
+  // rescue arc (those require a decision). Headless/no-keyboard environments
+  // (boot smoke test) are handled by the `?.` guard.
+  // ---------------------------------------------------------------------------
+
+  /** True when a blocking modal or scripted flow owns the screen. */
+  private isUIBlocked(): boolean {
+    return (
+      this.reportOpen || this.supplyModalOpen || this.roastModalOpen ||
+      this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen ||
+      this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen ||
+      this.glossaryModalOpen || this.aftermathModalOpen || this.inPostReportChain ||
+      this.tutorialStep >= 0
+    );
+  }
+
+  /** Close the topmost dismissible info modal. Returns true if one was closed. */
+  private closeTopModal(): boolean {
+    if (this.glossaryModalOpen) { this.closeGlossaryModal(); return true; }
+    if (this.settingsModalOpen) { this.closeSettingsModal(); return true; }
+    if (this.supplyModalOpen) { this.closeSupplyModal(); return true; }
+    if (this.roastModalOpen) { this.closeRoastModal(); return true; }
+    if (this.upgradesModalOpen) { this.closeUpgradesModal(); return true; }
+    if (this.districtModalOpen) { this.closeDistrictModal(); return true; }
+    if (this.booksModalOpen) { this.closeBooksModal(); return true; }
+    if (this.goalsModalOpen) { this.closeGoalsModal(); return true; }
+    return false;
+  }
+
+  private setupKeyboard(): void {
+    const kb = this.input?.keyboard;
+    if (!kb) return; // headless renderer / no keyboard — silently skip
+
+    // ESC: back/cancel. Closes an open info modal, or opens the menu when idle.
+    kb.on("keydown-ESC", () => {
+      if (this.closeTopModal()) return;
+      if (!this.isUIBlocked()) { playButtonTick(); this.openSettingsModal(); }
+    });
+
+    // Single-key shortcuts for each action, gated so they never stack.
+    const open = (fn: () => void) => () => {
+      if (this.isUIBlocked()) return;
+      playButtonTick();
+      fn();
+    };
+    kb.on("keydown-S", open(() => this.openSupplyModal()));
+    kb.on("keydown-R", open(() => this.handleSlotClick(0)));
+    kb.on("keydown-U", open(() => this.openUpgradesModal()));
+    kb.on("keydown-B", open(() => this.openBooksModal()));
+    kb.on("keydown-G", open(() => this.openGoalsModal()));
+    kb.on("keydown-D", open(() => this.openDistrictModal()));
+    kb.on("keydown-M", open(() => this.openSettingsModal()));
+
+    // Mute / music quick toggles work even with a modal open (volume is global).
+    kb.on("keydown-N", () => { audioInit(this.storage); toggleMute(this.storage); this.updateHUD(); });
+    kb.on("keydown-J", () => { audioInit(this.storage); toggleMusic(this.storage); });
+
+    // ENTER ends the trading day early — same guard as the END DAY button.
+    kb.on("keydown-ENTER", () => { if (!this.isUIBlocked()) this.qaClickEndDay(); });
   }
 
   // ---------------------------------------------------------------------------
@@ -791,6 +868,13 @@ export class GameScene extends Phaser.Scene {
     ) {
       this.triggerEndOfDay();
     }
+
+    // Cross-fade the soundtrack into the warmer Evening arrangement during the
+    // back third of the trading day (SOUND_DESIGN.md §C "Day → Evening"). The
+    // setMusicMode call is a cheap no-op once the mode already matches.
+    setMusicMode(
+      this.state.dayElapsedSeconds >= DAY_DURATION_SECONDS * 0.62 ? "evening" : "day",
+    );
 
     // Animate NPCs
     this.animateNpcs(dtSeconds);
@@ -2041,6 +2125,10 @@ export class GameScene extends Phaser.Scene {
     let y = mY + 28;
     // Sound: the pill reads "ON" when sound is ENABLED (i.e. not muted).
     addToggle(y, "Sound", () => !isMuted(), () => { audioInit(this.storage); toggleMute(this.storage); });
+    y += 22;
+    // Music: independent of the SFX/Sound mute. When turned on mid-session we
+    // ensure the AudioContext exists (gesture already satisfied) before playing.
+    addToggle(y, "Music", isMusicOn, () => { audioInit(this.storage); toggleMusic(this.storage); });
     y += 22;
     addToggle(y, "Reduced motion", isReducedMotion, () => { toggleReducedMotion(this.storage); });
     y += 22;
