@@ -26,3 +26,8 @@ scratch/
 
 # Local AI-tool drops (fleet ruling 2026-06-07)
 .cursor/
+
+# Generated pixel-art PNGs — reproducible from tools/art/build-assets.cjs
+# (the generator is the source of truth; keep the README, drop the outputs)
+assets/generated/*.png
+
