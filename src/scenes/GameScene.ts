@@ -90,6 +90,7 @@ import {
   playButtonTick,
   loadMutePref,
 } from "./audio.js";
+import { closeFeedbackOverlay, openFeedbackOverlay } from "../playtest/feedback.js";
 
 // LORE_LOADED_COUNT removed — denominator is now computed dynamically in updateHUD()
 // based on state.dayNumber and LORE_TIER_DAY_GATE (honest: shows unlocked pool size).
@@ -306,6 +307,7 @@ export class GameScene extends Phaser.Scene {
   private settingsModalOpen = false;
   private glossaryModalGroup?: Phaser.GameObjects.Group;
   private glossaryModalOpen = false;
+  private feedbackOverlayOpen = false;
 
   // Rescue aftermath beats: queued durably in state.pendingAftermath at
   // endOfDay, shown one at a time after the day report closes (and before any
@@ -722,6 +724,21 @@ export class GameScene extends Phaser.Scene {
     settingsBtn.on("pointerover", () => settingsBtn.setAlpha(0.85));
     settingsBtn.on("pointerout",  () => settingsBtn.setAlpha(1.0));
 
+    const feedbackX = setX - 46;
+    const feedbackBtn = this.add.rectangle(feedbackX, dpY2 + 5, 40, 14, 0x445566)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.add.text(feedbackX, dpY2 + 5, "FEEDBACK",
+      { fontSize: "5px", color: "#F5DEB3", fontFamily: "monospace" }
+    ).setOrigin(0.5);
+    feedbackBtn.on("pointerdown", () => {
+      if (this.canOpenFeedback()) this.openPlaytestFeedback();
+    });
+    feedbackBtn.on("pointerover", () => feedbackBtn.setAlpha(0.85));
+    feedbackBtn.on("pointerout",  () => feedbackBtn.setAlpha(1.0));
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => closeFeedbackOverlay());
+
     // ---- First-run tutorial init (Wave 3) ---------------------------------
     // Only show tutorial if no save existed at load time (fresh player).
     // Uses a parallel storage key so save schema is untouched.
@@ -747,7 +764,7 @@ export class GameScene extends Phaser.Scene {
     // Track wall-clock playtime (excludes offline time; used by trySave meta)
     this.playtimeSeconds += delta / 1_000;
 
-    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen || this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen || this.glossaryModalOpen || this.aftermathModalOpen || this.inPostReportChain) return;
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen || this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen || this.glossaryModalOpen || this.aftermathModalOpen || this.inPostReportChain || this.feedbackOverlayOpen) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -2056,6 +2073,20 @@ export class GameScene extends Phaser.Scene {
 
     this.settingsModalGroup.add(this.add.rectangle(mX + mW / 2, y - 4, mW - 8, 1, P.PANEL_BORDER));
 
+    const feedbackBtn = this.add.rectangle(mX + mW / 2, y + 8, mW - 24, 16, 0x445566)
+      .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
+    this.settingsModalGroup.add(feedbackBtn);
+    this.settingsModalGroup.add(this.add.text(mX + mW / 2, y + 8, "FEEDBACK — report a bug or idea",
+      monoTextStyle(7)).setOrigin(0.5));
+    feedbackBtn.on("pointerdown", () => {
+      playButtonTick();
+      this.closeSettingsModal();
+      this.openPlaytestFeedback();
+    });
+    feedbackBtn.on("pointerover", () => feedbackBtn.setAlpha(0.85));
+    feedbackBtn.on("pointerout",  () => feedbackBtn.setAlpha(1.0));
+    y += 22;
+
     // Glossary entry point.
     const glossBtn = this.add.rectangle(mX + mW / 2, y + 8, mW - 24, 16, P.AWNING)
       .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
@@ -2099,6 +2130,29 @@ export class GameScene extends Phaser.Scene {
     }
     this.settingsModalOpen = false;
     this.updateHUD();
+  }
+
+  private canOpenFeedback(): boolean {
+    return !this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen
+      && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen
+      && !this.booksModalOpen && !this.goalsModalOpen && !this.aftermathModalOpen
+      && !this.inPostReportChain && !this.feedbackOverlayOpen;
+  }
+
+  private openPlaytestFeedback(): void {
+    if (!this.canOpenFeedback()) return;
+    playButtonTick();
+    this.feedbackOverlayOpen = true;
+    openFeedbackOverlay({
+      storage: this.storage,
+      context: {
+        day: this.state.dayNumber,
+        cash: this.state.cash,
+      },
+      onClose: () => {
+        this.feedbackOverlayOpen = false;
+      },
+    });
   }
 
   /**

@@ -10,6 +10,12 @@
 
 **Session feedback (private, after invite):** https://github.com/subtiliorars-sys/DrivingMeNuts/issues/new?template=playtest-feedback
 
+**In-game (browser / itch):** tap **FEEDBACK** on the bottom HUD or in **Settings** — opens a pre-filled GitHub form (no URL copy-paste).
+
+**Public play links (advertise these only):**
+- itch.io: https://subtiliorars.itch.io/jimmythehat-driving-me-nuts
+- GitHub Pages: https://subtiliorars-sys.github.io/DrivingMeNuts/
+
 ---
 
 ## Before you play

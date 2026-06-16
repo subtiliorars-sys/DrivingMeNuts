@@ -2,18 +2,32 @@ name: Playtest session feedback
 description: Bug reports and session notes from a playtest (private issue)
 title: "[Playtest feedback] "
 labels:
+  - playtest
   - playtest-feedback
 body:
   - type: markdown
     attributes:
       value: |
-        Use after a play session. See [PLAYTEST.md](https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/blob/main/PLAYTEST.md) for the feedback checklist.
+        Use after a play session — or submit from the in-game **FEEDBACK** button (pre-fills this form).
+        See [PLAYTEST.md](https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/blob/main/PLAYTEST.md).
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Bug
+        - Confusing / not fun
+        - I broke it on purpose
+        - Praise / worked great
+    validations:
+      required: true
 
   - type: input
     id: build
     attributes:
       label: Build / commit (if known)
-      placeholder: git sha or date owner sent access
+      placeholder: git sha or v0.1.0 from title screen
     validations:
       required: false
 
