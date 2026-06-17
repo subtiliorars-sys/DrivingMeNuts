@@ -82,24 +82,31 @@ no FOMO. Persistence: `weatherSeed` additive-optional, no schema bump.
 
 ---
 
-## 2. Unbuilt GDD §C4 upgrades
+## 2. GDD §C4 upgrades (remaining)
 
-The roaster-tier and queue-slot upgrades shipped (wave 4). Three C4 rows remain.
+The roaster-tier and queue-slot upgrades shipped (wave 4). Auto-sell off-peak
+shipped on `main` (wave DM-W1). Two C4 rows remain deferred.
 All touch `endOfDay`/economy → same test-ripple caution as weather; all are
 purchases gated on cash, so they're **additive and default-off** (a fresh save
 never has them → existing tests unaffected until a test buys one).
 
-### 2a. Auto-sell off-peak (GDD C4: "sell remaining batches at 10% discount EOD")
+### 2a. Auto-sell off-peak (GDD C4: "sell remaining batches at 10% discount EOD") — ✅ SHIPPED (DM-W1)
+
+> **SHIPPED & WIRED.** One-time $1,500 upgrade (`AUTO_SELL_COST` in `economy.ts`);
+> at `endOfDay`, unsold roasted stock clears at `sellPrice × (1 − AUTO_SELL_DISCOUNT)`
+> (10% off). Day-report line + ledger contribution; `autoSellEnabled` additive-optional
+> in persistence. Tests: `src/sim/auto_sell.test.ts`. UI: UPGRADES panel in `GameScene`.
+> Dark-pattern framing: "reduce waste," not FOMO. Spec retained below.
+
 - **Mechanic.** Optional toggle/upgrade: at `endOfDay`, any unsold roasted stock
   is sold at `sellPrice × (1 − AUTO_SELL_DISCOUNT)` (10%), reducing spoilage/waste
   and freeing working capital. Teaches: clearance vs. holding cost.
-- **Constants.** `AUTO_SELL_DISCOUNT = 0.10`, upgrade cost (GDD: L1 $3k / L3 $10k —
-  scale to P1 economy; suggest one-time ~$1.5k given P1 cash scale, owner to confirm).
-- **Integration.** New `endOfDay` step BEFORE the day-stats reset, AFTER sales:
-  if `autoSellEnabled`, convert `roastedStockLbs` to revenue at the discounted
-  price, recognize COGS at `roastedCostBasisPerLb` (consistent with RT6-1), add a
-  `DayReport` line + ledger row contribution. Persisted flag `autoSellEnabled` (additive-optional).
-- **Test plan.** New `auto_sell.test.ts`: discounted-revenue math, COGS recognized,
+- **Constants.** `AUTO_SELL_DISCOUNT = 0.10`, `AUTO_SELL_COST = 1_500` (P1-scaled;
+  owner confirmed vs. GDD L1 $3k / L3 $10k tier table).
+- **Integration.** `endOfDay` step after sales: if `autoSellEnabled`, convert
+  `roastedStockLbs` to revenue at the discounted price, recognize COGS at
+  `roastedCostBasisPerLb`, add a `DayReport` line + ledger row contribution.
+- **Test plan.** `auto_sell.test.ts`: discounted-revenue math, COGS recognized,
   ledger/report line present, equity-neutral-at-cost check. Existing tests
   unaffected (flag defaults false).
 - **Dark-pattern.** Frame as "reduce waste," not "never lose a sale!" No FOMO.
@@ -148,7 +155,7 @@ Owner queue item: `agent-corps/fleet/owner-queue/items/20260613-1820-dmn-visual-
 | Item | Safe unattended? | Blocker | Persistence |
 |---|---|---|---|
 | Weather modifier | With care (default-clear keeps tests green) | test-suite + GDD-walkthrough update | `weatherSeed` additive-optional |
-| Auto-sell off-peak | Yes (default-off, additive) | owner confirm cost | `autoSellEnabled` additive-optional |
+| Auto-sell off-peak | Shipped (DM-W1) | — | `autoSellEnabled` additive-optional |
 | Refrigerated truck | No | **spoilage (P2) not shipped** | — |
 | Marketing tiers | No | **A4 Owner Decision** (timed boost) | additive-optional |
 | Large-text | Shipped (DM-W2); owner visual QA queued | visual eyeball in owner queue | `largeText` pref |

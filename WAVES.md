@@ -10,7 +10,7 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 
 ## Active queue
 
-_(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`; gameplay waves blocked until P1 exit.)_
+_(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`; gameplay waves blocked until P1 exit. Next candidate when unblocked: **DM-P2-W2** truck movement prototype.)_
 
 ## Blocked (queue owner — do not implement)
 - Marketing campaign tiers (A4) — owner decision
@@ -28,3 +28,4 @@ _(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`; gameplay wave
 - **DM-W6 — Phase 2 RPG shell prep** — `docs/PHASE2_PREP.md` on `main`
 - **DM-W7 — WAVES registry sync** — merged PR #35 (2026-06-14)
 - **DM-W8 — Playtest volunteer docs cross-link** — merged PR #38 (2026-06-14)
+- **DM-W9 — SYSTEMS_BACKLOG §2a auto-sell shipped sync** — docs-only registry close-out
