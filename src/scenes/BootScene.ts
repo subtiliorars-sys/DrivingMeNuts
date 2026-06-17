@@ -29,6 +29,8 @@ import Phaser from "phaser";
 import { drawLegsy } from "./legsy.js";
 import { audioInit, playButtonTick } from "./audio.js";
 import { SAVE_KEY, safeStorage, resetSave } from "../sim/persistence.js";
+import { openExternalUrl } from "../playtest/feedback.js";
+import { PLAYTEST_SIGNUP_URL } from "../playtest/urls.js";
 
 // Palette A constants (same subset used in GameScene)
 const P = {
@@ -131,9 +133,24 @@ export class BootScene extends Phaser.Scene {
       this.scene.start("GameScene");
     });
 
+    const signupY = btnY + 30;
+    const signupBtn = this.add.rectangle(W / 2, signupY, 160, 16, 0x445566)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.add.text(W / 2, signupY, "Become a playtester", {
+      fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace",
+    }).setOrigin(0.5);
+    signupBtn.on("pointerover", () => signupBtn.setAlpha(0.85));
+    signupBtn.on("pointerout",  () => signupBtn.setAlpha(1.0));
+    signupBtn.on("pointerdown", () => {
+      audioInit(storage);
+      playButtonTick();
+      openExternalUrl(PLAYTEST_SIGNUP_URL);
+    });
+
     // ---- RESET SAVE button (only when a save exists) -----------------------
     if (hasSave) {
-      const resetBtnY = btnY + 34;
+      const resetBtnY = signupY + 28;
       const resetBtn = this.add.rectangle(W / 2, resetBtnY, 120, 18, 0x664444)
         .setStrokeStyle(1, P.PANEL_BORDER)
         .setInteractive({ cursor: "pointer" });
