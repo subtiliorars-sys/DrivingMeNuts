@@ -28,4 +28,5 @@ _(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`; gameplay wave
 - **DM-W6 — Phase 2 RPG shell prep** — `docs/PHASE2_PREP.md` on `main`
 - **DM-W7 — WAVES registry sync** — merged PR #35 (2026-06-14)
 - **DM-W8 — Playtest volunteer docs cross-link** — merged PR #38 (2026-06-14)
-- **DM-W9 — SYSTEMS_BACKLOG §2a auto-sell shipped sync** — docs-only registry close-out
+- **DM-W9 — SYSTEMS_BACKLOG §2a auto-sell shipped sync** — merged PR #73 (2026-06-17)
+- **DM-W10 — In-game playtest feedback overlay** — merged PR #74 (2026-06-17)
