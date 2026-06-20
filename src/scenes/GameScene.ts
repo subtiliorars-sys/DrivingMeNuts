@@ -754,6 +754,38 @@ export class GameScene extends Phaser.Scene {
       this.inPostReportChain = true;
       this.time.delayedCall(600, () => this.afterReportFlow());
     }
+
+    // ---- Keyboard Shortcuts (Task 4 UI/UX enhancement) --------------------
+    if (this.input && this.input.keyboard) {
+      this.input.keyboard.on("keydown", (event: KeyboardEvent) => {
+        const key = event.key.toLowerCase();
+        // Prevent key inputs when some other overlay is active (e.g. feedback)
+        if (this.feedbackOverlayOpen) return;
+
+        if (key === "b") {
+          if (this.booksModalOpen) this.closeBooksModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openBooksModal();
+        } else if (key === "u") {
+          if (this.upgradesModalOpen) this.closeUpgradesModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openUpgradesModal();
+        } else if (key === "s") {
+          if (this.supplyModalOpen) this.closeSupplyModal();
+          else if (!this.reportOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openSupplyModal();
+        } else if (key === "g") {
+          if (this.glossaryModalOpen) this.closeGlossaryModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openGlossaryModal();
+        } else if (key === "o") {
+          if (this.goalsModalOpen) this.closeGoalsModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openGoalsModal();
+        } else if (key === "d") {
+          if (this.districtModalOpen) this.closeDistrictModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openDistrictModal();
+        } else if (key === "p") {
+          if (this.settingsModalOpen) this.closeSettingsModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openSettingsModal();
+        }
+      });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1838,13 +1870,15 @@ export class GameScene extends Phaser.Scene {
       rowY += 12;
     } else {
       // Header row (monospace columns)
-      const header = "Day  Revenue    COGS   Fixed     Net    Debt$   Cash end";
+      const header = "Day Weather  Revenue    COGS   Fixed     Net    Debt$   Cash end";
       this.booksModalGroup.add(this.add.text(mX + 10, rowY, header, { ...textStyleLabel(), color: "#8B6F47" }));
       rowY += 10;
       const pad = (s: string, w: number) => s.padStart(w);
+      const padR = (s: string, w: number) => s.padEnd(w);
       for (const e of ledgerRows) {
+        const weatherStr = e.weather ? (e.weather === "hot_sunny" ? "Sunny" : e.weather === "clear" ? "Clear" : "Rainy") : "—";
         const line =
-          `${pad(String(e.day), 3)}  ${pad(e.revenue.toFixed(2), 7)} ${pad(e.cogs.toFixed(2), 7)} ${pad(e.fixedCosts.toFixed(2), 7)} ${pad(e.net.toFixed(2), 7)} ${pad(e.debtService > 0 ? e.debtService.toFixed(2) : "—", 7)} ${pad(e.cashAfter.toFixed(2), 9)}`;
+          `${pad(String(e.day), 3)} ${padR(weatherStr, 7)}  ${pad(e.revenue.toFixed(2), 7)} ${pad(e.cogs.toFixed(2), 7)} ${pad(e.fixedCosts.toFixed(2), 7)} ${pad(e.net.toFixed(2), 7)} ${pad(e.debtService > 0 ? e.debtService.toFixed(2) : "—", 7)} ${pad(e.cashAfter.toFixed(2), 9)}`;
         this.booksModalGroup.add(this.add.text(mX + 10, rowY, line, {
           ...textStyleLabel(),
           color: e.net >= 0 ? "#2C2416" : "#C0392B",
@@ -2385,7 +2419,7 @@ export class GameScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
-    const mW = 280, mH = 184;
+    const mW = 280, mH = 196;
     const mX = (W - mW) / 2;
     const mY = (H - mH) / 2;
 
@@ -2428,6 +2462,16 @@ export class GameScene extends Phaser.Scene {
       ? `Supplier Lv${supLvl}: extra –${(supDisc * 100).toFixed(0)}% (loyalty, stacks)`
       : `Supplier Lv0: order more to earn loyalty discounts`;
     this.modalGroup.add(this.add.text(mX + 6, ty, supLine, { ...textStyleLabel(), color: supLvl > 0 ? "#4A7C4E" : "#8B6F47" }));
+    ty += 11;
+
+    let progressLine = "";
+    if (supLvl < 3) {
+      const nextGoal = SUPPLIER_LEVEL_THRESHOLDS[supLvl];
+      progressLine = `Progress to Lv${supLvl + 1}: ${this.state.supplierLbsPurchased}/${nextGoal} lbs`;
+    } else {
+      progressLine = `Progress: ${this.state.supplierLbsPurchased} lbs purchased (Max Lv3)`;
+    }
+    this.modalGroup.add(this.add.text(mX + 6, ty, progressLine, { ...textStyleLabel(), color: "#8B6F47" }));
     ty += 12;
 
     // Qty controls

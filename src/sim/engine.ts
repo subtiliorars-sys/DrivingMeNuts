@@ -971,6 +971,7 @@ export function endOfDay(state: SimState): DayReport {
     net,
     debtService,
     cashAfter,
+    weather: weatherForDay(endedDay, state.weatherSeed),
   };
   state.ledger.push(ledgerEntry);
   if (state.ledger.length > LEDGER_MAX_DAYS) {
