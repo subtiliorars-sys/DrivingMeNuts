@@ -505,11 +505,11 @@ export class GameScene extends Phaser.Scene {
     // ---- Rescue arc HUD chip (Wave 5) — neutral framing, visible while debt/obligation active --
     // Positioned below the lore counter; hidden when no active debt.
     this.rescueHudChip = this.add.text(W - 6, 28, "", {
-      fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+      fontSize: "6px", color: "#8B6F47", fontFamily: "VT323",
     }).setOrigin(1, 0).setVisible(false);
 
     this.derekHudChip = this.add.text(W - 6, 38, "", {
-      fontSize: "6px", color: "#1C3A47", fontFamily: "monospace",
+      fontSize: "6px", color: "#1C3A47", fontFamily: "VT323",
     }).setOrigin(1, 0).setVisible(false);
 
     // ---- Roast Queue Panel (P1_SPRITE_SPEC #13) ----------------------------
@@ -582,7 +582,7 @@ export class GameScene extends Phaser.Scene {
     const btnMinus = this.add.rectangle(pX + 16, pY + 35, 22, 16, P.AWNING)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
-    this.add.text(pX + 16, pY + 35, "–", { fontSize: "10px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+    this.add.text(pX + 16, pY + 35, "–", { fontSize: "10px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
     btnMinus.on("pointerdown", () => { if (!this.reportOpen) { playButtonTick(); this.adjustPrice(-this.PRICE_STEP); } });
     btnMinus.on("pointerover", () => btnMinus.setAlpha(0.8));
     btnMinus.on("pointerout",  () => btnMinus.setAlpha(1.0));
@@ -591,7 +591,7 @@ export class GameScene extends Phaser.Scene {
     const btnPlus = this.add.rectangle(pX + 46, pY + 35, 22, 16, P.AWNING)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
-    this.add.text(pX + 46, pY + 35, "+", { fontSize: "10px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+    this.add.text(pX + 46, pY + 35, "+", { fontSize: "10px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
     btnPlus.on("pointerdown", () => { if (!this.reportOpen) { playButtonTick(); this.adjustPrice(+this.PRICE_STEP); } });
     btnPlus.on("pointerover", () => btnPlus.setAlpha(0.8));
     btnPlus.on("pointerout",  () => btnPlus.setAlpha(1.0));
@@ -612,7 +612,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.buyBtnRef = buyBtn; // held for tutorial pointer targeting
     this.add.text(buyBtnX + 68, buyBtnY + 10, "BUY RAW PEANUTS", {
-      fontSize: "8px", color: "#2C2416", fontFamily: "monospace",
+      fontSize: "8px", color: "#2C2416", fontFamily: "VT323",
     }).setOrigin(0.5);
     buyBtn.on("pointerdown", () => {
       if (!this.reportOpen && !this.rescueModalOpen && !this.districtModalOpen) {
@@ -629,7 +629,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(buyBtnX + 68, upgBtnY + 10, "UPGRADES", {
-      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323",
     }).setOrigin(0.5);
     upgradesBtn.on("pointerdown", () => {
       if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.districtModalOpen && !this.rescueModalOpen) {
@@ -645,7 +645,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(buyBtnX + 68, booksBtnY + 10, "BOOKS", {
-      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323",
     }).setOrigin(0.5);
     booksBtn.on("pointerdown", () => {
       if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen && !this.goalsModalOpen) {
@@ -661,7 +661,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(buyBtnX + 68, goalsBtnY + 10, "GOALS", {
-      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323",
     }).setOrigin(0.5);
     goalsBtn.on("pointerdown", () => {
       if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen && !this.booksModalOpen) {
@@ -681,7 +681,7 @@ export class GameScene extends Phaser.Scene {
     const endBtn = this.add.rectangle(W - 50, dpY + 5, 88, 14, 0x556644)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
-    this.add.text(W - 50, dpY + 5, "END DAY", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
+    this.add.text(W - 50, dpY + 5, "END DAY", { fontSize: "7px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5);
     endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen) this.triggerEndOfDay(); });
 
     // ---- Reset Save button (spec req; tucked in bottom-left corner) --------
@@ -689,7 +689,7 @@ export class GameScene extends Phaser.Scene {
     const resetBtn = this.add.rectangle(28, dpY + 5, 48, 14, 0x664444)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
-    this.add.text(28, dpY + 5, "RESET", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
+    this.add.text(28, dpY + 5, "RESET", { fontSize: "7px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5);
     resetBtn.on("pointerdown", () => {
       if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen) return;
       this.showResetConfirm();
@@ -714,7 +714,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(setX, dpY2 + 5, "⚙ MENU",
-      { fontSize: "6px", color: "#F5DEB3", fontFamily: "monospace" }
+      { fontSize: "6px", color: "#F5DEB3", fontFamily: "VT323" }
     ).setOrigin(0.5);
     settingsBtn.on("pointerdown", () => {
       if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) {
@@ -729,7 +729,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(feedbackX, dpY2 + 5, "FEEDBACK",
-      { fontSize: "5px", color: "#F5DEB3", fontFamily: "monospace" }
+      { fontSize: "5px", color: "#F5DEB3", fontFamily: "VT323" }
     ).setOrigin(0.5);
     feedbackBtn.on("pointerdown", () => {
       if (this.canOpenFeedback()) this.openPlaytestFeedback();
@@ -1035,7 +1035,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.roastModalGroup.add(closeBtn);
     this.roastModalGroup.add(
-      this.add.text(mX + mW - 12, mY + 10, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW - 12, mY + 10, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     closeBtn.on("pointerdown", () => this.closeRoastModal());
 
@@ -1171,7 +1171,7 @@ export class GameScene extends Phaser.Scene {
         .setInteractive({ cursor: "pointer" });
       this.roastModalGroup.add(btn);
       const t = this.add.text(bx + 16, batchBtnY + 6, `${qty}lb`, {
-        fontSize: "7px", color: "#2C2416", fontFamily: "monospace",
+        fontSize: "7px", color: "#2C2416", fontFamily: "VT323",
       }).setOrigin(0.5);
       this.roastModalGroup.add(t);
       btn.on("pointerdown", () => {
@@ -1194,7 +1194,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.roastModalGroup.add(stepDown);
     this.roastModalGroup.add(
-      this.add.text(bx + 50, batchBtnY + 14, "▼", { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(bx + 50, batchBtnY + 14, "▼", { fontSize: "7px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     stepDown.on("pointerdown", () => {
       this.roastModalBatchLbs = Math.max(BATCH_MIN_LBS, this.roastModalBatchLbs - 5);
@@ -1206,7 +1206,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.roastModalGroup.add(stepUp);
     this.roastModalGroup.add(
-      this.add.text(bx + 76, batchBtnY + 14, "▲", { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(bx + 76, batchBtnY + 14, "▲", { fontSize: "7px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     stepUp.on("pointerdown", () => {
       this.roastModalBatchLbs = Math.min(maxBatch, this.roastModalBatchLbs + 5);
@@ -1240,7 +1240,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.roastModalGroup.add(cancelBtn);
     this.roastModalGroup.add(
-      this.add.text(mX + 60, btnY, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + 60, btnY, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     cancelBtn.on("pointerdown", () => this.closeRoastModal());
 
@@ -1249,7 +1249,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.roastModalGroup.add(startBtn);
     this.roastModalGroup.add(
-      this.add.text(mX + 220, btnY, "START ROAST", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + 220, btnY, "START ROAST", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     startBtn.on("pointerdown", () => {
       const ev = startRoast(this.state, this.roastModalSlotIndex, this.roastModalRecipe, this.roastModalBatchLbs);
@@ -1315,7 +1315,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.upgradesModalGroup.add(closeBtn);
     this.upgradesModalGroup.add(
-      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     closeBtn.on("pointerdown", () => this.closeUpgradesModal());
 
@@ -1373,7 +1373,7 @@ export class GameScene extends Phaser.Scene {
           this.add.text(mX + mW - 46, rowY + 4, btnLabel, {
             fontSize: "7px",
             color: canAfford ? "#2C2416" : "#666644",
-            fontFamily: "monospace",
+            fontFamily: "VT323",
           }).setOrigin(0.5)
         );
 
@@ -1436,7 +1436,7 @@ export class GameScene extends Phaser.Scene {
           this.add.text(mX + mW - 46, rowY + 4, btnLabel, {
             fontSize: "7px",
             color: canAfford ? "#2C2416" : "#666644",
-            fontFamily: "monospace",
+            fontFamily: "VT323",
           }).setOrigin(0.5)
         );
 
@@ -1489,7 +1489,7 @@ export class GameScene extends Phaser.Scene {
         this.add.text(mX + mW - 46, rowY + 4, btnLabel, {
           fontSize: "7px",
           color: canAfford ? "#2C2416" : "#666644",
-          fontFamily: "monospace",
+          fontFamily: "VT323",
         }).setOrigin(0.5)
       );
       if (canAfford) {
@@ -1532,7 +1532,7 @@ export class GameScene extends Phaser.Scene {
       const asLabel = canAfford ? `BUY $${AUTO_SELL_COST}` : `earn $${(AUTO_SELL_COST - this.state.cash).toFixed(0)} more`;
       this.upgradesModalGroup.add(
         this.add.text(mX + mW - 46, rowY + 4, asLabel, {
-          fontSize: "7px", color: canAfford ? "#2C2416" : "#666644", fontFamily: "monospace",
+          fontSize: "7px", color: canAfford ? "#2C2416" : "#666644", fontFamily: "VT323",
         }).setOrigin(0.5)
       );
       if (canAfford) {
@@ -1556,14 +1556,14 @@ export class GameScene extends Phaser.Scene {
     rowY += 6;
     this.upgradesModalGroup.add(
       this.add.text(mX + 6, rowY, "THIS WEEK  Mon 0.85 · Tue 0.90 · Wed 0.95 · Thu 1.00 · Fri 1.10 · Sat 1.25 · Sun 1.10", {
-        fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+        fontSize: "6px", color: "#8B6F47", fontFamily: "VT323",
       })
     );
 
     // (Save Export/Import relocated to the Settings panel — declutters this modal.)
     this.upgradesModalGroup.add(this.add.text(mX + 6, rowY + 4,
       "Save export/import is now in ⚙ MENU › Settings.",
-      { fontSize: "7px", color: "#8B6F47", fontFamily: "monospace" }));
+      { fontSize: "7px", color: "#8B6F47", fontFamily: "VT323" }));
 
     // Close button at bottom
     const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
@@ -1571,7 +1571,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.upgradesModalGroup.add(doneBtn);
     this.upgradesModalGroup.add(
-      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     doneBtn.on("pointerdown", () => this.closeUpgradesModal());
     doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
@@ -1630,11 +1630,14 @@ export class GameScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
-    const mW = 300;
-    const mH = 172;
+    const mW = 420;
+    const mH = 220;
     const mX = (W - mW) / 2;
     const mY = (H - mH) / 2;
-    const districtOrder: DistrictId[] = ["farmers_market", "office_quarter"];
+    const districtOrder: DistrictId[] = [
+      "farmers_market", "office_quarter", "residential", 
+      "university", "park", "boardwalk", "downtown"
+    ];
 
     this.districtModalGroup = this.add.group();
 
@@ -1655,7 +1658,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.districtModalGroup.add(closeBtn);
     this.districtModalGroup.add(
-      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     closeBtn.on("pointerdown", () => this.closeDistrictModal());
 
@@ -1695,7 +1698,7 @@ export class GameScene extends Phaser.Scene {
           .setInteractive({ cursor: "pointer" });
         this.districtModalGroup.add(switchBtn);
         this.districtModalGroup.add(
-          this.add.text(mX + mW - 52, rowY + 6, "SWITCH", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+          this.add.text(mX + mW - 52, rowY + 6, "SWITCH", { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
         );
         const targetId = id;
         switchBtn.on("pointerdown", () => {
@@ -1716,7 +1719,7 @@ export class GameScene extends Phaser.Scene {
           .setInteractive({ cursor: canAfford ? "pointer" : "default" });
         this.districtModalGroup.add(permitBtn);
         this.districtModalGroup.add(
-          this.add.text(mX + mW - 58, rowY + 6, `PERMIT $${cfg.permitCost}`, { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+          this.add.text(mX + mW - 58, rowY + 6, `PERMIT $${cfg.permitCost}`, { fontSize: "7px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
         );
         if (canAfford) {
           const targetId = id;
@@ -1746,7 +1749,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.districtModalGroup.add(doneBtn);
     this.districtModalGroup.add(
-      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     doneBtn.on("pointerdown", () => this.closeDistrictModal());
     doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
@@ -1800,7 +1803,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.booksModalGroup.add(closeBtn);
     this.booksModalGroup.add(
-      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     closeBtn.on("pointerdown", () => this.closeBooksModal());
 
@@ -1865,7 +1868,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.booksModalGroup.add(doneBtn);
     this.booksModalGroup.add(
-      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     doneBtn.on("pointerdown", () => this.closeBooksModal());
     doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
@@ -1917,7 +1920,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.goalsModalGroup.add(closeBtn);
     this.goalsModalGroup.add(
-      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     closeBtn.on("pointerdown", () => this.closeGoalsModal());
     this.goalsModalGroup.add(this.add.rectangle(mX + mW / 2, mY + 21, mW - 8, 1, P.PANEL_BORDER));
@@ -1990,7 +1993,7 @@ export class GameScene extends Phaser.Scene {
     // Footnote — goals are markers, not power-ups
     this.goalsModalGroup.add(this.add.text(colRX, mY + mH - 26,
       "Goals track your progress —\nthey grant no in-game boost.",
-      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace" }));
+      { fontSize: "6px", color: "#8B6F47", fontFamily: "VT323" }));
 
     // Close button
     const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
@@ -1998,7 +2001,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.goalsModalGroup.add(doneBtn);
     this.goalsModalGroup.add(
-      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     doneBtn.on("pointerdown", () => this.closeGoalsModal());
     doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
@@ -2043,7 +2046,7 @@ export class GameScene extends Phaser.Scene {
       const pill = this.add.rectangle(mX + mW - 40, y + 4, 56, 14, isOn() ? P.CASH_GREEN : 0x999977)
         .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
       const lbl = this.add.text(mX + mW - 40, y + 4, isOn() ? "ON" : "OFF",
-        { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+        { fontSize: "7px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
       this.settingsModalGroup!.add(pill);
       this.settingsModalGroup!.add(lbl);
       pill.on("pointerdown", () => {
@@ -2117,7 +2120,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
     this.settingsModalGroup.add(doneBtn);
     this.settingsModalGroup.add(this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE",
-      { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+      { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     doneBtn.on("pointerdown", () => this.closeSettingsModal());
     doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
     doneBtn.on("pointerout",  () => doneBtn.setAlpha(1.0));
@@ -2163,13 +2166,13 @@ export class GameScene extends Phaser.Scene {
   private addSaveIORow(group: Phaser.GameObjects.Group, mX: number, mW: number, rowY: number, onClose: () => void): void {
     group.add(this.add.rectangle(mX + mW / 2, rowY, mW - 8, 1, P.PANEL_BORDER));
     group.add(this.add.text(mX + 8, rowY + 4, "SAVE FILE (local, no server)",
-      { fontSize: "7px", color: "#8B6F47", fontFamily: "monospace" }));
+      { fontSize: "7px", color: "#8B6F47", fontFamily: "VT323" }));
     const by = rowY + 18;
 
     const exportBtn = this.add.rectangle(mX + 72, by, 116, 14, 0x445566)
       .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
     group.add(exportBtn);
-    group.add(this.add.text(mX + 72, by, "EXPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    group.add(this.add.text(mX + 72, by, "EXPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     exportBtn.on("pointerdown", () => {
       const json = serialize(this.state, this.playtimeSeconds);
       const blob = new Blob([json], { type: "application/json" });
@@ -2184,7 +2187,7 @@ export class GameScene extends Phaser.Scene {
     const importBtn = this.add.rectangle(mX + mW - 72, by, 116, 14, 0x445566)
       .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
     group.add(importBtn);
-    group.add(this.add.text(mX + mW - 72, by, "IMPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    group.add(this.add.text(mX + mW - 72, by, "IMPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     importBtn.on("pointerdown", () => {
       const fileInput = document.createElement("input");
       fileInput.type = "file"; fileInput.accept = ".json,application/json";
@@ -2245,12 +2248,12 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.glossaryModalGroup.add(closeBtn);
     this.glossaryModalGroup.add(this.add.text(mX + mW - 12, mY + 11, "×",
-      { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+      { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     closeBtn.on("pointerdown", () => this.closeGlossaryModal());
 
     // A2 disclaimer banner (always visible).
     this.glossaryModalGroup.add(this.add.text(mX + 8, mY + 20, GLOSSARY_DISCLAIMER,
-      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace", wordWrap: { width: mW - 16 } }));
+      { fontSize: "6px", color: "#8B6F47", fontFamily: "VT323", wordWrap: { width: mW - 16 } }));
 
     const listX = mX + 8, listTop = mY + 44;
     const detailX = mX + 156, detailW = mW - 156 - 10;
@@ -2260,7 +2263,7 @@ export class GameScene extends Phaser.Scene {
     const detailBody = this.add.text(detailX, listTop + 14, "",
       { ...textStyleLabel(), wordWrap: { width: detailW } });
     const detailInGame = this.add.text(detailX, listTop + 14, "",
-      { fontSize: "7px", color: "#4A7C4E", fontFamily: "monospace", wordWrap: { width: detailW } });
+      { fontSize: "7px", color: "#4A7C4E", fontFamily: "VT323", wordWrap: { width: detailW } });
     this.glossaryModalGroup.add(detailTitle);
     this.glossaryModalGroup.add(detailBody);
     this.glossaryModalGroup.add(detailInGame);
@@ -2279,7 +2282,7 @@ export class GameScene extends Phaser.Scene {
     for (let i = 0; i < GLOSSARY.length; i++) {
       const e = GLOSSARY[i];
       const t = this.add.text(listX, ly, `• ${e.term}`,
-        { fontSize: "7px", color: "#2C2416", fontFamily: "monospace", wordWrap: { width: 140 } });
+        { fontSize: "7px", color: "#2C2416", fontFamily: "VT323", wordWrap: { width: 140 } });
       t.setInteractive({ cursor: "pointer" });
       t.on("pointerdown", () => { playButtonTick(); showEntry(i); });
       t.on("pointerover", () => t.setColor("#C0392B"));
@@ -2295,7 +2298,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
     this.glossaryModalGroup.add(backBtn);
     this.glossaryModalGroup.add(this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE",
-      { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+      { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     backBtn.on("pointerdown", () => this.closeGlossaryModal());
     backBtn.on("pointerover", () => backBtn.setAlpha(0.85));
     backBtn.on("pointerout",  () => backBtn.setAlpha(1.0));
@@ -2442,7 +2445,7 @@ export class GameScene extends Phaser.Scene {
         .setStrokeStyle(1, P.PANEL_BORDER)
         .setInteractive({ cursor: "pointer" });
       this.modalGroup!.add(btn);
-      const t = this.add.text(x, ty + 12, label, { fontSize: "8px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+      const t = this.add.text(x, ty + 12, label, { fontSize: "8px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
       this.modalGroup!.add(t);
       btn.on("pointerdown", () => {
         this.supplyQty = Math.max(10, Math.min(1000, this.supplyQty + delta));
@@ -2483,7 +2486,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.modalGroup.add(cancelBtn);
-    const cancelTxt = this.add.text(mX + 60, mY + mH - 14, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+    const cancelTxt = this.add.text(mX + 60, mY + mH - 14, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
     this.modalGroup.add(cancelTxt);
     cancelBtn.on("pointerdown", () => this.closeSupplyModal());
 
@@ -2491,7 +2494,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.modalGroup.add(confirmBtn);
-    const confirmTxt = this.add.text(mX + 200, mY + mH - 14, "CONFIRM ORDER", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+    const confirmTxt = this.add.text(mX + 200, mY + mH - 14, "CONFIRM ORDER", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
     this.modalGroup.add(confirmTxt);
     confirmBtn.on("pointerdown", () => {
       const ev = buyRaw(this.state, this.supplyQty);
@@ -2763,7 +2766,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.reportGroup.add(nextBtn);
     this.reportGroup.add(
-      this.add.text(rX + rW / 2, rY + rH - 14, "START NEXT DAY", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(rX + rW / 2, rY + rH - 14, "START NEXT DAY", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     nextBtn.on("pointerdown", () => this.closeDayReport());
     nextBtn.on("pointerover", () => nextBtn.setAlpha(0.85));
@@ -2882,7 +2885,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.aftermathModalGroup.add(contBtn);
     this.aftermathModalGroup.add(
-      this.add.text(mX + mW / 2, mY + mH - 11, "CONTINUE", { fontSize: "8px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW / 2, mY + mH - 11, "CONTINUE", { fontSize: "8px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     contBtn.on("pointerdown", () => this.closeAftermathBeat());
     contBtn.on("pointerover", () => contBtn.setAlpha(0.85));
@@ -2928,7 +2931,7 @@ export class GameScene extends Phaser.Scene {
 
     const circle = this.add.circle(x, y, 5, P.COIN_GOLD);
     const label  = this.add.text(x + 8, y - 4, `+$${revenue.toFixed(2)}`, {
-      fontSize: "7px", color: "#FFD700", fontFamily: "monospace",
+      fontSize: "7px", color: "#FFD700", fontFamily: "VT323",
     });
 
     this.coinPops.push({ circle, label, life: 1.0 });
@@ -2980,13 +2983,13 @@ export class GameScene extends Phaser.Scene {
 
     const panel = this.add.rectangle(cx, cy, bw, bh, P.PANEL_BG, 0.96).setStrokeStyle(2, P.AWNING);
     const t1 = this.add.text(cx, subtitle ? cy - 7 : cy, title,
-      { fontSize: scaledFont(11), color: "#2C2416", fontFamily: "monospace", fontStyle: "bold", align: "center", wordWrap: { width: bw - 12 } }
+      { fontSize: scaledFont(11), color: "#2C2416", fontFamily: "VT323", fontStyle: "bold", align: "center", wordWrap: { width: bw - 12 } }
     ).setOrigin(0.5);
     g.add(panel);
     g.add(t1);
     if (subtitle) {
       g.add(this.add.text(cx, cy + 9, subtitle,
-        { fontSize: "7px", color: "#5A3A1A", fontFamily: "monospace", align: "center", wordWrap: { width: bw - 12 } }
+        { fontSize: "7px", color: "#5A3A1A", fontFamily: "VT323", align: "center", wordWrap: { width: bw - 12 } }
       ).setOrigin(0.5));
     }
 
@@ -3097,7 +3100,7 @@ export class GameScene extends Phaser.Scene {
   private showToast(msg: string): void {
     const W = this.scale.width;
     const toast = this.add.text(W / 2, 30, msg, {
-      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323",
       backgroundColor: "#2C2416", padding: { x: 4, y: 2 },
     }).setOrigin(0.5);
 
@@ -3154,13 +3157,13 @@ export class GameScene extends Phaser.Scene {
 
     // Customer line (shown immediately)
     const customerLine = this.add.text(bX + 4, bY + 3, `"${line.customer}"`, {
-      fontSize: "7px", color: "#2C2416", fontFamily: "monospace",
+      fontSize: "7px", color: "#2C2416", fontFamily: "VT323",
       wordWrap: { width: bW - 8 },
     });
 
     // Owner reply (shown after a short pause)
     const ownerLine = this.add.text(bX + 4, bY + 20, "", {
-      fontSize: "7px", color: "#4A7C4E", fontFamily: "monospace",
+      fontSize: "7px", color: "#4A7C4E", fontFamily: "VT323",
       wordWrap: { width: bW - 8 },
     });
 
@@ -3385,7 +3388,7 @@ export class GameScene extends Phaser.Scene {
       const headerColor = isQuickNut ? "#CC4400" : "#2C2416";
       this.rescueModalGroup.add(
         this.add.text(cx + cardW / 2, cardY + 5, card.label, {
-          fontSize: "6px", color: headerColor, fontFamily: "monospace", fontStyle: "bold",
+          fontSize: "6px", color: headerColor, fontFamily: "VT323", fontStyle: "bold",
           wordWrap: { width: cardW - 4 }, align: "center",
         }).setOrigin(0.5, 0)
       );
@@ -3397,7 +3400,7 @@ export class GameScene extends Phaser.Scene {
           const lineColor = isQuickNut && (line.includes("391") || line.includes("Roll")) ? "#CC2200" : "#2C2416";
           this.rescueModalGroup.add(
             this.add.text(cx + 2, lineY, line, {
-              fontSize: "5px", color: lineColor, fontFamily: "monospace",
+              fontSize: "5px", color: lineColor, fontFamily: "VT323",
               wordWrap: { width: cardW - 4 },
             })
           );
@@ -3416,7 +3419,7 @@ export class GameScene extends Phaser.Scene {
       this.rescueModalGroup.add(chooseBtn);
       this.rescueModalGroup.add(
         this.add.text(cx + cardW / 2, cardY + cardH - 8, btnLabel, {
-          fontSize: "5px", color: "#2C2416", fontFamily: "monospace",
+          fontSize: "5px", color: "#2C2416", fontFamily: "VT323",
         }).setOrigin(0.5)
       );
 
@@ -3455,7 +3458,7 @@ export class GameScene extends Phaser.Scene {
     this.rescueModalGroup.add(
       this.add.text(mX + 52, warnY,
         "QuickNut APR math: $7.50 fee on $50 for 14 days = 15%/period × 26 periods/yr = ~391% APR. Old Joe: \"It's designed to keep people in debt.\"",
-        { fontSize: "5px", color: "#994400", fontFamily: "monospace", wordWrap: { width: mW - 60 } }
+        { fontSize: "5px", color: "#994400", fontFamily: "VT323", wordWrap: { width: mW - 60 } }
       )
     );
 
@@ -3463,7 +3466,7 @@ export class GameScene extends Phaser.Scene {
     this.rescueModalGroup.add(
       this.add.text(mX + 52, warnY + 10,
         "\"Whatever you choose — keep an eye on the till. Cash flow is predictable if you're watching.\"",
-        { fontSize: "5px", color: "#5A3A1A", fontFamily: "monospace", fontStyle: "italic", wordWrap: { width: mW - 60 } }
+        { fontSize: "5px", color: "#5A3A1A", fontFamily: "VT323", fontStyle: "italic", wordWrap: { width: mW - 60 } }
       )
     );
   }
@@ -3518,7 +3521,7 @@ export class GameScene extends Phaser.Scene {
     g.add(this.add.rectangle(x + 18 * s, y - 34 * s, 10 * s, 8 * s, 0xFF6600)
       .setStrokeStyle(1, 0xDD4400));
     g.add(this.add.text(x + 18 * s, y - 34 * s, "QN", {
-      fontSize: "4px", color: "#FFEE00", fontFamily: "monospace",
+      fontSize: "4px", color: "#FFEE00", fontFamily: "VT323",
     }).setOrigin(0.5));
   }
 
@@ -3552,14 +3555,14 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     group.add(cancelBtn);
-    group.add(this.add.text(mX + 70, mY + mH - 14, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5));
+    group.add(this.add.text(mX + 70, mY + mH - 14, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5));
     cancelBtn.on("pointerdown", () => { group.destroy(true); });
 
     const confirmBtn = this.add.rectangle(mX + 184, mY + mH - 14, 96, 18, P.WARNING_RED)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     group.add(confirmBtn);
-    group.add(this.add.text(mX + 184, mY + mH - 14, "YES, RESET", { fontSize: "9px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    group.add(this.add.text(mX + 184, mY + mH - 14, "YES, RESET", { fontSize: "9px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     confirmBtn.on("pointerdown", () => {
       group.destroy(true);
       resetSave(this.storage);
@@ -3655,20 +3658,20 @@ export class GameScene extends Phaser.Scene {
     // Step counter label
     this.tutorialGroup.add(
       this.add.text(bX + 30, bY + 4, `(${step + 1}/3)`, {
-        fontSize: "7px", color: "#8B6F47", fontFamily: "monospace",
+        fontSize: "7px", color: "#8B6F47", fontFamily: "VT323",
       })
     );
 
     // Message text
     const txt = this.add.text(bX + 30, bY + 14, def.msg, {
-      fontSize: "7px", color: "#2C2416", fontFamily: "monospace",
+      fontSize: "7px", color: "#2C2416", fontFamily: "VT323",
       wordWrap: { width: bubbleW - 36 },
     });
     this.tutorialGroup.add(txt);
 
     // Tap-to-skip label
     const skipTxt = this.add.text(bX + bubbleW - 4, bY + bubbleH - 8, "[tap to skip]", {
-      fontSize: "5px", color: "#8B6F47", fontFamily: "monospace",
+      fontSize: "5px", color: "#8B6F47", fontFamily: "VT323",
     }).setOrigin(1, 0);
     this.tutorialGroup.add(skipTxt);
 

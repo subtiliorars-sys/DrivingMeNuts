@@ -696,6 +696,9 @@ export function deserialize(json: string): SimState {
       ? Math.floor(_ss.derekLastPurchaseDay)
       : 0;
 
+  const martaBuffActive = !!_ss.martaBuffActive;
+  const salRivalPresent = !!_ss.salRivalPresent;
+
   const state: SimState = {
     cash: sim.cash,
     rawStockLbs: sim.rawStockLbs,
@@ -740,6 +743,8 @@ export function deserialize(json: string): SimState {
     derekConsistencyCounter,
     derekLastPrice,
     derekLastPurchaseDay,
+    martaBuffActive,
+    salRivalPresent,
     rngState: sim.rngState,
   };
 

@@ -24,6 +24,8 @@ const config: Phaser.Types.Core.GameConfig = {
   height: 270,
   backgroundColor: "#1a1008",
   pixelArt: true,
+  antialias: false,
+  roundPixels: true,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

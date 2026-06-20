@@ -48,6 +48,8 @@ import {
   DAY_NAMES,
   WEATHER_FACTOR,
   weatherForDay,
+  seasonForDay,
+  SEASON_FACTOR,
   RESCUE_LOAN_PRINCIPAL,
   RESCUE_LOAN_FEE_RATE,
   RESCUE_LOAN_DUE_DAYS,
@@ -198,12 +200,23 @@ function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0, dayF
   const basePrice = params ? params.basePrice : DEMAND_BASE_PRICE;
   const slope = params ? params.slope : DEMAND_SLOPE;
   const brandShift = state.brandCampaignActive ? DEMAND_BASE_PRICE * BRAND_CAMPAIGN_PRICE_TOLERANCE : 0;
+  
+  // P2: Boardwalk/Downtown get an extra +15% brand bonus
+  const brandAreaBonus = (state.brandCampaignActive && (district === "boardwalk" || district === "downtown")) ? 0.15 : 0.0;
+  
   const effectiveBase = basePrice + brandShift;
   const base = baseLbs - slope * (price - effectiveBase);
   // ±10% jitter (two uniform samples averaged → triangular distribution)
   const jitter = ((nextRand(state) + nextRand(state)) / 2 - 0.5) * 0.20;
   const lunchRush = lunchRushFactor(state, district);
-  return clamp(base * (1 + jitter) * demandMult * dayFactor * weatherFactor * lunchRush, 0, DEMAND_MAX_LBS_PER_HOUR);
+  const season = seasonForDay(state.dayNumber);
+  const seasonFactor = SEASON_FACTOR[season];
+  
+  // NPC Modifiers
+  const martaFactor = state.martaBuffActive ? 1.10 : 1.0;
+  const salFactor = state.salRivalPresent ? 0.85 : 1.0;
+
+  return clamp(base * (1 + jitter + brandAreaBonus) * demandMult * dayFactor * weatherFactor * lunchRush * seasonFactor * martaFactor * salFactor, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 /**
@@ -346,6 +359,8 @@ export function createState(seed = 1): SimState {
     derekConsistencyCounter: 0,
     derekLastPrice: null,
     derekLastPurchaseDay: 0,
+    martaBuffActive: false,
+    salRivalPresent: false,
     rngState: seed >>> 0,
   };
 }

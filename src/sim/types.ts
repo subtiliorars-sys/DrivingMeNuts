@@ -259,6 +259,12 @@ export interface SimState {
    */
   derekLastPurchaseDay: number;
 
+  // ---- NPC Buffs & Penalties (P1.5) -------------------------------------
+  /** Marta's relationship buff (+10% word-of-mouth demand). */
+  martaBuffActive: boolean;
+  /** Sal's rivalry penalty (-15% same-district demand). */
+  salRivalPresent: boolean;
+
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
   rngState: number;
