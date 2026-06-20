@@ -338,13 +338,50 @@ export const LORE_LINES: readonly LoreLine[] = [
     tone: "Warm/Celebratory",
     tier: "late",
   },
+
+  // ---- District-Specific Lore (Added in P1 Exit Polish) ----
+
+  {
+    id: "LL-DIST-RES",
+    customer: "Do you have a license to park a legume truck on this residential street?",
+    owner: "I do. And a license to hear about legumes. Want a bag?",
+    tone: "Deadpan",
+    tier: "early",
+  },
+  {
+    id: "LL-DIST-UNI",
+    customer: "According to my botany thesis, these are technically legumes, not nuts.",
+    owner: "Congrats on the thesis. That'll be $1.50 for a bag of science.",
+    tone: "Dry",
+    tier: "mid",
+  },
+  {
+    id: "LL-DIST-PARK",
+    customer: "I heard the squirrels here only eat tree nuts, so your legumes are safe.",
+    owner: "Tell the squirrels I'm hiring. They seem smarter than the average pedant.",
+    tone: "Sarcastic",
+    tier: "mid",
+  },
+  {
+    id: "LL-DIST-BOARD",
+    customer: "Salted legumes by the sea? Isn't that redundant?",
+    owner: "Life is redundant. My truck name is redundant. The peanuts are fresh. Buy some?",
+    tone: "Zen",
+    tier: "late",
+  },
+  {
+    id: "LL-DIST-TOWN",
+    customer: "I need high-protein legumes for this board meeting. No nuts allowed.",
+    owner: "You're in the right place. 'Driving Me Nuts' sells 0% nuts. Guaranteed corporate-safe.",
+    tone: "Efficient",
+    tier: "late",
+  },
 ] as const;
 
 /**
  * Total canon variant count (all tiers, including future late entries).
- * Kept for future use; current LORE_LINES only includes early + mid tiers.
  */
-export const LORE_TOTAL_COUNT = 40;
+export const LORE_TOTAL_COUNT = 45;
 
 /** Lookup map: id → LoreLine. */
 export const LORE_BY_ID: Readonly<Record<string, LoreLine>> = Object.fromEntries(
