@@ -91,6 +91,7 @@ import {
   loadMutePref,
 } from "./audio.js";
 import { isMusicOn, toggleMusic, loadMusicPref, startMusic, setMusicMode } from "./music.js";
+import { addSprite, SPR } from "./sprites.js";
 
 // LORE_LOADED_COUNT removed — denominator is now computed dynamically in updateHUD()
 // based on state.dayNumber and LORE_TIER_DAY_GATE (honest: shows unlocked pool size).
@@ -181,7 +182,9 @@ const P_OFFICE = {
 // ---------------------------------------------------------------------------
 
 interface CoinPop {
-  circle: Phaser.GameObjects.Arc;
+  // Arc fallback or the code-generated coin sprite — both support
+  // setAlpha / .y / .destroy, which is all tickCoinPops touches.
+  circle: Phaser.GameObjects.Arc | Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
   life: number; // seconds remaining
 }
@@ -2960,7 +2963,9 @@ export class GameScene extends Phaser.Scene {
     const x = truckX - 18 + Phaser.Math.Between(-8, 8);
     const y = truckY - 30;
 
-    const circle = this.add.circle(x, y, 5, P.COIN_GOLD);
+    // Code-generated coin sprite when loaded; otherwise the original gold dot.
+    const circle: Phaser.GameObjects.Arc | Phaser.GameObjects.Image =
+      addSprite(this, SPR.coin, x, y, 11) ?? this.add.circle(x, y, 5, P.COIN_GOLD);
     const label  = this.add.text(x + 8, y - 4, `+$${revenue.toFixed(2)}`, {
       fontSize: "7px", color: "#FFD700", fontFamily: "monospace",
     });
@@ -3013,6 +3018,11 @@ export class GameScene extends Phaser.Scene {
     this.celebrationGroup = g;
 
     const panel = this.add.rectangle(cx, cy, bw, bh, P.PANEL_BG, 0.96).setStrokeStyle(2, P.AWNING);
+    // Code-generated star sprites flanking the banner (earned-moment flair).
+    const starL = addSprite(this, SPR.star, cx - bw / 2 + 10, cy, 16);
+    const starR = addSprite(this, SPR.star, cx + bw / 2 - 10, cy, 16);
+    if (starL) g.add(starL);
+    if (starR) g.add(starR);
     const t1 = this.add.text(cx, subtitle ? cy - 7 : cy, title,
       { fontSize: scaledFont(11), color: "#2C2416", fontFamily: "monospace", fontStyle: "bold", align: "center", wordWrap: { width: bw - 12 } }
     ).setOrigin(0.5);

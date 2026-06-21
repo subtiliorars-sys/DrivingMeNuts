@@ -345,14 +345,16 @@ const SPRITES = {
   "shop-sign": spriteAwningSign(),
 };
 
-const outDir = path.join(__dirname, "..", "..", "assets", "generated");
-fs.mkdirSync(outDir, { recursive: true });
+const gameDir = path.join(__dirname, "..", "..", "public", "generated");
+const refDir = path.join(__dirname, "..", "..", "assets", "generated");
+fs.mkdirSync(gameDir, { recursive: true });
+fs.mkdirSync(refDir, { recursive: true });
 
 const EXPORT_SCALE = 8;
 const names = Object.keys(SPRITES);
 for (const name of names) {
   const big = SPRITES[name].scale(EXPORT_SCALE);
-  const bytes = writePNG(big, path.join(outDir, `${name}.png`));
+  const bytes = writePNG(big, path.join(gameDir, `${name}.png`));
   console.log(`  ${name}.png  ${big.w}×${big.h}  ${(bytes / 1024).toFixed(1)} KiB`);
 }
 
@@ -375,6 +377,7 @@ names.forEach((name, k) => {
   const cy = row * CELL + (CELL - big.h) / 2;
   sheet.blit(big, Math.round(cx), Math.round(cy));
 });
-const sheetBytes = writePNG(sheet, path.join(outDir, "_contact-sheet.png"));
+const sheetBytes = writePNG(sheet, path.join(refDir, "_contact-sheet.png"));
 console.log(`  _contact-sheet.png  ${sheet.w}×${sheet.h}  ${(sheetBytes / 1024).toFixed(1)} KiB`);
-console.log(`\nWrote ${names.length} sprites + contact sheet to ${outDir}`);
+console.log(`\nWrote ${names.length} game sprites to ${gameDir}`);
+console.log(`Wrote contact sheet to ${refDir}`);

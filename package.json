@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:boot": "vitest run --config vitest.boot.config.ts",
     "qa:browser": "powershell -ExecutionPolicy Bypass -File ./scripts/browser-qa.ps1 -Action tutorial-smoke",
+    "art": "node tools/art/build-assets.cjs",
     "verify": "tsc --noEmit && vitest run && npm run test:boot && vite build",
     "desktop:setup": "npm --prefix desktop install",
     "desktop:run": "npm run build && npm --prefix desktop start",
