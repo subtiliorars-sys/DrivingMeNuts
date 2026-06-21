@@ -150,12 +150,24 @@ Owner queue item: `agent-corps/fleet/owner-queue/items/20260613-1820-dmn-visual-
 
 ---
 
+## 4. P1.5 district layer (sim + ROUTES UI) — ✅ SHIPPED (2026-06, DMN-1/2)
+
+> **SHIPPED & WIRED.** Two playable districts (Farmers' Market + Office Quarter): per-district
+> demand curves, lunch rush, Derek consistency streak, permit purchase + switch via ROUTES
+> modal, district-aware day-report and backdrop palette. Sim fields: `currentDistrict`,
+> `unlockedDistricts` (additive-optional). Tests: `src/sim/district.test.ts`. Further districts
+> exist as data in `economy.ts` only until P2 content waves. Truck **movement** (map navigation)
+> remains P2 — see `docs/PHASE2_PREP.md` DM-P2-W2.
+
+---
+
 ## Summary table
 
 | Item | Safe unattended? | Blocker | Persistence |
 |---|---|---|---|
-| Weather modifier | With care (default-clear keeps tests green) | test-suite + GDD-walkthrough update | `weatherSeed` additive-optional |
+| Weather modifier | Shipped | — | `weatherSeed` additive-optional |
 | Auto-sell off-peak | Shipped (DM-W1) | — | `autoSellEnabled` additive-optional |
+| District sim + ROUTES UI | Shipped (P1.5) | truck movement = P2 | `currentDistrict`, `unlockedDistricts` |
 | Refrigerated truck | No | **spoilage (P2) not shipped** | — |
 | Marketing tiers | No | **A4 Owner Decision** (timed boost) | additive-optional |
 | Large-text | Shipped (DM-W2); owner visual QA queued | visual eyeball in owner queue | `largeText` pref |

@@ -4,7 +4,7 @@
 
 ---
 
-> **Build status — read before class prep** *(refreshed 2026-06-13)*
+> **Build status — read before class prep** *(refreshed 2026-06-21)*
 >
 > This guide describes the FULL designed experience. The current P1 build has grown well
 > beyond the original idle slice. Status as of the latest build:
@@ -27,8 +27,10 @@
 > | First-run tutorial, audio/SFX + mute, milestone celebrations | Onboarding + game-feel |
 > | **Auto-sell off-peak upgrade** | Optional $1,500 upgrade: leftover roasted stock clears at 10% off at day's end (less waste, frees working capital) |
 > | **Weather demand modifier** | Rainy −20% / hot-sunny +15% demand; 1-day forecast shown (predictable, no FOMO) |
+> | **In-game playtest feedback** | **FEEDBACK** on the HUD or in Settings — opens a pre-filled GitHub issue (rate-limited; see `docs/PLAYTEST_ONBOARDING.md`) |
+> | **District lore variants** | Five district-flavored Legume Lore lines (LL-DIST-*) in the gag pool — teaser for future zones |
 >
-> **PLANNED (P2+, not yet built):** truck driving + Boardwalk/University districts + NPC quests (the RPG layer); **spoilage** (and the refrigerated-truck upgrade that depends on it); the **full** dual-ledger (interest split, accounts-payable calendar); year-round seasons; dedicated break-even goal UI; day-skip / in-game hint system.
+> **PLANNED (P2+, not yet built):** truck **driving** between districts (modal switch exists today) + Boardwalk/University gameplay + NPC quests (the RPG layer); **spoilage** (and the refrigerated-truck upgrade that depends on it); the **full** dual-ledger (interest split, accounts-payable calendar); year-round seasons; dedicated break-even goal UI; day-skip / in-game hint system.
 >
 > **Use in class today:** COGS, pricing & the demand curve, location strategy (Office Quarter unlock), the day-report and **BOOKS** panel (profit vs. cash), the rescue arc (debt & APR), weather/weekday demand planning, and the Glossary. Break-even is teachable via the glossary + fixed-cost math; a dedicated daily goal UI is still on the roadmap.
 

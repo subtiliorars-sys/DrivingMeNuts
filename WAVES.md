@@ -10,7 +10,7 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 
 ## Active queue
 
-_(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`; gameplay waves blocked until P1 exit. Next candidate when unblocked: **DM-P2-W2** truck movement prototype.)_
+_(Queue idle — P1 exit gates owner-gated (`docs/ROADMAP.md`); P2 truck-movement gameplay blocked until signed. Next candidate when unblocked: **DM-P2-W2** truck movement prototype. P1.5 district sim + ROUTES UI already on `main` — see completed **DM-P2-W1**.)_
 
 ## Blocked (queue owner — do not implement)
 - Marketing campaign tiers (A4) — owner decision
@@ -30,3 +30,5 @@ _(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`; gameplay wave
 - **DM-W8 — Playtest volunteer docs cross-link** — merged PR #38 (2026-06-14)
 - **DM-W9 — SYSTEMS_BACKLOG §2a auto-sell shipped sync** — merged PR #73 (2026-06-17)
 - **DM-W10 — Itch playtest slice (in-game feedback)** — merged PR #74 (2026-06-17)
+- **DM-P2-W1 — District registry + demand curves (P1.5)** — on `main` (DMN-1/2 sim + ROUTES UI)
+- **DM-W11 — WAVES registry + Phase 2 prep sync** — this PR (2026-06-21)
