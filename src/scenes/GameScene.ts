@@ -91,7 +91,7 @@ import {
   loadMutePref,
 } from "./audio.js";
 import { isMusicOn, toggleMusic, loadMusicPref, startMusic, setMusicMode } from "./music.js";
-import { addSprite, SPR } from "./sprites.js";
+import { addSprite, SPR, npcPortraitKey } from "./sprites.js";
 import { NPC_ORDER, NPCS, FRIENDSHIP_MAX, tierForFriendship, type NpcId } from "../data/npcs.js";
 import { friendshipFor, tierFor, greet, hasMet, meet, addFriendship, applyDailyFriendship } from "../sim/relationships.js";
 
@@ -2154,7 +2154,10 @@ export class GameScene extends Phaser.Scene {
         .setInteractive({ cursor: "pointer" });
       g.add(row);
       const tier = tierFor(this.state, id);
-      g.add(this.add.text(listX + 6, ly + 3, npc.name, {
+      // Tiny portrait at the left of the row.
+      const pic = addSprite(this, npcPortraitKey(id), listX + 12, ly + 9, 16);
+      if (pic) g.add(pic);
+      g.add(this.add.text(listX + 24, ly + 3, npc.name, {
         fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
         fontStyle: selected ? "bold" : "normal",
       }));
@@ -2177,6 +2180,12 @@ export class GameScene extends Phaser.Scene {
     const dW = mW - 176;
     let dy = mY + 28;
 
+    // Large portrait, top-right of the detail panel (text layout unchanged).
+    // Backdrop first so the portrait draws on top of it.
+    g.add(this.add.rectangle(dx + dW - 22, dy + 18, 48, 48, 0xcdbb95).setStrokeStyle(1, P.PANEL_BORDER));
+    const portrait = addSprite(this, npcPortraitKey(id), dx + dW - 22, dy + 18, 44);
+    if (portrait) g.add(portrait);
+
     g.add(this.add.text(dx, dy, npc.name, { fontSize: scaledFont(11), color: "#2C2416", fontFamily: "monospace", fontStyle: "bold" }));
     dy += 14;
     g.add(this.add.text(dx, dy, npc.role, { ...textStyleLabel(), color: "#8B6F47" }));
@@ -2188,7 +2197,8 @@ export class GameScene extends Phaser.Scene {
     g.add(this.add.text(dx, dy, `Friendship: ${tier.toUpperCase()} (${pts}/${FRIENDSHIP_MAX})`,
       { ...textStyleLabel(), color: "#2C2416" }));
     dy += 11;
-    const barW = dW - 4;
+    // Leave room on the right for the portrait box.
+    const barW = dW - 54;
     g.add(this.add.rectangle(dx + barW / 2, dy + 3, barW, 6, 0xcdbb95).setStrokeStyle(1, P.PANEL_BORDER));
     if (pts > 0) {
       const fillW = Math.max(1, Math.round((barW - 2) * (pts / FRIENDSHIP_MAX)));

@@ -334,6 +334,148 @@ function spriteAwningSign() {
 }
 
 // ---------------------------------------------------------------------------
+// NPC portraits — a parametric pixel-art face builder (32×32). Each regular
+// gets a distinct silhouette via skin/hair/hat/accessory so they're readable
+// at a glance in the Regulars panel.
+// ---------------------------------------------------------------------------
+const SKIN = {
+  light: [0xf0, 0xc8, 0xa0, 255],
+  lightLo: [0xd8, 0xab, 0x82, 255],
+  med: [0xc8, 0x9a, 0x6b, 255],
+  medLo: [0xa8, 0x7c, 0x52, 255],
+  tan: [0xe2, 0xb88, 0x80, 255], // fixed below
+  brown: [0x8d, 0x5a, 0x3b, 255],
+  brownLo: [0x6f, 0x44, 0x2c, 255],
+};
+SKIN.tan = [0xe2, 0xb8, 0x80, 255];
+SKIN.tanLo = [0xc4, 0x9a, 0x66, 255];
+
+function drawFace(opts) {
+  const p = new Px(32, 32);
+  const skin = opts.skin;
+  const skinLo = opts.skinLo;
+  // neck
+  p.fillRect(13, 24, 6, 5, skinLo);
+  // head (rounded): disc + a squared jaw
+  p.disc(16, 15, 10, skin);
+  p.fillRect(7, 12, 18, 9, skin);
+  // jaw shade on right
+  for (let y = 8; y < 25; y++)
+    for (let x = 18; x < 26; x++) if (p.opaque(x, y)) p.set(x, y, skinLo);
+
+  // ears
+  p.disc(7, 16, 2, skin);
+  p.disc(25, 16, 2, skin);
+
+  // beard (lower jaw) before hair so hair overlays the top
+  if (opts.beard) {
+    const bc = opts.hair;
+    for (let y = 18; y < 26; y++)
+      for (let x = 8; x < 24; x++) {
+        const d = Math.hypot(x - 16, y - 16);
+        if (d < 10 && d > 6 && y > 17) p.set(x, y, bc);
+      }
+    p.fillRect(11, 23, 10, 3, bc);
+  }
+
+  // hair styles
+  const hair = opts.hair;
+  if (opts.hairStyle === "short" || opts.hairStyle === "bun") {
+    // hair cap across the top of the head
+    for (let y = 4; y < 14; y++)
+      for (let x = 6; x < 26; x++) {
+        const d = Math.hypot(x - 16, y - 14);
+        if (d < 11 && y < 12) p.set(x, y, hair);
+      }
+    p.fillRect(6, 11, 4, 4, hair); // sideburn L
+    p.fillRect(22, 11, 4, 4, hair); // sideburn R
+  }
+  if (opts.hairStyle === "bun") {
+    p.disc(16, 4, 4, hair);
+  }
+  if (opts.hairStyle === "bald") {
+    // fringe ring only (sides), bald top
+    p.fillRect(6, 13, 3, 4, hair);
+    p.fillRect(23, 13, 3, 4, hair);
+  }
+
+  // eyes
+  p.fillRect(11, 15, 2, 2, C.outline);
+  p.fillRect(19, 15, 2, 2, C.outline);
+  // brows
+  p.set(11, 13, hair);
+  p.set(12, 13, hair);
+  p.set(19, 13, hair);
+  p.set(20, 13, hair);
+  // smile
+  p.set(14, 20, C.outline);
+  p.set(15, 21, C.outline);
+  p.set(16, 21, C.outline);
+  p.set(17, 21, C.outline);
+  p.set(18, 20, C.outline);
+
+  // glasses
+  if (opts.glasses) {
+    const gl = [0x33, 0x33, 0x33, 255];
+    for (const cx of [12, 20]) p.disc(cx, 16, 3, [0, 0, 0, 0]); // clear lens area
+    const ring = (cx) => {
+      for (let a = 0; a < 360; a += 30) {
+        const x = Math.round(cx + Math.cos((a * Math.PI) / 180) * 3);
+        const y = Math.round(16 + Math.sin((a * Math.PI) / 180) * 3);
+        p.set(x, y, gl);
+      }
+    };
+    ring(12); ring(20);
+    p.fillRect(15, 16, 2, 1, gl); // bridge
+    // restore eyes inside lenses
+    p.fillRect(11, 15, 2, 2, C.outline);
+    p.fillRect(19, 15, 2, 2, C.outline);
+  }
+
+  // hats
+  if (opts.hat === "flatcap") {
+    const hc = opts.hatColor;
+    p.fillRect(6, 6, 20, 5, hc);
+    p.fillRect(5, 10, 8, 2, hc); // brim
+    for (let x = 6; x < 26; x++) p.set(x, 6, [hc[0] + 20, hc[1] + 20, hc[2] + 20, 255]);
+  } else if (opts.hat === "cap") {
+    const hc = opts.hatColor;
+    for (let y = 3; y < 11; y++)
+      for (let x = 7; x < 25; x++) {
+        const d = Math.hypot(x - 16, y - 11);
+        if (d < 9 && y < 10) p.set(x, y, hc);
+      }
+    p.fillRect(4, 10, 12, 2, hc); // bill
+  } else if (opts.hat === "visor") {
+    const hc = opts.hatColor;
+    p.fillRect(6, 9, 20, 3, hc); // band
+    p.fillRect(3, 11, 14, 2, [hc[0], hc[1], hc[2], 200]); // translucent-ish bill
+  }
+
+  // suit collar + tie
+  if (opts.collar === "suit") {
+    const sc = [0x33, 0x3a, 0x4a, 255];
+    p.fillRect(8, 26, 16, 4, sc);
+    p.fillPoly([[13, 26], [19, 26], [16, 30]], C.cream); // shirt V
+    // tie
+    const tc = opts.tieColor || [0xc0, 0x39, 0x2b, 255];
+    p.fillPoly([[15, 26], [17, 26], [18, 30], [14, 30]], tc);
+  }
+
+  p.outline(C.outline);
+  return p;
+}
+
+const PORTRAITS = {
+  old_joe: drawFace({ skin: SKIN.tan, skinLo: SKIN.tanLo, hair: [0xcc, 0xcc, 0xcc, 255], hairStyle: "bald", beard: true, hat: "flatcap", hatColor: [0x6b, 0x55, 0x3b, 255] }),
+  marta: drawFace({ skin: SKIN.light, skinLo: SKIN.lightLo, hair: [0xbf, 0xbf, 0xc4, 255], hairStyle: "bun", glasses: true }),
+  derek: drawFace({ skin: SKIN.med, skinLo: SKIN.medLo, hair: [0x6b, 0x4a, 0x2c, 255], hairStyle: "short", collar: "suit", tieColor: [0xc0, 0x39, 0x2b, 255] }),
+  sal: drawFace({ skin: SKIN.med, skinLo: SKIN.medLo, hair: [0x2c, 0x24, 0x16, 255], hairStyle: "short", beard: true, hat: "cap", hatColor: [0x2a, 0x3a, 0x6b, 255] }),
+  maya: drawFace({ skin: SKIN.brown, skinLo: SKIN.brownLo, hair: [0x1a, 0x14, 0x10, 255], hairStyle: "short", hat: "visor", hatColor: [0x3a, 0x8c, 0x5e, 255] }),
+  dr_chen: drawFace({ skin: SKIN.light, skinLo: SKIN.lightLo, hair: [0x20, 0x20, 0x28, 255], hairStyle: "short", glasses: true }),
+};
+
+// ---------------------------------------------------------------------------
 // Build
 // ---------------------------------------------------------------------------
 const SPRITES = {
@@ -343,6 +485,12 @@ const SPRITES = {
   star: spriteStar(),
   "peanut-bag": spritePeanutBag(),
   "shop-sign": spriteAwningSign(),
+  "npc-old_joe": PORTRAITS.old_joe,
+  "npc-marta": PORTRAITS.marta,
+  "npc-derek": PORTRAITS.derek,
+  "npc-sal": PORTRAITS.sal,
+  "npc-maya": PORTRAITS.maya,
+  "npc-dr_chen": PORTRAITS.dr_chen,
 };
 
 const gameDir = path.join(__dirname, "..", "..", "public", "generated");

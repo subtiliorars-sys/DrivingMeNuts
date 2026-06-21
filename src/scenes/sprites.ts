@@ -32,6 +32,14 @@ export const SPR = {
   sign: "spr-sign",
 } as const;
 
+/** The six NPC ids that have a portrait (mirrors src/data/npcs.ts NpcId). */
+const NPC_PORTRAIT_IDS = ["old_joe", "marta", "derek", "sal", "maya", "dr_chen"] as const;
+
+/** Texture key for an NPC portrait, e.g. npcPortraitKey("marta") → "npc-marta". */
+export function npcPortraitKey(id: string): string {
+  return `npc-${id}`;
+}
+
 export const SPRITE_MANIFEST: SpriteDef[] = [
   { key: SPR.peanut, url: "generated/roasted-peanut.png" },
   { key: SPR.mascot, url: "generated/peanut-mascot.png" },
@@ -39,6 +47,7 @@ export const SPRITE_MANIFEST: SpriteDef[] = [
   { key: SPR.star, url: "generated/star.png" },
   { key: SPR.bag, url: "generated/peanut-bag.png" },
   { key: SPR.sign, url: "generated/shop-sign.png" },
+  ...NPC_PORTRAIT_IDS.map((id) => ({ key: npcPortraitKey(id), url: `generated/npc-${id}.png` })),
 ];
 
 /** Queue every sprite for loading. Call from BootScene.preload(). */
