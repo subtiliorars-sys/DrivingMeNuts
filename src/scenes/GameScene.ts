@@ -93,7 +93,7 @@ import {
 import { isMusicOn, toggleMusic, loadMusicPref, startMusic, setMusicMode } from "./music.js";
 import { addSprite, SPR } from "./sprites.js";
 import { NPC_ORDER, NPCS, FRIENDSHIP_MAX, tierForFriendship, type NpcId } from "../data/npcs.js";
-import { friendshipFor, tierFor, greet, hasMet, meet, addFriendship } from "../sim/relationships.js";
+import { friendshipFor, tierFor, greet, hasMet, meet, addFriendship, applyDailyFriendship } from "../sim/relationships.js";
 
 // LORE_LOADED_COUNT removed — denominator is now computed dynamically in updateHUD()
 // based on state.dayNumber and LORE_TIER_DAY_GATE (honest: shows unlocked pool size).
@@ -2784,6 +2784,22 @@ export class GameScene extends Phaser.Scene {
 
     // Pause the sim — reportOpen flag stops tick() calls
     const report = endOfDay(this.state);
+
+    // RPG layer (M3.2): a day's trade warms the regulars of the current
+    // district. Friendship accrues mainly through showing up and doing good
+    // business — the Chat button is just a nudge. Surface tier-ups as gentle
+    // toasts (after the report) so they never strobe with achievement banners.
+    const friendChanges = applyDailyFriendship(this.state, this.state.currentDistrict, report.unitsSold);
+    let friendToastDelay = 900;
+    for (const fc of friendChanges) {
+      if (fc.change.tierUp) {
+        const npcName = NPCS[fc.id].name;
+        const tierLabel = fc.change.tierAfter;
+        this.time.delayedCall(friendToastDelay, () =>
+          this.showToast(`${npcName} is now a ${tierLabel}.`));
+        friendToastDelay += 1400;
+      }
+    }
 
     // Wave 5: surface rescue arc events as toasts (factual, never shaming)
     for (const ev of report.rescueEvents) {

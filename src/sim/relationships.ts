@@ -11,8 +11,11 @@
  */
 
 import type { SimState } from "./types.js";
+import type { DistrictId } from "../data/economy.js";
 import {
   FRIENDSHIP_MAX,
+  NPC_ORDER,
+  NPCS,
   type NpcId,
   type FriendTier,
   tierForFriendship,
@@ -68,6 +71,40 @@ export function addFriendship(state: SimState, id: NpcId, delta: number): Friend
 export function meet(state: SimState, id: NpcId): void {
   if (!state.npcRelationships) state.npcRelationships = {};
   if (state.npcRelationships[id] === undefined) state.npcRelationships[id] = 0;
+}
+
+/** Per-NPC result of a daily friendship award. */
+export interface DailyFriendship {
+  id: NpcId;
+  change: FriendshipChange;
+}
+
+/**
+ * Grow the friendship of the regulars who frequent `district`, based on how
+ * much the truck sold there today. This is how friendship mainly accrues —
+ * through showing up and doing good business in their neighbourhood, not
+ * grinding a Chat button. Gentle by design (a few points/day) so reaching
+ * "friend" is a season-long arc, mirroring real regulars.
+ *
+ * Sal is a rival, so he warms at half rate (beating him on the route slowly
+ * earns his respect — see his friend-tier line). No-op on a zero-sales day.
+ */
+export function applyDailyFriendship(
+  state: SimState,
+  district: DistrictId,
+  unitsSold: number,
+): DailyFriendship[] {
+  if (!(unitsSold > 0) || !Number.isFinite(unitsSold)) return [];
+  // +1 for trading at all, +1 per 15 lbs, capped at +4/day.
+  const base = Math.min(4, 1 + Math.floor(unitsSold / 15));
+  const out: DailyFriendship[] = [];
+  for (const id of NPC_ORDER) {
+    if (NPCS[id].district !== district) continue;
+    meet(state, id);
+    const delta = id === "sal" ? Math.max(1, Math.floor(base / 2)) : base;
+    out.push({ id, change: addFriendship(state, id, delta) });
+  }
+  return out;
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   addFriendship,
   meet,
   reviveRelationships,
+  applyDailyFriendship,
 } from "./relationships.js";
 import {
   NPCS,
@@ -109,6 +110,52 @@ describe("friendship mutations", () => {
     expect(greet(s, "sal")).toBe(NPCS.sal.greet.stranger);
     addFriendship(s, "sal", 85);
     expect(greet(s, "sal")).toBe(NPCS.sal.greet.friend);
+  });
+});
+
+describe("applyDailyFriendship (gameplay-driven growth)", () => {
+  it("warms only the regulars of the district traded in", () => {
+    const s = createState(1);
+    // Farmers' Market regulars: old_joe, marta, dr_chen.
+    const res = applyDailyFriendship(s, "farmers_market", 30);
+    const ids = res.map((r) => r.id).sort();
+    expect(ids).toEqual(["dr_chen", "marta", "old_joe"]);
+    expect(friendshipFor(s, "old_joe")).toBeGreaterThan(0);
+    // Office Quarter regular untouched.
+    expect(hasMet(s, "derek")).toBe(false);
+  });
+
+  it("scales gently with volume and caps at +4/day", () => {
+    const s = createState(1);
+    applyDailyFriendship(s, "farmers_market", 999);
+    expect(friendshipFor(s, "marta")).toBe(4); // capped
+    const s2 = createState(1);
+    applyDailyFriendship(s2, "farmers_market", 5); // < 15 lbs → +1
+    expect(friendshipFor(s2, "marta")).toBe(1);
+  });
+
+  it("warms rival Sal at half rate", () => {
+    const s = createState(1);
+    applyDailyFriendship(s, "office_quarter", 999); // base +4
+    expect(friendshipFor(s, "derek")).toBe(4);
+    expect(friendshipFor(s, "sal")).toBe(2); // half
+  });
+
+  it("is a no-op on a zero-sales day", () => {
+    const s = createState(1);
+    expect(applyDailyFriendship(s, "farmers_market", 0)).toEqual([]);
+    expect(hasMet(s, "marta")).toBe(false);
+  });
+
+  it("reports tier-ups across days", () => {
+    const s = createState(1);
+    let sawTierUp = false;
+    for (let d = 0; d < 30; d++) {
+      const res = applyDailyFriendship(s, "farmers_market", 30);
+      if (res.some((r) => r.change.tierUp)) sawTierUp = true;
+    }
+    expect(sawTierUp).toBe(true);
+    expect(tierFor(s, "marta")).not.toBe("stranger");
   });
 });
 
