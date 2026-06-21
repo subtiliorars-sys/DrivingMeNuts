@@ -355,6 +355,9 @@ export function createState(seed = 1): SimState {
     // P1.5: districts
     currentDistrict: "farmers_market",
     unlockedDistricts: ["farmers_market"],
+    // Phase 2: RPG shell
+    zonesUnlocked: ["market"],
+    currentZoneId: "market",
     // P1.5: Derek consistency mechanic
     derekConsistencyCounter: 0,
     derekLastPrice: null,

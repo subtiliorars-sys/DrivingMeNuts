@@ -740,6 +740,8 @@ export function deserialize(json: string): SimState {
     supplierLbsPurchased,
     currentDistrict,
     unlockedDistricts,
+    zonesUnlocked,
+    currentZoneId,
     derekConsistencyCounter,
     derekLastPrice,
     derekLastPurchaseDay,
@@ -948,6 +950,21 @@ export function importEnvelopeText(text: string, storage: StorageLike): ImportRe
 /**
  * Remove the saved game from storage. Does NOT reset the live SimState —
  * the caller (GameScene) is responsible for reinitialising state after
+ * confirming the player's intent.
+ */
+export function resetSave(storage: StorageLike): void {
+  storage.removeItem(SAVE_KEY);
+  storage.removeItem(CORRUPT_KEY);
+}
+. Does NOT reset the live SimState —
+ * the caller (GameScene) is responsible for reinitialising state after
+ * confirming the player's intent.
+ */
+export function resetSave(storage: StorageLike): void {
+  storage.removeItem(SAVE_KEY);
+  storage.removeItem(CORRUPT_KEY);
+}
+(GameScene) is responsible for reinitialising state after
  * confirming the player's intent.
  */
 export function resetSave(storage: StorageLike): void {

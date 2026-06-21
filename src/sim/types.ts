@@ -238,6 +238,15 @@ export interface SimState {
    */
   unlockedDistricts: DistrictId[];
 
+  // ---- Phase 2: RPG Shell (PHASE2_PREP.md) -----------------------------
+  /**
+   * IDs of zones unlocked on the world map.
+   * Distinct from districts (districts are economic zones; zones are map nodes).
+   */
+  zonesUnlocked: string[];
+  /** Current zone ID where the truck is parked. */
+  currentZoneId: string;
+
   // ---- Derek consistency mechanic (P1.5 — GDD B2) ----------------------
   /**
    * Tracks the number of consecutive days Derek has bought from the truck.
