@@ -387,6 +387,8 @@ function sanityCheck(env: SaveEnvelope): string | null {
           return `ledger entry ${field} out of range: ${e[field]}`;
       }
       if (e.day < 1) return `ledger entry day invalid: ${e.day}`;
+      if (e.weather !== undefined && typeof e.weather !== "string")
+        return `ledger entry weather invalid: ${e.weather}`;
     }
   }
 
@@ -617,6 +619,7 @@ export function deserialize(json: string): SimState {
         net: Number(e.net),
         debtService: Number(e.debtService),
         cashAfter: Number(e.cashAfter),
+        weather: e.weather !== undefined ? String(e.weather) : undefined,
       }))
     : [];
 

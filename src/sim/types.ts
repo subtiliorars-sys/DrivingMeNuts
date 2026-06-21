@@ -303,6 +303,8 @@ export interface LedgerEntry {
   debtService: number;
   /** Cash on hand after the day fully closed. */
   cashAfter: number;
+  /** Weather on the ended day. Additive-optional for backward compatibility. */
+  weather?: string;
 }
 
 /**
