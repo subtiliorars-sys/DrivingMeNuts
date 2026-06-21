@@ -496,3 +496,8 @@ export interface SimEvent {
   daySecond: number;
   detail: Record<string, unknown>;
 }
+
+export const WORLD = {
+  width: 480,
+  height: 270,
+};

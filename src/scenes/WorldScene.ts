@@ -59,10 +59,36 @@ export class WorldScene extends Phaser.Scene {
   }
 
   update(): void {
+    const prevX = this.truck.container.x;
     if (this.cursors?.left.isDown) {
       this.truck.container.x -= 2;
     } else if (this.cursors?.right.isDown) {
       this.truck.container.x += 2;
+    }
+
+    // Basic Player Collisions (World Bounds)
+    this.truck.container.x = Phaser.Math.Clamp(this.truck.container.x, 20, WORLD.width - 20);
+
+    // Transition Trigger between Market (200) and Residential (600)
+    const midPoint = 400;
+    if ((prevX < midPoint && this.truck.container.x >= midPoint) || 
+        (prevX > midPoint && this.truck.container.x <= midPoint)) {
+      this.onDistrictTransition(this.truck.container.x > midPoint ? "residential" : "market");
+    }
+  }
+
+  private onDistrictTransition(newDistrictId: string): void {
+    console.log(`DM-P2-W2: Transitioned to ${newDistrictId}`);
+    const loc = this.locations.find(l => l.id === newDistrictId);
+    if (loc) {
+      const msg = this.add.text(WORLD.width / 2, 100, `Entering ${loc.name}...`, {
+        fontSize: "24px",
+        color: "#fff",
+        backgroundColor: "#000",
+        padding: { x: 10, y: 5 }
+      }).setOrigin(0.5);
+      
+      this.time.delayedCall(2000, () => msg.destroy());
     }
   }
 }

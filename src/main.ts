@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { BootScene } from "./scenes/BootScene.js";
 import { GameScene } from "./scenes/GameScene.js";
+import { WorldScene } from "./scenes/WorldScene.js";
 
 /**
  * Canvas resolution: 480×270 (16:9).
