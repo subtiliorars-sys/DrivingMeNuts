@@ -35,10 +35,10 @@ localization, Steam Cloud. *Owner: approve or adjust this freeze.*
 
 | # | Milestone | Key deliverables | Exit criteria |
 |---|-----------|------------------|---------------|
-| **M0** | Shippable shell *(done — PR #43)* | Electron desktop build, procedural music, keyboard controls, save hardening | Desktop app launches + renders; verify green |
-| **M1** | Pipelines *(this PR)* | Code-as-art-tool sprite generator; Windows-build CI; this roadmap | Real sprites generated; CI workflow in place |
-| **M2** | Art pass | Replace all programmer-art in scenes with generated sprites; animation frames; cover `docs/P1_SPRITE_SPEC.md` | Every scene uses real art; no rectangles |
-| **M3** | RPG layer | Dialogue system; 6 NPCs with relationships; legume-gag arc deepened; quest framework | NPCs talkable; gag arc playable end-to-end |
+| **M0** | Shippable shell *(✅ done)* | Electron desktop build, procedural music, keyboard controls, save hardening | Desktop app launches + renders; verify green |
+| **M1** | Pipelines *(✅ done)* | Code-as-art-tool sprite generator; Windows-build CI; this roadmap | Real sprites generated; CI workflow in place |
+| **M2** | Art pass *(🚧 in progress)* | Sprites wired into game (coin/star/mascot/truck ✅) + 6 NPC portraits ✅; remaining: backdrops, truck tiers, animation frames per `docs/P1_SPRITE_SPEC.md` | Every scene uses real art; no rectangles |
+| **M3** | RPG layer *(🚧 in progress)* | NPC relationships + Regulars dialogue panel ✅ (M3.1); friendship grows from gameplay ✅ (M3.2); remaining: gag-bubbles↔named cast, quest framework | NPCs talkable; gag arc playable end-to-end |
 | **M4** | Districts | 4 launch districts live (traffic curves, permits, flavor bias, deco) | All 4 playable + balanced |
 | **M5** | Campaign | 3-act milestones, festival event, Sal rivalry, Dr. Chen review, corporate finale, franchise prestige polish | Full run from intro to prestige |
 | **M6** | Feel & a11y | Game-feel juice, transitions, onboarding, audio polish, full accessibility pass | Cozy + readable; a11y checklist green |
@@ -48,6 +48,26 @@ localization, Steam Cloud. *Owner: approve or adjust this freeze.*
 
 I can start **M2 immediately** and drive M2–M8 with no input from you except
 per-milestone spot-checks. M9 needs the Steam account.
+
+---
+
+## Integration notes (live)
+
+- **All campaign work lives on PR #43** (`claude/game-concept-production-6eiqog`),
+  shipped as verified slices: M0 → M1 → M2 (sprites + portraits) → M3.1
+  (relationships + dialogue) → M3.2 (gameplay-driven friendship).
+- **PR #43 was auto-closed once** by the Fleet janitor as a supposed "duplicate
+  cursor/* draft" — a misclassification (this is a `claude/*` production branch,
+  not a cursor draft). Reopened; work was never at risk (all commits on the
+  remote branch). If it re-closes, the branch still holds everything.
+- **Wave overlap to reconcile at merge:** PR #113 (`work/ideation-sweep`) also
+  adds GameScene keyboard shortcuts and a Books **Weather** column. This branch
+  has its own keyboard layer (S/R/U/B/G/D/C/M/N/J/Enter/Esc). Whoever integrates
+  the wave should merge these deliberately rather than letting one clobber the
+  other.
+- **Branch base is behind `main`.** This branch forked at an earlier `main`;
+  `main` has since advanced. A rebase/merge-forward is deferred to an attended
+  session (it touches the same GameScene areas as #113 — best done with eyes on).
 
 ---
 
