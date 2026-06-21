@@ -70,6 +70,11 @@ function createWindow() {
               );
               await new Promise((r) => setTimeout(r, 1200));
             }
+            // Optional: run arbitrary setup JS before the shot (QA/captures).
+            if (process.env.DMN_EVAL) {
+              await mainWindow.webContents.executeJavaScript(process.env.DMN_EVAL);
+              await new Promise((r) => setTimeout(r, 500));
+            }
             const img = await mainWindow.webContents.capturePage();
             require("fs").writeFileSync(process.env.DMN_SHOT, img.toPNG());
             console.log(`[smoke] screenshot written: ${process.env.DMN_SHOT}`);

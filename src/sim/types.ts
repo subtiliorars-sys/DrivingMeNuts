@@ -259,6 +259,15 @@ export interface SimState {
    */
   derekLastPurchaseDay: number;
 
+  // ---- NPC relationships (RPG layer — GDD B3) -------------------------
+  /**
+   * Friendship points (0–100) per named NPC id (see src/data/npcs.ts).
+   * Presence of a key means the player has met that NPC. Monotonic — never
+   * decays (DARK_PATTERN_GATE: relationships are warm, not a treadmill).
+   * Additive-optional in the save (absent → {}).
+   */
+  npcRelationships: Record<string, number>;
+
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
   rngState: number;

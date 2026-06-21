@@ -346,6 +346,8 @@ export function createState(seed = 1): SimState {
     derekConsistencyCounter: 0,
     derekLastPrice: null,
     derekLastPurchaseDay: 0,
+    // RPG layer: no NPCs met yet.
+    npcRelationships: {},
     rngState: seed >>> 0,
   };
 }

@@ -17,6 +17,7 @@
 
 import type { SimState, RescueDebt, PreorderObligation, LedgerEntry } from "./types.js";
 import { createState, applyOffline, checkAchievements } from "./engine.js";
+import { reviveRelationships } from "./relationships.js";
 import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS, RAW_PEANUT_BASE_PRICE, WEATHER_DEFAULT_SEED, PRICE_MIN, PRICE_MAX } from "../data/economy.js";
 import type { RecipeId, RoasterTier } from "../data/economy.js";
 import { RECIPES, ROASTER_EFFICIENCY } from "../data/economy.js";
@@ -470,6 +471,15 @@ function sanityCheck(env: SaveEnvelope): string | null {
       return `weatherSeed invalid: ${ss.weatherSeed}`;
   }
 
+  // RPG layer: npcRelationships, when present, must be a plain object. Per-entry
+  // validity (known id, finite 0–100) is enforced leniently by
+  // reviveRelationships on load, mirroring how gagsSeen/achievements drop
+  // unknown entries rather than rejecting the whole save.
+  if (ss.npcRelationships !== undefined) {
+    if (ss.npcRelationships === null || typeof ss.npcRelationships !== "object" || Array.isArray(ss.npcRelationships))
+      return `npcRelationships invalid: ${String(ss.npcRelationships)}`;
+  }
+
   return null;
 }
 
@@ -713,6 +723,9 @@ export function deserialize(json: string): SimState {
       ? Math.floor(_ss.derekLastPurchaseDay)
       : 0;
 
+  // RPG layer: revive NPC friendships (drop unknown ids, clamp 0–100).
+  const npcRelationships = reviveRelationships(_ss.npcRelationships);
+
   const state: SimState = {
     cash: sim.cash,
     rawStockLbs: sim.rawStockLbs,
@@ -757,6 +770,7 @@ export function deserialize(json: string): SimState {
     derekConsistencyCounter,
     derekLastPrice,
     derekLastPurchaseDay,
+    npcRelationships,
     rngState: sim.rngState,
   };
 

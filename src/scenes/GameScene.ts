@@ -92,6 +92,8 @@ import {
 } from "./audio.js";
 import { isMusicOn, toggleMusic, loadMusicPref, startMusic, setMusicMode } from "./music.js";
 import { addSprite, SPR } from "./sprites.js";
+import { NPC_ORDER, NPCS, FRIENDSHIP_MAX, tierForFriendship, type NpcId } from "../data/npcs.js";
+import { friendshipFor, tierFor, greet, hasMet, meet, addFriendship } from "../sim/relationships.js";
 
 // LORE_LOADED_COUNT removed — denominator is now computed dynamically in updateHUD()
 // based on state.dayNumber and LORE_TIER_DAY_GATE (honest: shows unlocked pool size).
@@ -304,6 +306,15 @@ export class GameScene extends Phaser.Scene {
   // Goals panel (achievements + lore/comeback collection — wave 6)
   private goalsModalGroup?: Phaser.GameObjects.Group;
   private goalsModalOpen = false;
+
+  // Regulars panel (RPG layer — NPC relationships + dialogue, M3)
+  private regularsModalGroup?: Phaser.GameObjects.Group;
+  private regularsModalOpen = false;
+  /** Day on which each NPC was last chatted-to, so a chat nudges friendship at
+   *  most once per game day (charm, not a clicker). */
+  private npcChattedDay: Record<string, number> = {};
+  /** Which regular is selected in the Regulars panel (master-detail). */
+  private regularsSelected: NpcId = "old_joe";
 
   // Settings + Glossary panels (Polish & Pedagogy wave)
   private settingsModalGroup?: Phaser.GameObjects.Group;
@@ -673,6 +684,20 @@ export class GameScene extends Phaser.Scene {
     goalsBtn.on("pointerover", () => goalsBtn.setAlpha(0.85));
     goalsBtn.on("pointerout",  () => goalsBtn.setAlpha(1.0));
 
+    // ---- REGULARS button (RPG layer — NPC relationships + dialogue, M3) ------
+    const regBtnY = goalsBtnY + 24;
+    const regularsBtn = this.add.rectangle(buyBtnX + 68, regBtnY + 10, 137, 20, 0x6E5A8A)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.add.text(buyBtnX + 68, regBtnY + 10, "REGULARS", {
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+    }).setOrigin(0.5);
+    regularsBtn.on("pointerdown", () => {
+      if (!this.isUIBlocked()) this.openRegularsModal();
+    });
+    regularsBtn.on("pointerover", () => regularsBtn.setAlpha(0.85));
+    regularsBtn.on("pointerout",  () => regularsBtn.setAlpha(1.0));
+
     // ---- Day progress bar --------------------------------------------------
     const dpY = H - 18;
     this.add.rectangle(W / 2, dpY + 5, W, 18, P.PANEL_BORDER);
@@ -770,7 +795,7 @@ export class GameScene extends Phaser.Scene {
       this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen ||
       this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen ||
       this.glossaryModalOpen || this.aftermathModalOpen || this.inPostReportChain ||
-      this.tutorialStep >= 0
+      this.regularsModalOpen || this.tutorialStep >= 0
     );
   }
 
@@ -784,6 +809,7 @@ export class GameScene extends Phaser.Scene {
     if (this.districtModalOpen) { this.closeDistrictModal(); return true; }
     if (this.booksModalOpen) { this.closeBooksModal(); return true; }
     if (this.goalsModalOpen) { this.closeGoalsModal(); return true; }
+    if (this.regularsModalOpen) { this.closeRegularsModal(); return true; }
     return false;
   }
 
@@ -808,6 +834,7 @@ export class GameScene extends Phaser.Scene {
     kb.on("keydown-U", open(() => this.openUpgradesModal()));
     kb.on("keydown-B", open(() => this.openBooksModal()));
     kb.on("keydown-G", open(() => this.openGoalsModal()));
+    kb.on("keydown-C", open(() => this.openRegularsModal()));
     kb.on("keydown-D", open(() => this.openDistrictModal()));
     kb.on("keydown-M", open(() => this.openSettingsModal()));
 
@@ -827,7 +854,7 @@ export class GameScene extends Phaser.Scene {
     // Track wall-clock playtime (excludes offline time; used by trySave meta)
     this.playtimeSeconds += delta / 1_000;
 
-    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen || this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen || this.glossaryModalOpen || this.aftermathModalOpen || this.inPostReportChain) return;
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen || this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen || this.glossaryModalOpen || this.aftermathModalOpen || this.regularsModalOpen || this.inPostReportChain) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -2081,6 +2108,163 @@ export class GameScene extends Phaser.Scene {
       this.goalsModalGroup = undefined;
     }
     this.goalsModalOpen = false;
+    this.updateHUD();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Regulars panel (RPG layer — GDD B3). Master-detail: the six named NPCs on
+  // the left, the selected one's dialogue + friendship on the right. Chatting
+  // nudges friendship once per game day (warm, not a clicker — no decay, no
+  // FOMO). Friendship + tier persist in SimState.npcRelationships.
+  // ---------------------------------------------------------------------------
+
+  private readonly TIER_COLOR: Record<string, number> = {
+    stranger: 0x999977,
+    acquaintance: 0xc0a060,
+    regular: 0x4a9c5e,
+    friend: 0xe8a33d,
+  };
+
+  private openRegularsModal(): void {
+    if (this.regularsModalOpen || this.isUIBlocked()) return;
+    this.regularsModalOpen = true;
+    playButtonTick();
+
+    const W = this.scale.width, H = this.scale.height;
+    const mW = 440, mH = 250;
+    const mX = (W - mW) / 2, mY = (H - mH) / 2;
+
+    const g = this.add.group();
+    this.regularsModalGroup = g;
+    g.add(this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.55).setInteractive());
+    g.add(this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG).setStrokeStyle(2, P.PANEL_BORDER));
+    g.add(this.add.text(mX + 8, mY + 6, "REGULARS — the people who make the route", textStyleHeader()));
+    g.add(this.add.rectangle(mX + mW / 2, mY + 20, mW - 8, 1, P.PANEL_BORDER));
+
+    // ---- Left: the cast list (selectable) ---------------------------------
+    const listX = mX + 8;
+    const listW = 150;
+    let ly = mY + 28;
+    for (const id of NPC_ORDER) {
+      const npc = NPCS[id];
+      const selected = id === this.regularsSelected;
+      const met = hasMet(this.state, id);
+      const row = this.add.rectangle(listX + listW / 2, ly + 9, listW, 18,
+        selected ? 0x6E5A8A : 0x4a4458).setStrokeStyle(1, P.PANEL_BORDER)
+        .setInteractive({ cursor: "pointer" });
+      g.add(row);
+      const tier = tierFor(this.state, id);
+      g.add(this.add.text(listX + 6, ly + 3, npc.name, {
+        fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+        fontStyle: selected ? "bold" : "normal",
+      }));
+      // tiny tier pip on the right of the row
+      g.add(this.add.rectangle(listX + listW - 8, ly + 9, 6, 6,
+        met ? this.TIER_COLOR[tier] : 0x333333).setStrokeStyle(1, P.PANEL_BORDER));
+      row.on("pointerdown", () => {
+        this.regularsSelected = id;
+        playButtonTick();
+        this.closeRegularsModal();
+        this.openRegularsModal();
+      });
+      ly += 22;
+    }
+
+    // ---- Right: the selected regular's detail ------------------------------
+    const id = this.regularsSelected;
+    const npc = NPCS[id];
+    const dx = mX + 168;
+    const dW = mW - 176;
+    let dy = mY + 28;
+
+    g.add(this.add.text(dx, dy, npc.name, { fontSize: scaledFont(11), color: "#2C2416", fontFamily: "monospace", fontStyle: "bold" }));
+    dy += 14;
+    g.add(this.add.text(dx, dy, npc.role, { ...textStyleLabel(), color: "#8B6F47" }));
+    dy += 13;
+
+    // Friendship bar + tier label.
+    const pts = friendshipFor(this.state, id);
+    const tier = tierFor(this.state, id);
+    g.add(this.add.text(dx, dy, `Friendship: ${tier.toUpperCase()} (${pts}/${FRIENDSHIP_MAX})`,
+      { ...textStyleLabel(), color: "#2C2416" }));
+    dy += 11;
+    const barW = dW - 4;
+    g.add(this.add.rectangle(dx + barW / 2, dy + 3, barW, 6, 0xcdbb95).setStrokeStyle(1, P.PANEL_BORDER));
+    if (pts > 0) {
+      const fillW = Math.max(1, Math.round((barW - 2) * (pts / FRIENDSHIP_MAX)));
+      g.add(this.add.rectangle(dx + 1 + fillW / 2, dy + 3, fillW, 4, this.TIER_COLOR[tier]));
+    }
+    dy += 14;
+
+    // Greeting (tier-appropriate) + their flavour of the legume gag.
+    g.add(this.add.text(dx, dy, `"${greet(this.state, id)}"`,
+      { ...textStyleLabel(), color: "#2C2416", wordWrap: { width: dW } }));
+    dy += 40;
+    g.add(this.add.text(dx, dy, `On the gag: "${npc.gag}"`,
+      { ...monoTextStyle(7, "#5A3A1A"), wordWrap: { width: dW } }));
+    dy += 44;
+
+    // Friend-tier reward beat (only once you've truly bonded).
+    if (tier === "friend") {
+      g.add(this.add.text(dx, dy, `★ ${npc.friendBeat}`,
+        { ...monoTextStyle(7, "#4A7C4E"), wordWrap: { width: dW } }));
+      dy += 24;
+    } else {
+      g.add(this.add.text(dx, dy, `Hook: ${npc.hook}`,
+        { ...monoTextStyle(6, "#8B6F47"), wordWrap: { width: dW } }));
+      dy += 24;
+    }
+
+    // CHAT button — once per game day.
+    const chattedToday = this.npcChattedDay[id] === this.state.dayNumber;
+    const maxed = pts >= FRIENDSHIP_MAX;
+    const chatLabel = maxed ? "BEST FRIENDS ✓" : chattedToday ? "caught up today" : "CHAT (+ friendship)";
+    const chatBtn = this.add.rectangle(dx + dW / 2, mY + mH - 32, dW, 16,
+      (chattedToday || maxed) ? 0x888888 : P.AWNING).setStrokeStyle(1, P.PANEL_BORDER);
+    g.add(chatBtn);
+    g.add(this.add.text(dx + dW / 2, mY + mH - 32, chatLabel,
+      { fontSize: "8px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5));
+    if (!chattedToday && !maxed) {
+      chatBtn.setInteractive({ cursor: "pointer" });
+      chatBtn.on("pointerover", () => chatBtn.setAlpha(0.85));
+      chatBtn.on("pointerout", () => chatBtn.setAlpha(1.0));
+      chatBtn.on("pointerdown", () => this.chatWithNpc(id));
+    }
+
+    // Close.
+    const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 14, 0x556677)
+      .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
+    g.add(doneBtn);
+    g.add(this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE",
+      { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    doneBtn.on("pointerdown", () => this.closeRegularsModal());
+    doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
+    doneBtn.on("pointerout",  () => doneBtn.setAlpha(1.0));
+  }
+
+  /** Chat with an NPC: meet + nudge friendship once/day, celebrate tier-ups. */
+  private chatWithNpc(id: NpcId): void {
+    if (this.npcChattedDay[id] === this.state.dayNumber) return;
+    playButtonTick();
+    meet(this.state, id);
+    const change = addFriendship(this.state, id, 8);
+    this.npcChattedDay[id] = this.state.dayNumber;
+    trySave(this.storage, this.state, this.playtimeSeconds);
+    // Refresh the panel to show the new line/bar.
+    this.closeRegularsModal();
+    this.openRegularsModal();
+    if (change.tierUp) {
+      this.showCelebration(`${NPCS[id].name}: now a ${change.tierAfter}!`,
+        tierForFriendship(change.points) === "friend" ? NPCS[id].friendBeat : "");
+    }
+  }
+
+  private closeRegularsModal(): void {
+    if (this.regularsModalGroup) {
+      this.regularsModalGroup.destroy(true);
+      this.regularsModalGroup = undefined;
+    }
+    this.regularsModalOpen = false;
     this.updateHUD();
   }
 
