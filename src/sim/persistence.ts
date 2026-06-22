@@ -34,7 +34,7 @@ export const SAVE_KEY = "dmn_save_v1";
 export const CORRUPT_KEY = "dmn_save_v1-corrupt";
 
 /** Bump on every breaking schema change. Migration chain lives in MIGRATIONS below. */
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 // ---------------------------------------------------------------------------
 // StorageLike interface — injectable, testable
@@ -232,6 +232,26 @@ const MIGRATIONS: Record<number, Migrator> = {
         brandCampaignActive: false,
         aftermathSeen: [],
         pendingAftermath: [],
+      },
+    };
+    return upgraded;
+  },
+
+  /**
+   * v4 → v5 (RPG map expansion): add zonesUnlocked, currentZoneId.
+   * Default: zonesUnlocked ["residential"], currentZoneId "residential".
+   * These defaults ensure P1 saves can transition into the RPG shell.
+   */
+  4: (raw) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const env = raw as any;
+    const upgraded: SaveEnvelope = {
+      ...env,
+      schemaVersion: 5,
+      sim: {
+        ...env.sim,
+        zonesUnlocked: ["residential"],
+        currentZoneId: "residential",
       },
     };
     return upgraded;
@@ -451,6 +471,21 @@ function sanityCheck(env: SaveEnvelope): string | null {
   if (ss.weatherSeed !== undefined) {
     if (!Number.isFinite(ss.weatherSeed) || ss.weatherSeed < 0)
       return `weatherSeed invalid: ${ss.weatherSeed}`;
+  }
+
+  // RPG Shell: zonesUnlocked must be an array of strings.
+  if (ss.zonesUnlocked !== undefined) {
+    if (!Array.isArray(ss.zonesUnlocked))
+      return `zonesUnlocked must be an array`;
+    for (const z of ss.zonesUnlocked) {
+      if (typeof z !== "string")
+        return `zonesUnlocked entry invalid: ${String(z)}`;
+    }
+  }
+
+  // RPG Shell: currentZoneId must be a string.
+  if (ss.currentZoneId !== undefined && typeof ss.currentZoneId !== "string") {
+    return `currentZoneId must be a string`;
   }
 
   return null;
@@ -681,6 +716,11 @@ export function deserialize(json: string): SimState {
       )
     : ["farmers_market"];
   if (!unlockedDistricts.includes("farmers_market")) unlockedDistricts.push("farmers_market");
+  
+  // RPG Shell: revive zone fields (additive-optional, absent = defaults).
+  const zonesUnlocked: string[] = Array.isArray(_ss.zonesUnlocked) ? _ss.zonesUnlocked : ["residential"];
+  const currentZoneId: string = typeof _ss.currentZoneId === "string" ? _ss.currentZoneId : "residential";
+
   const derekConsistencyCounter =
     typeof _ss.derekConsistencyCounter === "number" && Number.isFinite(_ss.derekConsistencyCounter) && _ss.derekConsistencyCounter >= 0
       ? Math.floor(_ss.derekConsistencyCounter)
@@ -950,21 +990,6 @@ export function importEnvelopeText(text: string, storage: StorageLike): ImportRe
 /**
  * Remove the saved game from storage. Does NOT reset the live SimState —
  * the caller (GameScene) is responsible for reinitialising state after
- * confirming the player's intent.
- */
-export function resetSave(storage: StorageLike): void {
-  storage.removeItem(SAVE_KEY);
-  storage.removeItem(CORRUPT_KEY);
-}
-. Does NOT reset the live SimState —
- * the caller (GameScene) is responsible for reinitialising state after
- * confirming the player's intent.
- */
-export function resetSave(storage: StorageLike): void {
-  storage.removeItem(SAVE_KEY);
-  storage.removeItem(CORRUPT_KEY);
-}
-(GameScene) is responsible for reinitialising state after
  * confirming the player's intent.
  */
 export function resetSave(storage: StorageLike): void {

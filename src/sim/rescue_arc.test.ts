@@ -658,11 +658,10 @@ describe("persistence round-trip v3", () => {
     );
   });
 
-  it("CURRENT_SCHEMA_VERSION is 4", () => {
-    // Bumped 3→4 by the ledger/lore wave (ledger, comebackTier,
-    // brandCampaignActive, aftermathSeen). If this fails, a schema change
+  it("CURRENT_SCHEMA_VERSION is 5", () => {
+    // Bumped 4→5 by the map expansion wave. If this fails, a schema change
     // landed without updating the MIGRATIONS chain — fix that first.
-    expect(CURRENT_SCHEMA_VERSION).toBe(4);
+    expect(CURRENT_SCHEMA_VERSION).toBe(5);
   });
 });
 

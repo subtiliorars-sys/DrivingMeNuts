@@ -10,7 +10,9 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 
 ## Active queue
 
-_(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`; gameplay waves blocked until P1 exit. Next candidate when unblocked: **DM-P2-W2** truck movement prototype.)_
+- [ ] **DM-P2-W1** — Map Expansion: Industrial Zone (Base Layout)
+- [ ] **DM-P2-W2** — Truck movement prototype (Physics tuning)
+- [ ] **DM-P2-W3** — NPC quest stub: Residential District (First Contact) — **STAGED**
 
 ## Blocked (queue owner — do not implement)
 - Marketing campaign tiers (A4) — owner decision

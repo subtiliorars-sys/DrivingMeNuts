@@ -321,7 +321,7 @@ export const DEMAND_MAX_LBS_PER_HOUR = 40;
 // ---------------------------------------------------------------------------
 
 /** Unique identifier for each playable district. */
-export type DistrictId = "farmers_market" | "office_quarter" | "residential" | "university" | "park" | "boardwalk" | "downtown";
+export type DistrictId = "farmers_market" | "office_quarter" | "residential" | "university" | "park" | "boardwalk" | "downtown" | "industrial_zone";
 
 /** Per-district configuration for demand curves, permit costs, and lunch rush. */
 export interface DistrictConfig {
@@ -407,6 +407,16 @@ export const DISTRICT_CONFIGS: Readonly<Record<DistrictId, DistrictConfig>> = {
     permitCost: 800,
     lunchRushHour: 12,
     lunchRushBoost: 1.2,
+  },
+  industrial_zone: {
+    id: "industrial_zone",
+    label: "Industrial Zone",
+    baseDemandLbsPerHour: 28,
+    basePrice: 1.45,
+    demandSlope: 9,
+    permitCost: 400,
+    lunchRushHour: 12,
+    lunchRushBoost: 1.25,
   },
 } as const;
 
