@@ -4,8 +4,8 @@
  * strings are canon from docs/LEGUME_LORE.md — edit there first, then sync here
  *
  * Tier gating (Wave 3, W5 playtest-compressed gates):
- *   early: unlocked from day 1+   (LL-001 – LL-006)
- *   mid:   unlocked from day 8+   (LL-007 – LL-016)
+ *   early: unlocked from day 1+
+ *   mid:   unlocked from day 8+
  *   late:  unlocked from day 20+  (LL-017 – LL-040; canon LATE per LEGUME_LORE.md)
  *
  * Gate note: day numbers are compressed vs the doc's narrative ranges (Mid=day 21+,
@@ -376,12 +376,33 @@ export const LORE_LINES: readonly LoreLine[] = [
     tone: "Efficient",
     tier: "late",
   },
+  {
+    id: "LL-ARCH-LECTURER",
+    customer: "As a very regular reader of placards, I must note: peanuts are legumes.",
+    owner: "Then the placard and I agree. The bag is still warm.",
+    tone: "Dry/Professorial",
+    tier: "early",
+  },
+  {
+    id: "LL-ARCH-PARENT",
+    customer: "My kid says your truck is selling legumes in disguise.",
+    owner: "Smart kid. Please tell them the disguise comes lightly salted.",
+    tone: "Warm",
+    tier: "early",
+  },
+  {
+    id: "LL-ARCH-WORKER",
+    customer: "Quick question before my meeting: am I expensing nuts or legumes?",
+    owner: "Expense the snack. Let accounting enjoy the plot twist.",
+    tone: "Efficient/Deadpan",
+    tier: "mid",
+  },
 ] as const;
 
 /**
  * Total canon variant count (all tiers, including future late entries).
  */
-export const LORE_TOTAL_COUNT = 45;
+export const LORE_TOTAL_COUNT = 48;
 
 /** Lookup map: id → LoreLine. */
 export const LORE_BY_ID: Readonly<Record<string, LoreLine>> = Object.fromEntries(
