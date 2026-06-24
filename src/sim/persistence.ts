@@ -143,6 +143,10 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   currentDistrict?: string;
   /** P1.5: unlocked districts. Additive-optional: absent → ["farmers_market"]. */
   unlockedDistricts?: string[];
+  /** Phase 2 shell: unlocked world-map zones. Additive-optional: absent → ["market"]. */
+  zonesUnlocked?: string[];
+  /** Phase 2 shell: current world-map zone. Additive-optional: absent → "market". */
+  currentZoneId?: string;
   /** P1.5: Derek consistency counter. Additive-optional: absent → 0. */
   derekConsistencyCounter?: number;
   /** P1.5: Derek last purchase price. Additive-optional: absent → null. */
@@ -681,6 +685,17 @@ export function deserialize(json: string): SimState {
       )
     : ["farmers_market"];
   if (!unlockedDistricts.includes("farmers_market")) unlockedDistricts.push("farmers_market");
+
+  // Phase 2 shell: revive world-map zones (additive-optional, absent = market).
+  const zonesUnlocked = Array.isArray(_ss.zonesUnlocked)
+    ? [...new Set(_ss.zonesUnlocked.filter((z): z is string => typeof z === "string" && z.length > 0))]
+    : ["market"];
+  if (!zonesUnlocked.includes("market")) zonesUnlocked.unshift("market");
+  const currentZoneId =
+    typeof _ss.currentZoneId === "string" && zonesUnlocked.includes(_ss.currentZoneId)
+      ? _ss.currentZoneId
+      : "market";
+
   const derekConsistencyCounter =
     typeof _ss.derekConsistencyCounter === "number" && Number.isFinite(_ss.derekConsistencyCounter) && _ss.derekConsistencyCounter >= 0
       ? Math.floor(_ss.derekConsistencyCounter)
@@ -950,21 +965,6 @@ export function importEnvelopeText(text: string, storage: StorageLike): ImportRe
 /**
  * Remove the saved game from storage. Does NOT reset the live SimState —
  * the caller (GameScene) is responsible for reinitialising state after
- * confirming the player's intent.
- */
-export function resetSave(storage: StorageLike): void {
-  storage.removeItem(SAVE_KEY);
-  storage.removeItem(CORRUPT_KEY);
-}
-. Does NOT reset the live SimState —
- * the caller (GameScene) is responsible for reinitialising state after
- * confirming the player's intent.
- */
-export function resetSave(storage: StorageLike): void {
-  storage.removeItem(SAVE_KEY);
-  storage.removeItem(CORRUPT_KEY);
-}
-(GameScene) is responsible for reinitialising state after
  * confirming the player's intent.
  */
 export function resetSave(storage: StorageLike): void {
