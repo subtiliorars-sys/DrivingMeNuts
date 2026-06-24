@@ -4,7 +4,7 @@
 
 Canon premise: Customers inform the owner that "peanuts aren't nuts, they're legumes," triggering the owner's weary or clever response. Each variant is indexed, tiered (early/mid/late game), tagged with delivery tone, and grounded in one specific joke angle.
 
-**Total count: 40 variants** (QUALITY > COUNT per risk register; no padding).
+**Total count: 48 variants** (QUALITY > COUNT per risk register; no padding).
 
 ---
 
@@ -275,6 +275,62 @@ are tunable. LL-017–020 belong to the LATE narrative section and are gated at 
 
 ---
 
+## District-Specific Variants (P1 Exit Polish)
+
+### LL-DIST-RES
+**Customer:** "Do you have a license to park a legume truck on this residential street?"
+**Owner:** "I do. And a license to hear about legumes. Want a bag?"
+**Tier:** Early | **Tone:** Deadpan
+**Angle:** Residential customers tie the gag to permits without blocking the sale.
+
+### LL-DIST-UNI
+**Customer:** "According to my botany thesis, these are technically legumes, not nuts."
+**Owner:** "Congrats on the thesis. That'll be $1.50 for a bag of science."
+**Tier:** Mid | **Tone:** Dry
+**Angle:** University district customers over-document the obvious fact.
+
+### LL-DIST-PARK
+**Customer:** "I heard the squirrels here only eat tree nuts, so your legumes are safe."
+**Owner:** "Tell the squirrels I'm hiring. They seem smarter than the average pedant."
+**Tier:** Mid | **Tone:** Sarcastic
+**Angle:** Park customers connect the legume gag to local animal chaos.
+
+### LL-DIST-BOARD
+**Customer:** "Salted legumes by the sea? Isn't that redundant?"
+**Owner:** "Life is redundant. My truck name is redundant. The peanuts are fresh. Buy some?"
+**Tier:** Late | **Tone:** Zen
+**Angle:** Boardwalk customers fold place-based wordplay into the brand joke.
+
+### LL-DIST-TOWN
+**Customer:** "I need high-protein legumes for this board meeting. No nuts allowed."
+**Owner:** "You're in the right place. 'Driving Me Nuts' sells 0% nuts. Guaranteed corporate-safe."
+**Tier:** Late | **Tone:** Efficient
+**Angle:** Office Quarter customers make the gag useful as a business ordering shortcut.
+
+---
+
+## Customer-Archetype Variants (GAME-AUTO-06)
+
+### LL-ARCH-LECTURER
+**Customer:** "As a very regular reader of placards, I must note: peanuts are legumes."
+**Owner:** "Then the placard and I agree. The bag is still warm."
+**Tier:** Early | **Tone:** Dry/Professorial
+**Angle:** The lecturer archetype performs the well-actually without becoming the butt of the joke.
+
+### LL-ARCH-PARENT
+**Customer:** "My kid says your truck is selling legumes in disguise."
+**Owner:** "Smart kid. Please tell them the disguise comes lightly salted."
+**Tier:** Early | **Tone:** Warm
+**Angle:** The parent archetype keeps the education beat affectionate and sale-forward.
+
+### LL-ARCH-WORKER
+**Customer:** "Quick question before my meeting: am I expensing nuts or legumes?"
+**Owner:** "Expense the snack. Let accounting enjoy the plot twist."
+**Tier:** Mid | **Tone:** Efficient/Deadpan
+**Angle:** The worker archetype turns the legume fact into a brisk office-order joke.
+
+---
+
 ## Writing Style Notes (For Future Variants)
 
 **Proven mechanics for new variants:**
@@ -334,7 +390,7 @@ These five are held in reserve for special story moments (Act III victory, franc
 
 **LEGUME LORE COMPLETE.**
 
-Variant count: **40 hand-written entries** (LL-001 through LL-040).
+Variant count: **48 hand-written entries** (LL-001 through LL-040, five district-specific variants, and three customer-archetype variants).
 Hard rules verified:
 - ✓ ZERO allergy references or jokes
 - ✓ No mental-health punchlines (idiomatic "driving me nuts" title only)
