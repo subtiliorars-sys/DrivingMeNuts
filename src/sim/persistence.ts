@@ -99,7 +99,7 @@ export function safeStorage(): StorageLike {
 // ---------------------------------------------------------------------------
 
 /** SimState on the wire: Set<string> fields serialised as string[]. */
-type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
+type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked" | "zonesUnlocked" | "currentZoneId"> & {
   gagsSeen: string[];
   recipesUnlocked: string[];
   /** W2: blended-pool recipe demand multiplier (schema v2). */
@@ -143,6 +143,10 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   currentDistrict?: string;
   /** P1.5: unlocked districts. Additive-optional: absent → ["farmers_market"]. */
   unlockedDistricts?: string[];
+  /** Phase 2 shell: unlocked world-map zones. Additive-optional: absent → ["market"]. */
+  zonesUnlocked?: string[];
+  /** Phase 2 shell: current world-map zone. Additive-optional: absent → "market". */
+  currentZoneId?: string;
   /** P1.5: Derek consistency counter. Additive-optional: absent → 0. */
   derekConsistencyCounter?: number;
   /** P1.5: Derek last purchase price. Additive-optional: absent → null. */
@@ -681,6 +685,18 @@ export function deserialize(json: string): SimState {
       )
     : ["farmers_market"];
   if (!unlockedDistricts.includes("farmers_market")) unlockedDistricts.push("farmers_market");
+
+  // Phase 2 shell: revive world-map zone fields (legacy saves default to market).
+  const zonesUnlocked = Array.isArray(_ss.zonesUnlocked)
+    ? _ss.zonesUnlocked.filter((z): z is string => typeof z === "string" && z.length > 0)
+    : ["market"];
+  if (!zonesUnlocked.includes("market")) zonesUnlocked.push("market");
+  const currentZoneId =
+    typeof _ss.currentZoneId === "string" && _ss.currentZoneId.length > 0
+      ? _ss.currentZoneId
+      : "market";
+  if (!zonesUnlocked.includes(currentZoneId)) zonesUnlocked.push(currentZoneId);
+
   const derekConsistencyCounter =
     typeof _ss.derekConsistencyCounter === "number" && Number.isFinite(_ss.derekConsistencyCounter) && _ss.derekConsistencyCounter >= 0
       ? Math.floor(_ss.derekConsistencyCounter)

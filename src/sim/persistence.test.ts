@@ -101,6 +101,18 @@ describe("round-trip", () => {
     expect(envelope.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
   });
 
+  it("defaults missing world-map zone fields for legacy saves", () => {
+    const state = createState(1);
+    const envelope = JSON.parse(serialize(state));
+    delete envelope.sim.zonesUnlocked;
+    delete envelope.sim.currentZoneId;
+
+    const loaded = deserialize(JSON.stringify(envelope));
+
+    expect(loaded.zonesUnlocked).toEqual(["market"]);
+    expect(loaded.currentZoneId).toBe("market");
+  });
+
   it("round-trip includes a savedAt timestamp", () => {
     const before = Date.now();
     const json = serialize(createState(1));
