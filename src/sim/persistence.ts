@@ -956,18 +956,3 @@ export function resetSave(storage: StorageLike): void {
   storage.removeItem(SAVE_KEY);
   storage.removeItem(CORRUPT_KEY);
 }
-. Does NOT reset the live SimState —
- * the caller (GameScene) is responsible for reinitialising state after
- * confirming the player's intent.
- */
-export function resetSave(storage: StorageLike): void {
-  storage.removeItem(SAVE_KEY);
-  storage.removeItem(CORRUPT_KEY);
-}
-(GameScene) is responsible for reinitialising state after
- * confirming the player's intent.
- */
-export function resetSave(storage: StorageLike): void {
-  storage.removeItem(SAVE_KEY);
-  storage.removeItem(CORRUPT_KEY);
-}
