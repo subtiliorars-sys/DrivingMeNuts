@@ -4,7 +4,7 @@
 
 Canon premise: Customers inform the owner that "peanuts aren't nuts, they're legumes," triggering the owner's weary or clever response. Each variant is indexed, tiered (early/mid/late game), tagged with delivery tone, and grounded in one specific joke angle.
 
-**Total count: 40 variants** (QUALITY > COUNT per risk register; no padding).
+**Total count: 43 variants** (QUALITY > COUNT per risk register; no padding).
 
 ---
 
@@ -275,6 +275,28 @@ are tunable. LL-017–020 belong to the LATE narrative section and are gated at 
 
 ---
 
+## Customer Archetype Variants (Early Game Variety)
+
+### LL-ARCH-INV
+**Customer:** "For my inventory sheet, are these nuts or legumes?"  
+**Owner:** "File them under 'snacks that sell after the lecture.'"  
+**Tier:** Early | **Tone:** Dry/Efficient  
+**Angle:** Inventory-minded customer turns the botany correction into a bookkeeping category.
+
+### LL-ARCH-CHEF
+**Customer:** "Chef question: if peanuts are legumes, is this a bean roast?"  
+**Owner:** "Only if beans smell this good. Want a warm bag?"  
+**Tier:** Early | **Tone:** Warm/Playful  
+**Angle:** Food-service customer riffs on cooking language; owner pivots back to the sale.
+
+### LL-ARCH-TEAM
+**Customer:** "My kid's soccer team voted: legumes win on a technicality."  
+**Owner:** "Tell the team the scoreboard says salted peanuts."  
+**Tier:** Early | **Tone:** Playful  
+**Angle:** Sports-parent customer broadens the gag while keeping the owner upbeat.
+
+---
+
 ## Writing Style Notes (For Future Variants)
 
 **Proven mechanics for new variants:**
@@ -334,7 +356,7 @@ These five are held in reserve for special story moments (Act III victory, franc
 
 **LEGUME LORE COMPLETE.**
 
-Variant count: **40 hand-written entries** (LL-001 through LL-040).
+Variant count: **43 hand-written entries** (LL-001 through LL-040 plus LL-ARCH-INV, LL-ARCH-CHEF, and LL-ARCH-TEAM).
 Hard rules verified:
 - ✓ ZERO allergy references or jokes
 - ✓ No mental-health punchlines (idiomatic "driving me nuts" title only)

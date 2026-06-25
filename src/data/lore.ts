@@ -376,12 +376,36 @@ export const LORE_LINES: readonly LoreLine[] = [
     tone: "Efficient",
     tier: "late",
   },
+
+  // ---- Customer Archetype Variety (GAME-AUTO-06-dev) ----
+
+  {
+    id: "LL-ARCH-INV",
+    customer: "For my inventory sheet, are these nuts or legumes?",
+    owner: "File them under 'snacks that sell after the lecture.'",
+    tone: "Dry/Efficient",
+    tier: "early",
+  },
+  {
+    id: "LL-ARCH-CHEF",
+    customer: "Chef question: if peanuts are legumes, is this a bean roast?",
+    owner: "Only if beans smell this good. Want a warm bag?",
+    tone: "Warm/Playful",
+    tier: "early",
+  },
+  {
+    id: "LL-ARCH-TEAM",
+    customer: "My kid's soccer team voted: legumes win on a technicality.",
+    owner: "Tell the team the scoreboard says salted peanuts.",
+    tone: "Playful",
+    tier: "early",
+  },
 ] as const;
 
 /**
- * Total canon variant count (all tiers, including future late entries).
+ * Total playable variant count (canon + district + archetype entries).
  */
-export const LORE_TOTAL_COUNT = 45;
+export const LORE_TOTAL_COUNT = 48;
 
 /** Lookup map: id → LoreLine. */
 export const LORE_BY_ID: Readonly<Record<string, LoreLine>> = Object.fromEntries(
