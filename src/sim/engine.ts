@@ -989,6 +989,7 @@ export function endOfDay(state: SimState): DayReport {
     net,
     debtService,
     cashAfter,
+    weather: weatherForDay(endedDay, state.weatherSeed),
   };
   state.ledger.push(ledgerEntry);
   if (state.ledger.length > LEDGER_MAX_DAYS) {
@@ -1463,6 +1464,29 @@ export function optimumPrice(recipe: RecipeId, campaignActive = false): number {
   const cogs = RAW_PEANUT_BASE_PRICE + RECIPES[recipe].ingredientCostPerLb;
   const pStar = (DEMAND_BASE_LBS_PER_HOUR / DEMAND_SLOPE + effectiveBasePrice(campaignActive) + cogs) / 2;
   return clamp(parseFloat(pStar.toFixed(2)), PRICE_MIN, PRICE_MAX);
+}
+
+/** Dollars away from optimum before the HUD shows a pricing nudge (playtest UX). */
+export const PRICING_NUDGE_THRESHOLD = 0.12;
+
+/**
+ * One-line pricing elasticity hint for the HUD price panel.
+ * Returns null when price is near the profit-maximising sweet spot — no nagging.
+ * Voice: educational, no FOMO (DARK_PATTERN_GATE §A).
+ */
+export function pricingElasticityHint(
+  price: number,
+  recipe: RecipeId = "classic_salted",
+  campaignActive = false,
+  threshold = PRICING_NUDGE_THRESHOLD,
+): string | null {
+  const opt = optimumPrice(recipe, campaignActive);
+  const delta = price - opt;
+  if (Math.abs(delta) < threshold) return null;
+  if (delta > 0) {
+    return `Above demand sweet spot (~$${opt.toFixed(2)}/lb) — sales may slow.`;
+  }
+  return `Below profit sweet spot (~$${opt.toFixed(2)}/lb) — demand up, margin thinner.`;
 }
 
 // ---------------------------------------------------------------------------

@@ -19,6 +19,8 @@ import {
   setPrice,
   endOfDay,
   applyOffline,
+  optimumPrice,
+  pricingElasticityHint,
 } from "./engine.js";
 import {
   DEFAULT_SELL_PRICE,
@@ -198,6 +200,28 @@ describe("price elasticity", () => {
 
     expect(profitAtPeak).toBeGreaterThan(profitAtFloor);
     expect(profitAtPeak).toBeGreaterThan(profitAtCeil);
+  });
+});
+
+describe("pricingElasticityHint", () => {
+  it("returns null near the profit-maximising price", () => {
+    const opt = optimumPrice("classic_salted");
+    expect(pricingElasticityHint(opt, "classic_salted")).toBeNull();
+    expect(pricingElasticityHint(opt + 0.10, "classic_salted")).toBeNull();
+  });
+
+  it("nudges when price is well above optimum", () => {
+    const opt = optimumPrice("classic_salted");
+    const hint = pricingElasticityHint(2.20, "classic_salted");
+    expect(hint).toMatch(/Above demand sweet spot/);
+    expect(hint).toMatch(new RegExp(`\\$${opt.toFixed(2).replace(".", "\\.")}`));
+  });
+
+  it("nudges when price is well below optimum", () => {
+    const opt = optimumPrice("classic_salted");
+    const hint = pricingElasticityHint(1.00, "classic_salted");
+    expect(hint).toMatch(/Below profit sweet spot/);
+    expect(hint).toMatch(new RegExp(`\\$${opt.toFixed(2).replace(".", "\\.")}`));
   });
 });
 

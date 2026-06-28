@@ -387,6 +387,8 @@ function sanityCheck(env: SaveEnvelope): string | null {
           return `ledger entry ${field} out of range: ${e[field]}`;
       }
       if (e.day < 1) return `ledger entry day invalid: ${e.day}`;
+      if (e.weather !== undefined && typeof e.weather !== "string")
+        return `ledger entry weather invalid: ${e.weather}`;
     }
   }
 
@@ -617,6 +619,7 @@ export function deserialize(json: string): SimState {
         net: Number(e.net),
         debtService: Number(e.debtService),
         cashAfter: Number(e.cashAfter),
+        weather: e.weather !== undefined ? String(e.weather) : undefined,
       }))
     : [];
 
@@ -681,6 +684,17 @@ export function deserialize(json: string): SimState {
       )
     : ["farmers_market"];
   if (!unlockedDistricts.includes("farmers_market")) unlockedDistricts.push("farmers_market");
+
+  const VALID_ZONES = new Set(["market"]);
+  const zonesUnlocked: string[] = Array.isArray(_ss.zonesUnlocked)
+    ? _ss.zonesUnlocked.filter((z): z is string => typeof z === "string" && VALID_ZONES.has(z))
+    : ["market"];
+  if (zonesUnlocked.length === 0) zonesUnlocked.push("market");
+  const currentZoneId =
+    typeof _ss.currentZoneId === "string" && VALID_ZONES.has(_ss.currentZoneId)
+      ? _ss.currentZoneId
+      : zonesUnlocked[0] ?? "market";
+
   const derekConsistencyCounter =
     typeof _ss.derekConsistencyCounter === "number" && Number.isFinite(_ss.derekConsistencyCounter) && _ss.derekConsistencyCounter >= 0
       ? Math.floor(_ss.derekConsistencyCounter)
@@ -950,21 +964,6 @@ export function importEnvelopeText(text: string, storage: StorageLike): ImportRe
 /**
  * Remove the saved game from storage. Does NOT reset the live SimState —
  * the caller (GameScene) is responsible for reinitialising state after
- * confirming the player's intent.
- */
-export function resetSave(storage: StorageLike): void {
-  storage.removeItem(SAVE_KEY);
-  storage.removeItem(CORRUPT_KEY);
-}
-. Does NOT reset the live SimState —
- * the caller (GameScene) is responsible for reinitialising state after
- * confirming the player's intent.
- */
-export function resetSave(storage: StorageLike): void {
-  storage.removeItem(SAVE_KEY);
-  storage.removeItem(CORRUPT_KEY);
-}
-(GameScene) is responsible for reinitialising state after
  * confirming the player's intent.
  */
 export function resetSave(storage: StorageLike): void {

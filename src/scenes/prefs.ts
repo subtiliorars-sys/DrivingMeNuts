@@ -90,3 +90,25 @@ export function marginCue(marginPct: number): string {
   if (marginPct >= 45) return "tight";
   return "low";
 }
+
+/** Test-only override for coarse-pointer detection (null = use live media query). */
+let _coarsePointerOverride: boolean | null = null;
+
+/** Force coarse/fine pointer for unit tests; pass null to restore live detection. */
+export function setCoarsePointerOverride(value: boolean | null): void {
+  _coarsePointerOverride = value;
+}
+
+/**
+ * True when the primary input is touch/coarse (phone/tablet).
+ * Used to show the mobile panel dock instead of keyboard shortcut hints.
+ */
+export function isCoarsePointer(): boolean {
+  if (_coarsePointerOverride !== null) return _coarsePointerOverride;
+  if (typeof window === "undefined") return false;
+  const coarse = window.matchMedia?.("(pointer: coarse)").matches;
+  if (coarse) return true;
+  // Touch-only devices without a fine pointer (hover:none + coarse or no hover)
+  if (window.matchMedia?.("(hover: none) and (pointer: coarse)").matches) return true;
+  return false;
+}

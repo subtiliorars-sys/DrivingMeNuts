@@ -36,6 +36,7 @@ import {
   endOfDay,
   projectedDemand,
   optimumPrice,
+  pricingElasticityHint,
   buyRoasterUpgrade,
   buyQueueSlot,
   chooseRescuePath,
@@ -63,6 +64,7 @@ import {
   isReducedMotion,
   isColorblindCues,
   isLargeText,
+  isCoarsePointer,
   toggleReducedMotion,
   toggleColorblindCues,
   toggleLargeText,
@@ -234,6 +236,8 @@ export class GameScene extends Phaser.Scene {
   private txtRoastedStock!: Phaser.GameObjects.Text;
   private txtPrice!: Phaser.GameObjects.Text;
   private txtDemandHint!: Phaser.GameObjects.Text;
+  private txtElasticityNudge!: Phaser.GameObjects.Text;
+  private mobileDockGroup?: Phaser.GameObjects.Group;
   private txtDayProgress!: Phaser.GameObjects.Text;
 
   // ---- Roast slot UI (P1 has STARTING_QUEUE_SLOTS = 1) -------------------
@@ -602,6 +606,11 @@ export class GameScene extends Phaser.Scene {
     // Demand hint (updates with price)
     this.txtDemandHint = this.add.text(pX + 4, pY + 50, "", textStyleLabel());
 
+    // Pricing elasticity nudge (playtest UX — gentle, no FOMO)
+    this.txtElasticityNudge = this.add.text(pX + 4, pY + 62, "", {
+      ...textStyleLabel(), fontSize: scaledFont(5), color: "#8B6F47",
+    }).setVisible(false);
+
     // Margin hint
     this.add.text(pX + 4, pY + 74, "HEALTHY >60%", { ...textStyleLabel(), color: "#4A7C4E" });
 
@@ -754,6 +763,47 @@ export class GameScene extends Phaser.Scene {
       this.inPostReportChain = true;
       this.time.delayedCall(600, () => this.afterReportFlow());
     }
+
+    // ---- Keyboard Shortcuts (Task 4 UI/UX enhancement) --------------------
+    if (this.input && this.input.keyboard) {
+      this.input.keyboard.on("keydown", (event: KeyboardEvent) => {
+        const key = event.key.toLowerCase();
+        // Prevent key inputs when some other overlay is active (e.g. feedback)
+        if (this.feedbackOverlayOpen) return;
+
+        if (key === "b") {
+          if (this.booksModalOpen) this.closeBooksModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openBooksModal();
+        } else if (key === "u") {
+          if (this.upgradesModalOpen) this.closeUpgradesModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openUpgradesModal();
+        } else if (key === "s") {
+          if (this.supplyModalOpen) this.closeSupplyModal();
+          else if (!this.reportOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openSupplyModal();
+        } else if (key === "g") {
+          if (this.glossaryModalOpen) this.closeGlossaryModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openGlossaryModal();
+        } else if (key === "o") {
+          if (this.goalsModalOpen) this.closeGoalsModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openGoalsModal();
+        } else if (key === "d") {
+          if (this.districtModalOpen) this.closeDistrictModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openDistrictModal();
+        } else if (key === "p") {
+          if (this.settingsModalOpen) this.closeSettingsModal();
+          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openSettingsModal();
+        }
+      });
+    }
+
+    // ---- Playtest UX: mobile panel dock + desktop shortcut hint (P1 sprint) --
+    if (isCoarsePointer()) {
+      this.buildMobileDock(W, H);
+    } else {
+      this.add.text(W / 2, H - 42, "B books · S supply · U upgrades · G glossary · O goals · D routes · P settings", {
+        fontSize: scaledFont(5), color: "#8B6F47", fontFamily: "monospace",
+      }).setOrigin(0.5, 0).setAlpha(0.75);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -876,6 +926,17 @@ export class GameScene extends Phaser.Scene {
     this.txtDemandHint.setText(
       `~${demandLbsHr.toFixed(0)} lbs/hr  margin ${marginPct.toFixed(0)}%${cue}`
     ).setStyle({ ...textStyleLabel(), color: marginColor });
+
+    const elasticityHint = pricingElasticityHint(
+      this.state.sellPrice,
+      "classic_salted",
+      this.state.brandCampaignActive,
+    );
+    if (elasticityHint) {
+      this.txtElasticityNudge.setText(elasticityHint).setVisible(true);
+    } else {
+      this.txtElasticityNudge.setVisible(false);
+    }
 
     // Day progress
     const pct = Math.min(100, (this.state.dayElapsedSeconds / DAY_DURATION_SECONDS) * 100);
@@ -1841,13 +1902,15 @@ export class GameScene extends Phaser.Scene {
       rowY += 12;
     } else {
       // Header row (monospace columns)
-      const header = "Day  Revenue    COGS   Fixed     Net    Debt$   Cash end";
+      const header = "Day Weather  Revenue    COGS   Fixed     Net    Debt$   Cash end";
       this.booksModalGroup.add(this.add.text(mX + 10, rowY, header, { ...textStyleLabel(), color: "#8B6F47" }));
       rowY += 10;
       const pad = (s: string, w: number) => s.padStart(w);
+      const padR = (s: string, w: number) => s.padEnd(w);
       for (const e of ledgerRows) {
+        const weatherStr = e.weather ? (e.weather === "hot_sunny" ? "Sunny" : e.weather === "clear" ? "Clear" : "Rainy") : "—";
         const line =
-          `${pad(String(e.day), 3)}  ${pad(e.revenue.toFixed(2), 7)} ${pad(e.cogs.toFixed(2), 7)} ${pad(e.fixedCosts.toFixed(2), 7)} ${pad(e.net.toFixed(2), 7)} ${pad(e.debtService > 0 ? e.debtService.toFixed(2) : "—", 7)} ${pad(e.cashAfter.toFixed(2), 9)}`;
+          `${pad(String(e.day), 3)} ${padR(weatherStr, 7)}  ${pad(e.revenue.toFixed(2), 7)} ${pad(e.cogs.toFixed(2), 7)} ${pad(e.fixedCosts.toFixed(2), 7)} ${pad(e.net.toFixed(2), 7)} ${pad(e.debtService > 0 ? e.debtService.toFixed(2) : "—", 7)} ${pad(e.cashAfter.toFixed(2), 9)}`;
         this.booksModalGroup.add(this.add.text(mX + 10, rowY, line, {
           ...textStyleLabel(),
           color: e.net >= 0 ? "#2C2416" : "#C0392B",
@@ -2388,7 +2451,7 @@ export class GameScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
-    const mW = 280, mH = 184;
+    const mW = 280, mH = 196;
     const mX = (W - mW) / 2;
     const mY = (H - mH) / 2;
 
@@ -2431,6 +2494,16 @@ export class GameScene extends Phaser.Scene {
       ? `Supplier Lv${supLvl}: extra –${(supDisc * 100).toFixed(0)}% (loyalty, stacks)`
       : `Supplier Lv0: order more to earn loyalty discounts`;
     this.modalGroup.add(this.add.text(mX + 6, ty, supLine, { ...textStyleLabel(), color: supLvl > 0 ? "#4A7C4E" : "#8B6F47" }));
+    ty += 11;
+
+    let progressLine = "";
+    if (supLvl < 3) {
+      const nextGoal = SUPPLIER_LEVEL_THRESHOLDS[supLvl];
+      progressLine = `Progress to Lv${supLvl + 1}: ${this.state.supplierLbsPurchased}/${nextGoal} lbs`;
+    } else {
+      progressLine = `Progress: ${this.state.supplierLbsPurchased} lbs purchased (Max Lv3)`;
+    }
+    this.modalGroup.add(this.add.text(mX + 6, ty, progressLine, { ...textStyleLabel(), color: "#8B6F47" }));
     ty += 12;
 
     // Qty controls
@@ -3720,6 +3793,95 @@ export class GameScene extends Phaser.Scene {
     if (this.tutorialGroup) {
       this.tutorialGroup.destroy(true);
       this.tutorialGroup = undefined;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Playtest UX — mobile dock + panel guards (P1 sprint)
+  // ---------------------------------------------------------------------------
+
+  /** True when gameplay panels should not open (modals, report chain, feedback). */
+  private panelsBlocked(): boolean {
+    return (
+      this.reportOpen ||
+      this.supplyModalOpen ||
+      this.roastModalOpen ||
+      this.upgradesModalOpen ||
+      this.districtModalOpen ||
+      this.rescueModalOpen ||
+      this.booksModalOpen ||
+      this.goalsModalOpen ||
+      this.settingsModalOpen ||
+      this.glossaryModalOpen ||
+      this.aftermathModalOpen ||
+      this.inPostReportChain ||
+      this.feedbackOverlayOpen
+    );
+  }
+
+  /**
+   * Coarse-pointer dock: BOOKS / SUPPLY / UPGRADES / GLOSSARY / GOALS / ROUTES / SETTINGS.
+   * Native 22px height → ≥44 CSS px at 2× FIT scale (BootScene WCAG guidance).
+   */
+  private buildMobileDock(W: number, H: number): void {
+    const dockY = H - 40;
+    const dockH = 22;
+    const labels = ["BOOKS", "SUPPLY", "UPGR", "GLOSS", "GOALS", "ROUTE", "SET"] as const;
+    const actions: Array<() => void> = [
+      () => {
+        if (this.booksModalOpen) this.closeBooksModal();
+        else if (!this.panelsBlocked()) this.openBooksModal();
+      },
+      () => {
+        if (this.supplyModalOpen) this.closeSupplyModal();
+        else if (!this.panelsBlocked()) this.openSupplyModal();
+      },
+      () => {
+        if (this.upgradesModalOpen) this.closeUpgradesModal();
+        else if (!this.panelsBlocked()) this.openUpgradesModal();
+      },
+      () => {
+        if (this.glossaryModalOpen) this.closeGlossaryModal();
+        else if (!this.panelsBlocked()) this.openGlossaryModal();
+      },
+      () => {
+        if (this.goalsModalOpen) this.closeGoalsModal();
+        else if (!this.panelsBlocked()) this.openGoalsModal();
+      },
+      () => {
+        if (this.districtModalOpen) this.closeDistrictModal();
+        else if (!this.panelsBlocked()) this.openDistrictModal();
+      },
+      () => {
+        if (this.settingsModalOpen) this.closeSettingsModal();
+        else if (!this.panelsBlocked()) this.openSettingsModal();
+      },
+    ];
+
+    this.mobileDockGroup = this.add.group();
+    const btnW = W / labels.length;
+    this.mobileDockGroup.add(
+      this.add.rectangle(W / 2, dockY + dockH / 2, W, dockH, P.PANEL_BORDER),
+    );
+
+    for (let i = 0; i < labels.length; i++) {
+      const cx = btnW * i + btnW / 2;
+      const btn = this.add.rectangle(cx, dockY + dockH / 2, btnW - 2, dockH - 2, 0x556677)
+        .setStrokeStyle(1, P.PANEL_BORDER)
+        .setInteractive({ useHandCursor: true });
+      const label = this.add.text(cx, dockY + dockH / 2, labels[i], {
+        fontSize: scaledFont(5), color: "#F5DEB3", fontFamily: "monospace",
+      }).setOrigin(0.5);
+      const action = actions[i];
+      btn.on("pointerdown", () => {
+        if (this.feedbackOverlayOpen) return;
+        playButtonTick();
+        action();
+      });
+      btn.on("pointerover", () => btn.setAlpha(0.85));
+      btn.on("pointerout", () => btn.setAlpha(1.0));
+      this.mobileDockGroup.add(btn);
+      this.mobileDockGroup.add(label);
     }
   }
 
