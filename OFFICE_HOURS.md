@@ -12,6 +12,7 @@
 | [Signup form](https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/issues/new?template=playtest-signup) | Agreement + intake (public GitHub issue) |
 | [PLAYTEST.md](https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/blob/main/PLAYTEST.md) | Full onboarding guide |
 | HQ `docs/PLAYTEST_ONBOARDING.md` | Private-repo clone + feedback templates |
+| HQ `docs/WAITLIST_AND_WISHLIST.md` | Educator pilot waitlist + Steam wishlist prep (revenue sprint) |
 
 ## 5-min PR checklist
 1. CI **verify** job green  
