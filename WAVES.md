@@ -30,3 +30,4 @@ _(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`; gameplay wave
 - **DM-W8 — Playtest volunteer docs cross-link** — merged PR #38 (2026-06-14)
 - **DM-W9 — SYSTEMS_BACKLOG §2a auto-sell shipped sync** — merged PR #73 (2026-06-17)
 - **DM-W10 — Itch playtest slice (in-game feedback)** — merged PR #74 (2026-06-17)
+- **DM-W11 — Playtest waitlist + Steam wishlist prep (revenue sprint #9)** — PR pending (2026-06-28)
