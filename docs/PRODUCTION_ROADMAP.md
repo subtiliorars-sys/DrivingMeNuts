@@ -60,14 +60,26 @@ per-milestone spot-checks. M9 needs the Steam account.
   cursor/* draft" — a misclassification (this is a `claude/*` production branch,
   not a cursor draft). Reopened; work was never at risk (all commits on the
   remote branch). If it re-closes, the branch still holds everything.
-- **Wave overlap to reconcile at merge:** PR #113 (`work/ideation-sweep`) also
-  adds GameScene keyboard shortcuts and a Books **Weather** column. This branch
-  has its own keyboard layer (S/R/U/B/G/D/C/M/N/J/Enter/Esc). Whoever integrates
-  the wave should merge these deliberately rather than letting one clobber the
-  other.
-- **Branch base is behind `main`.** This branch forked at an earlier `main`;
-  `main` has since advanced. A rebase/merge-forward is deferred to an attended
-  session (it touches the same GameScene areas as #113 — best done with eyes on).
+- **Merge-forward DONE.** `main` (`af0c4c3`) was merged into this branch and all
+  conflicts resolved — the PR is now conflict-free / mergeable (was `dirty`).
+  Reconciliations:
+  - SimState gained `martaBuffActive` / `salRivalPresent` (main's NPC buff/penalty
+    feature) **alongside** this branch's `npcRelationships` — both coexist in
+    createState + persistence.
+  - **Keyboard layer unified:** kept this branch's clean `setupKeyboard()`
+    structure but adopted main's key letters + on-screen hint + mobile dock +
+    `feedbackOverlayOpen` guard. Final map: B books · S supply · U upgrades ·
+    G glossary · O goals · D routes · C regulars · P settings · R roast ·
+    N sound · J music · Esc back · Enter end-day.
+  - Picked up main's VT323 font, playtest feedback overlay, and zones shell.
+- **Upstream test consolidation (heads-up, not an action item):** main collapsed
+  several granular `wave*/reentry/integration` suites into fewer cases in its 18
+  commits, so the post-merge unit count (333) is *lower* than this branch had in
+  isolation (439). That's main's own refactor — every test this branch ADDED
+  (relationships ×18, music ×6, save-corruption guards) is intact, no test files
+  were dropped, and the full gate is green.
+- **PR #113** (`work/ideation-sweep`) remains open separately; its keyboard/Books
+  work is now superseded by this branch's unified layer where they overlapped.
 
 ---
 
