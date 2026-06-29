@@ -17,7 +17,8 @@
 
 import type { SimState, RescueDebt, PreorderObligation, LedgerEntry } from "./types.js";
 import { createState, applyOffline, checkAchievements } from "./engine.js";
-import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS, RAW_PEANUT_BASE_PRICE, WEATHER_DEFAULT_SEED } from "../data/economy.js";
+import { reviveRelationships } from "./relationships.js";
+import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS, RAW_PEANUT_BASE_PRICE, WEATHER_DEFAULT_SEED, PRICE_MIN, PRICE_MAX } from "../data/economy.js";
 import type { RecipeId, RoasterTier } from "../data/economy.js";
 import { RECIPES, ROASTER_EFFICIENCY } from "../data/economy.js";
 import { comebackTierFor, COMEBACK_TIERS } from "../data/comebacks.js";
@@ -299,6 +300,23 @@ function sanityCheck(env: SaveEnvelope): string | null {
     return `gagsSeen must be an array (not a serialized Set {})`;
   if (typeof s.unitsSoldLifetime !== "number" || s.unitsSoldLifetime < 0)
     return `unitsSoldLifetime invalid: ${s.unitsSoldLifetime}`;
+
+  // P-prod audit (HIGH): these core economy fields previously flowed through
+  // unvalidated, so a corrupt or hand-edited save could inject NaN / negative /
+  // out-of-range values that poison cost-basis math, demand, and the
+  // never-negative-cash invariant. Validate them like every other field.
+  // sellPrice is always clamped to [PRICE_MIN, PRICE_MAX] by setPrice(); a tiny
+  // epsilon absorbs float round-trip noise.
+  if (!Number.isFinite(s.sellPrice) || s.sellPrice < PRICE_MIN - 1e-6 || s.sellPrice > PRICE_MAX + 1e-6)
+    return `sellPrice invalid: ${s.sellPrice}`;
+  if (!Number.isFinite(s.rawStockLbs) || s.rawStockLbs < 0 || s.rawStockLbs > 1e9)
+    return `rawStockLbs invalid: ${s.rawStockLbs}`;
+  if (!Number.isFinite(s.roastedStockLbs) || s.roastedStockLbs < 0 || s.roastedStockLbs > 1e9)
+    return `roastedStockLbs invalid: ${s.roastedStockLbs}`;
+  if (!Number.isFinite(s.roastedCostBasisPerLb) || s.roastedCostBasisPerLb < 0 || s.roastedCostBasisPerLb > 1e6)
+    return `roastedCostBasisPerLb invalid: ${s.roastedCostBasisPerLb}`;
+  if (!Number.isFinite(s.dayElapsedSeconds) || s.dayElapsedSeconds < 0)
+    return `dayElapsedSeconds invalid: ${s.dayElapsedSeconds}`;
   if (typeof s.lifetimeEarned !== "number" || s.lifetimeEarned < 0)
     return `lifetimeEarned invalid: ${s.lifetimeEarned}`;
   if (!Array.isArray(s.recipesUnlocked))
@@ -453,6 +471,15 @@ function sanityCheck(env: SaveEnvelope): string | null {
   if (ss.weatherSeed !== undefined) {
     if (!Number.isFinite(ss.weatherSeed) || ss.weatherSeed < 0)
       return `weatherSeed invalid: ${ss.weatherSeed}`;
+  }
+
+  // RPG layer: npcRelationships, when present, must be a plain object. Per-entry
+  // validity (known id, finite 0–100) is enforced leniently by
+  // reviveRelationships on load, mirroring how gagsSeen/achievements drop
+  // unknown entries rather than rejecting the whole save.
+  if (ss.npcRelationships !== undefined) {
+    if (ss.npcRelationships === null || typeof ss.npcRelationships !== "object" || Array.isArray(ss.npcRelationships))
+      return `npcRelationships invalid: ${String(ss.npcRelationships)}`;
   }
 
   return null;
@@ -710,6 +737,8 @@ export function deserialize(json: string): SimState {
       ? Math.floor(_ss.derekLastPurchaseDay)
       : 0;
 
+  // RPG layer: revive NPC friendships (drop unknown ids, clamp 0–100).
+  const npcRelationships = reviveRelationships(_ss.npcRelationships);
   const martaBuffActive = !!_ss.martaBuffActive;
   const salRivalPresent = !!_ss.salRivalPresent;
 
@@ -759,6 +788,7 @@ export function deserialize(json: string): SimState {
     derekConsistencyCounter,
     derekLastPrice,
     derekLastPurchaseDay,
+    npcRelationships,
     martaBuffActive,
     salRivalPresent,
     rngState: sim.rngState,

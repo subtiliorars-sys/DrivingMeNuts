@@ -268,6 +268,15 @@ export interface SimState {
    */
   derekLastPurchaseDay: number;
 
+  // ---- NPC relationships (RPG layer — GDD B3) -------------------------
+  /**
+   * Friendship points (0–100) per named NPC id (see src/data/npcs.ts).
+   * Presence of a key means the player has met that NPC. Monotonic — never
+   * decays (DARK_PATTERN_GATE: relationships are warm, not a treadmill).
+   * Additive-optional in the save (absent → {}).
+   */
+  npcRelationships: Record<string, number>;
+
   // ---- NPC Buffs & Penalties (P1.5) -------------------------------------
   /** Marta's relationship buff (+10% word-of-mouth demand). */
   martaBuffActive: boolean;
