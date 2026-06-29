@@ -58,7 +58,7 @@ export function drawFoodTruck(scene: Phaser.Scene, x: number, y: number): FoodTr
   const sticker = scene.add.text(-38, 2, "Legumes ≠ Nuts", {
     fontSize: "4px",
     color: "#2C2416",
-    fontFamily: "monospace",
+    fontFamily: "VT323",
   }).setOrigin(0.5);
   c.add(sticker);
 

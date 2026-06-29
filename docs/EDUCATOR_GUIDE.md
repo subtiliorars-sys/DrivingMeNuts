@@ -230,6 +230,8 @@ The game teaches *principles*; real businesses require *professional guidance*.
 
 **Questions or feedback?** This guide can be improved. Reach out if a concept wasn't clear, a discussion prompt fell flat, or your students discovered a surprising angle we missed.
 
+**Classroom pilot waitlist:** Teachers interested in a guided pilot should read [`docs/WAITLIST_AND_WISHLIST.md`](WAITLIST_AND_WISHLIST.md#educator-classroom-pilot-waitlist), then use the [public playtest signup form](https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/issues/new?template=playtest-signup) and note **educator pilot** in optional notes.
+
 ---
 
 ## Classroom Pilot Checklist

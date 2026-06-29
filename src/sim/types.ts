@@ -238,6 +238,15 @@ export interface SimState {
    */
   unlockedDistricts: DistrictId[];
 
+  // ---- Phase 2: RPG Shell (PHASE2_PREP.md) -----------------------------
+  /**
+   * IDs of zones unlocked on the world map.
+   * Distinct from districts (districts are economic zones; zones are map nodes).
+   */
+  zonesUnlocked: string[];
+  /** Current zone ID where the truck is parked. */
+  currentZoneId: string;
+
   // ---- Derek consistency mechanic (P1.5 — GDD B2) ----------------------
   /**
    * Tracks the number of consecutive days Derek has bought from the truck.
@@ -268,6 +277,12 @@ export interface SimState {
    */
   npcRelationships: Record<string, number>;
 
+  // ---- NPC Buffs & Penalties (P1.5) -------------------------------------
+  /** Marta's relationship buff (+10% word-of-mouth demand). */
+  martaBuffActive: boolean;
+  /** Sal's rivalry penalty (-15% same-district demand). */
+  salRivalPresent: boolean;
+
   // ---- PRNG state (seeded, deterministic) -----------------------------
   /** Mutable PRNG state — updated in place by nextRand(). */
   rngState: number;
@@ -297,6 +312,8 @@ export interface LedgerEntry {
   debtService: number;
   /** Cash on hand after the day fully closed. */
   cashAfter: number;
+  /** Weather on the ended day. Additive-optional for backward compatibility. */
+  weather?: string;
 }
 
 /**
@@ -490,3 +507,8 @@ export interface SimEvent {
   daySecond: number;
   detail: Record<string, unknown>;
 }
+
+export const WORLD = {
+  width: 480,
+  height: 270,
+};

@@ -3,12 +3,11 @@
  *
  * IMPORTANT: These are stylized in-game values; real-world reference =
  * docs/BUSINESS_CURRICULUM.md. Numbers are internally consistent:
- *   - Classic Salted COGS $0.60/lb, default sell $1.50/lb → 60% gross margin.
- *     (The in-game 60% margin is the stylized teaching figure; BUSINESS_CURRICULUM §2
- *      cites 65–72% as the real-world food-truck benchmark.)
- *   - A "mispriced" day at $0.70/lb (below COGS) visibly loses money.
- *   - Daily fixed costs of $5.00 require ceil($5.00 / $0.90) = 6 lbs/day sold at
- *     default price to break even.  (gross profit/lb at $1.50 = $1.50 – $0.60 = $0.90)
+ *   - Classic Salted COGS $0.42/unit, default sell $1.50/unit → 72% gross margin.
+ *     (Matching SME_REVIEW_CHECKLIST claim 1.8 and 2.6).
+ *   - A "mispriced" day at $0.40/unit (below COGS) visibly loses money.
+ *   - Daily fixed costs of $5.00 require ceil($5.00 / $1.08) = 5 units/day sold at
+ *     default price to break even. (gross profit per unit at $1.50 = $1.50 – $0.42 = $1.08)
  *
  * Do NOT hardcode prices, rates, or multipliers elsewhere; import from here.
  */
@@ -17,13 +16,13 @@
 // Raw peanut supply
 // ---------------------------------------------------------------------------
 
-/** Base market price per lb (no discount, no season modifier). */
-export const RAW_PEANUT_BASE_PRICE = 0.40;
+/** Base market price per unit (no discount, no season modifier). */
+export const RAW_PEANUT_BASE_PRICE = 0.32;
 
-/** Minimum purchase qty in a single order (lbs). */
+/** Minimum purchase qty in a single order (units). */
 export const RAW_ORDER_MIN_LBS = 10;
 
-/** Maximum purchase qty in a single order (lbs). */
+/** Maximum purchase qty in a single order (units). */
 export const RAW_ORDER_MAX_LBS = 1_000;
 
 // ---------------------------------------------------------------------------
@@ -71,18 +70,18 @@ export interface Recipe {
 export const RECIPES: Readonly<Record<RecipeId, Recipe>> = {
   classic_salted: {
     id: "classic_salted",
-    ingredientCostPerLb: 0.20,  // salt additive; raw $0.40 + $0.20 = $0.60 COGS/lb
-    roastSecondsPerLbTinPan: 60, // 10 min for 10 lbs on Tin Pan
+    ingredientCostPerLb: 0.10,  // raw $0.32 + $0.10 = $0.42 COGS/unit (SME Claim 1.8)
+    roastSecondsPerLbTinPan: 60, // 10 min for 10 units on Tin Pan
   },
   honey_cinnamon: {
     id: "honey_cinnamon",
-    ingredientCostPerLb: 0.30,  // honey drizzle + cinnamon; $0.40 + $0.30 = $0.70 COGS/lb
-    roastSecondsPerLbTinPan: 72, // 12 min for 10 lbs
+    ingredientCostPerLb: 0.20,  // $0.32 + $0.20 = $0.52 COGS/unit
+    roastSecondsPerLbTinPan: 72, // 12 min for 10 units
   },
   ghost_pepper: {
     id: "ghost_pepper",
-    ingredientCostPerLb: 0.50,  // pepper powder + oil; $0.40 + $0.50 = $0.90 COGS/lb
-    roastSecondsPerLbTinPan: 90, // 15 min for 10 lbs
+    ingredientCostPerLb: 0.40,  // $0.32 + $0.40 = $0.72 COGS/unit
+    roastSecondsPerLbTinPan: 90, // 15 min for 10 units
   },
 } as const;
 
@@ -177,10 +176,10 @@ export const QUEUE_SLOT_COST: readonly number[] = [
   600, // buying slot index 2 (the 3rd slot)
 ] as const;
 
-/** Hard minimum batch size (lbs). */
+/** Hard minimum batch size (units). */
 export const BATCH_MIN_LBS = 1;
 
-/** Hard maximum batch size (lbs). */
+/** Hard maximum batch size (units). */
 export const BATCH_MAX_LBS = 100;
 
 // ---------------------------------------------------------------------------
@@ -212,21 +211,39 @@ export const DAY_NAMES: readonly string[] = [
 
 // ---------------------------------------------------------------------------
 // Weather  (GDD C3 — "Weather (rainy: −20%, hot sunny: +15%)")
-//
-// FOUNDATION ONLY (this wave): the constants + a pure, deterministic
-// weatherForDay() + a per-save weatherSeed. It is NOT yet wired into the demand
-// curve — wiring it into demandLbsPerHour is an economy-rippling change deferred
-// to an attended session (docs/SYSTEMS_BACKLOG.md §1). Until wired, weather has
-// ZERO gameplay effect; this just makes the (forecastable, predictable) calendar
-// available so the eventual wiring + a forecast UI are a small, safe step.
-//
-// Determinism: weatherForDay is a PURE hash of (dayNumber, seed) — it does NOT
-// consume the live PRNG stream (that would perturb the demand jitter and break
-// determinism tests). Because it's a pure function of the day, a 1-day forecast
-// is trivial: weatherForDay(dayNumber + 1, seed).
 // ---------------------------------------------------------------------------
 
 export type Weather = "clear" | "hot_sunny" | "rainy";
+
+// ---------------------------------------------------------------------------
+// Seasonality  (BUSINESS_CURRICULUM §7 — "Seasonality (Summer: +40%, Winter: -40%)")
+// ---------------------------------------------------------------------------
+
+export type Season = "spring" | "summer" | "fall" | "winter";
+
+/** Demand multiplier per season (BUSINESS_CURRICULUM §7). */
+export const SEASON_FACTOR: Readonly<Record<Season, number>> = {
+  spring: 1.20, // +20% (recovery, farmers markets return)
+  summer: 1.40, // +40% (festivals, parks packed)
+  fall:   1.15, // +15% (harvest fairs)
+  winter: 0.60, // −40% (foot traffic drops, hard cold)
+} as const;
+
+/**
+ * Return the season for a given 1-indexed game day.
+ * One game year = 364 days (52 weeks exactly).
+ *   Winter: Day 337–364 and 1–56   (Nov–Feb approx)
+ *   Spring: Day 57–147             (Mar–May)
+ *   Summer: Day 148–238            (Jun–Aug)
+ *   Fall:   Day 239–336            (Sep–Oct)
+ */
+export function seasonForDay(dayNumber: number): Season {
+  const d = ((dayNumber - 1) % 364) + 1;
+  if (d >= 57 && d <= 147) return "spring";
+  if (d >= 148 && d <= 238) return "summer";
+  if (d >= 239 && d <= 336) return "fall";
+  return "winter";
+}
 
 /** Demand multiplier per weather state (GDD C3). Applied ON TOP of the day
  *  factor when wiring lands; 1.0 today (unwired). */
@@ -267,33 +284,32 @@ export function weatherForDay(dayNumber: number, seed: number): Weather {
 // Pricing bounds  (UI_WIREFRAMES §2 slider spec)
 // ---------------------------------------------------------------------------
 
-export const PRICE_MIN = 0.75;  // $ per lb — floor enforced by UI slider
-export const PRICE_MAX = 2.50;  // $ per lb — ceiling enforced by UI slider
+export const PRICE_MIN = 0.75;  // $ per unit — floor enforced by UI slider
+export const PRICE_MAX = 2.50;  // $ per unit — ceiling enforced by UI slider
 
-/** Default sell price at game start — targets ~60 % gross margin on classic_salted. */
+/** Default sell price at game start — targets ~72% gross margin on classic_salted. */
 export const DEFAULT_SELL_PRICE = 1.50;
 
 // ---------------------------------------------------------------------------
 // Demand curve — Farmers' Market, Classic Salted  (GDD C3, Appendix)
-// Demand (lbs/hr) = BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)
-// At base price ($1.20):  demand = 20 lbs/hr exactly.
+// Demand (units/hr) = BASE_LBS_PER_HOUR − DEMAND_SLOPE × (price − BASE_PRICE)
+// At base price ($1.20):  demand = 20 units/hr exactly.
 // Demand is clamped to [0, MAX_DEMAND_LBS_PER_HOUR].
 //
 // Profit maximisation (gross profit, ignoring fixed costs):
-//   π(p) = (p − COGS) × demand(p) = (p − 0.60) × (20 − 10 × (p − 1.20))
-//   dπ/dp = 0  →  p* = (20/10 + 1.20 + 0.60) / 2 = 1.90
-//   p* = $1.90 is strictly interior: PRICE_MIN ($0.75) < $1.90 < PRICE_MAX ($2.50).
+//   π(p) = (p − COGS) × demand(p) = (p − 0.42) × (20 − 10 × (p − 1.20))
+//   dπ/dp = 0  →  p* = (20/10 + 1.20 + 0.42) / 2 = 1.81
+//   p* = $1.81 is strictly interior: PRICE_MIN ($0.75) < $1.81 < PRICE_MAX ($2.50).
 // ---------------------------------------------------------------------------
 
 /** Base (reference) price for demand curve calibration. */
 export const DEMAND_BASE_PRICE = 1.20;
 
-/** Demand at base price, lbs per simulated hour. */
+/** Demand at base price, units per simulated hour. */
 export const DEMAND_BASE_LBS_PER_HOUR = 20;
 
 /**
- * Slope: how many lbs/hr demand falls per $1 increase in price above base price.
- * SLOPE = 10 gives interior profit peak at p* = $1.90 (see derivation above).
+ * Slope: how many units/hr demand falls per $1 increase in price above base price.
  */
 export const DEMAND_SLOPE = 10;
 
@@ -305,7 +321,7 @@ export const DEMAND_MAX_LBS_PER_HOUR = 40;
 // ---------------------------------------------------------------------------
 
 /** Unique identifier for each playable district. */
-export type DistrictId = "farmers_market" | "office_quarter";
+export type DistrictId = "farmers_market" | "office_quarter" | "residential" | "university" | "park" | "boardwalk" | "downtown";
 
 /** Per-district configuration for demand curves, permit costs, and lunch rush. */
 export interface DistrictConfig {
@@ -341,6 +357,56 @@ export const DISTRICT_CONFIGS: Readonly<Record<DistrictId, DistrictConfig>> = {
     permitCost: 300,
     lunchRushHour: 12,      // noon spike
     lunchRushBoost: 1.3,
+  },
+  residential: {
+    id: "residential",
+    label: "Residential Lane",
+    baseDemandLbsPerHour: 12,
+    basePrice: 1.30,
+    demandSlope: 12,
+    permitCost: 100,
+    lunchRushHour: 0,       // peaks at am/pm commute instead
+    lunchRushBoost: 1.0,
+  },
+  university: {
+    id: "university",
+    label: "University Quad",
+    baseDemandLbsPerHour: 25,
+    basePrice: 1.10,
+    demandSlope: 15,        // very price sensitive students
+    permitCost: 200,
+    lunchRushHour: 12,
+    lunchRushBoost: 1.4,
+  },
+  park: {
+    id: "park",
+    label: "City Park",
+    baseDemandLbsPerHour: 18,
+    basePrice: 1.40,
+    demandSlope: 9,
+    permitCost: 150,
+    lunchRushHour: 0,
+    lunchRushBoost: 1.0,
+  },
+  boardwalk: {
+    id: "boardwalk",
+    label: "Ocean Boardwalk",
+    baseDemandLbsPerHour: 30,
+    basePrice: 1.80,
+    demandSlope: 7,         // high willingness to pay
+    permitCost: 500,
+    lunchRushHour: 18,      // evening spike (6pm)
+    lunchRushBoost: 1.5,
+  },
+  downtown: {
+    id: "downtown",
+    label: "Downtown Hub",
+    baseDemandLbsPerHour: 22,
+    basePrice: 2.00,
+    demandSlope: 6,         // premium corporate crowd
+    permitCost: 800,
+    lunchRushHour: 12,
+    lunchRushBoost: 1.2,
   },
 } as const;
 
@@ -391,8 +457,8 @@ export const SIM_TIME_SCALE = 60;
 // ---------------------------------------------------------------------------
 // Daily fixed costs  (BUSINESS_CURRICULUM §8 break-even reference)
 // $5.00/day covers prorated permit + fuel/propane at P1 scale.
-// At default price ($1.50) and COGS ($0.60), gross profit/lb = $0.90.
-// Break-even: ceil($5.00 / $0.90) = 6 lbs/day sold. Very achievable — good for onboarding.
+// At default price ($1.50) and COGS ($0.42), gross profit/unit = $1.08.
+// Break-even: ceil($5.00 / $1.08) = 5 units/day sold. Very achievable — good for onboarding.
 // ---------------------------------------------------------------------------
 
 export const DAILY_FIXED_COSTS = 5.00;
@@ -404,7 +470,7 @@ export const DAILY_FIXED_COSTS = 5.00;
 /** Cash the player begins with. */
 export const STARTING_CASH = 50.00;
 
-/** Raw peanuts (lbs) the player begins with. */
+/** Raw peanuts (units) the player begins with. */
 export const STARTING_RAW_STOCK_LBS = 20;
 
 // ---------------------------------------------------------------------------
@@ -448,7 +514,7 @@ export const RESCUE_ARC_CASH_THRESHOLD = 25;
 //   Bounds guaranteed by tests: ≥1 and ≤6 on a full default-price day.
 // ---------------------------------------------------------------------------
 
-/** Emit one 'gag' SimEvent per this many cumulative lbs sold (whole-game counter). */
+/** Emit one 'gag' SimEvent per this many cumulative units sold (whole-game counter). */
 export const GAG_EVERY_N_LBS_SOLD = 80;
 
 // ---------------------------------------------------------------------------
@@ -458,15 +524,15 @@ export const GAG_EVERY_N_LBS_SOLD = 80;
 
 /** Path 1 — Old Joe Fair Loan: cash advanced. */
 export const RESCUE_LOAN_PRINCIPAL = 75;
-/** Path 1 — Old Joe Fair Loan: flat interest rate per season (5%). */
-export const RESCUE_LOAN_FEE_RATE = 0.05;
+/** Path 1 — Old Joe Fair Loan: flat interest rate per period (0.3% ≈ 8% annual). */
+export const RESCUE_LOAN_FEE_RATE = 0.003;
 /** Path 1 — Old Joe Fair Loan: repayment window in game-days. */
 export const RESCUE_LOAN_DUE_DAYS = 14;
 
-/** Path 2 — Marta's Supplier Credit: raw peanuts credited (lbs at $0.40 base). */
+/** Path 2 — Marta's Supplier Credit: raw peanuts credited (units at $0.32 base). */
 export const RESCUE_CREDIT_RAW_LBS = 125;
-/** Path 2 — Marta's Supplier Credit: dollar amount due (= 125 lbs × $0.40). */
-export const RESCUE_CREDIT_AMOUNT_DUE = 50;
+/** Path 2 — Marta's Supplier Credit: dollar amount due (= 125 units × $0.32). */
+export const RESCUE_CREDIT_AMOUNT_DUE = 40;
 /** Path 2 — Marta's Supplier Credit: repayment window in game-days. */
 export const RESCUE_CREDIT_DUE_DAYS = 14;
 
@@ -491,9 +557,8 @@ export const RESCUE_PAYDAY_DUE_DAYS = 14;
 // holds: a new offer only appears AFTER the prior crisis is fully resolved).
 // On a REPEAT entry (the player has been through the arc before), terms
 // escalate — teaching that repeated borrowing is riskier and costlier:
-//   - Old Joe's loan fee rises 5% → 7%.
-//   - Derek's pre-order scales up: 100 lbs/$110 → 200 lbs/$220 (bigger infusion,
-//     bigger delivery challenge; stays ≤ $250 per the script's P2-scope cap).
+//   - Old Joe's loan fee rises 0.3% → 0.5%.
+//   - Derek's pre-order scales up: 100 lbs/$110 → 200 lbs/$220
 //   - Marta's credit terms are UNCHANGED — the escalation is a relationship note
 //     in dialogue ("I vouched for you"), not harsher numbers.
 //   - QuickNut (payday) is UNCHANGED — it is already the cautionary option.
@@ -502,8 +567,8 @@ export const RESCUE_PAYDAY_DUE_DAYS = 14;
 // cash pump (the RT-1 concern); it is purely a cost increase + bigger obligation.
 // ---------------------------------------------------------------------------
 
-/** Re-entry: Old Joe's loan fee rate on a repeat crisis (vs 5% first time). */
-export const RESCUE_LOAN_FEE_RATE_REPEAT = 0.07;
+/** Re-entry: Old Joe's loan fee rate on a repeat crisis (0.5% vs 0.3%). */
+export const RESCUE_LOAN_FEE_RATE_REPEAT = 0.005;
 
 /** Re-entry: Derek's pre-order size on a repeat crisis (lbs to deliver). */
 export const RESCUE_PREORDER_LBS_REPEAT = 200;

@@ -1,14 +1,22 @@
 # Playtest onboarding — Driving Me Nuts (HQ)
 
 **Audience:** Closed-beta volunteers with repo or build access  
-**Updated:** 2026-06-14  
+**Updated:** 2026-06-28  
 **Public volunteer link (share this):** https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/blob/main/PLAYTEST.md
+
+**Educator pilots & Steam wishlist (owner lanes):** [`docs/WAITLIST_AND_WISHLIST.md`](WAITLIST_AND_WISHLIST.md)
 
 **Signup form (creates GitHub issue):** https://github.com/subtiliorars-sys/DrivingMeNuts---Preview/issues/new?template=playtest-signup
 
 **Private full record (after repo invite):** https://github.com/subtiliorars-sys/DrivingMeNuts/issues/new?template=playtest-signup
 
 **Session feedback (private, after invite):** https://github.com/subtiliorars-sys/DrivingMeNuts/issues/new?template=playtest-feedback
+
+**In-game (browser / itch):** tap **FEEDBACK** on the bottom HUD or in **Settings** — opens a pre-filled GitHub form (no URL copy-paste).
+
+**Public play links (advertise these only):**
+- itch.io: https://subtiliorars.itch.io/jimmythehat-driving-me-nuts
+- GitHub Pages: https://subtiliorars-sys.github.io/DrivingMeNuts/
 
 ---
 
@@ -114,3 +122,4 @@ Nits / polish:
 | [`docs/PLAYTEST-2026-06-13.md`](PLAYTEST-2026-06-13.md) | Example automated smoke scope |
 | [`docs/DARK_PATTERN_GATE.md`](DARK_PATTERN_GATE.md) | What we refuse to ship (pressure/FOMO) |
 | [`docs/ALLERGY_REVIEWER_BRIEF.md`](ALLERGY_REVIEWER_BRIEF.md) | Separate allergy review track |
+| [`docs/WAITLIST_AND_WISHLIST.md`](WAITLIST_AND_WISHLIST.md) | Educator pilot waitlist + Steam wishlist prep |

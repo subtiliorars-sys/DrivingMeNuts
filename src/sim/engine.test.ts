@@ -19,6 +19,8 @@ import {
   setPrice,
   endOfDay,
   applyOffline,
+  optimumPrice,
+  pricingElasticityHint,
 } from "./engine.js";
 import {
   DEFAULT_SELL_PRICE,
@@ -81,18 +83,18 @@ describe("determinism", () => {
 // ---------------------------------------------------------------------------
 // 2. Margin math — worked example
 //
-// Setup: 20 lbs raw stock (free at game start), roast 10 lbs Classic Salted.
-// COGS per lb:  RAW_PEANUT_BASE_PRICE ($0.40) + ingredientCostPerLb ($0.20) = $0.60
+// Setup: 20 units raw stock (free at game start), roast 10 units Classic Salted.
+// COGS per unit: RAW_PEANUT_BASE_PRICE ($0.32) + ingredientCostPerLb ($0.10) = $0.42
 // Sell price:   $1.50 (DEFAULT_SELL_PRICE)
-// Gross margin: ($1.50 – $0.60) / $1.50 = 60.0%
+// Gross margin: ($1.50 – $0.42) / $1.50 = 72.0%
 //
-// If we sell exactly 10 lbs at $1.50:
+// If we sell exactly 10 units at $1.50:
 //   Revenue     = 10 × $1.50 = $15.00
-//   COGS        = 10 × $0.60 = $6.00
-//   Gross Profit = $15.00 – $6.00 = $9.00
-//   Gross Margin = $9.00 / $15.00 = 60.0%
+//   COGS        = 10 × $0.42 = $4.20
+//   Gross Profit = $15.00 – $4.20 = $10.80
+//   Gross Margin = $10.80 / $15.00 = 72.0%
 //   Fixed Costs  = $5.00 (DAILY_FIXED_COSTS)
-//   Net          = $9.00 – $5.00 = $4.00
+//   Net          = $10.80 – $5.00 = $5.80
 // ---------------------------------------------------------------------------
 
 describe("margin math (worked example)", () => {
@@ -101,21 +103,21 @@ describe("margin math (worked example)", () => {
   const SELL_LBS = 10;
   const SELL_PRICE = DEFAULT_SELL_PRICE; // $1.50
   const EXPECTED_REVENUE = SELL_LBS * SELL_PRICE;       // $15.00
-  const EXPECTED_COGS    = SELL_LBS * COGS_PER_LB;      // $6.00
-  const EXPECTED_GROSS   = EXPECTED_REVENUE - EXPECTED_COGS; // $9.00
-  const EXPECTED_MARGIN  = EXPECTED_GROSS / EXPECTED_REVENUE; // 0.60
-  const EXPECTED_NET     = EXPECTED_GROSS - DAILY_FIXED_COSTS; // $4.00
+  const EXPECTED_COGS    = SELL_LBS * COGS_PER_LB;      // $4.20
+  const EXPECTED_GROSS   = EXPECTED_REVENUE - EXPECTED_COGS; // $10.80
+  const EXPECTED_MARGIN  = EXPECTED_GROSS / EXPECTED_REVENUE; // 0.72
+  const EXPECTED_NET     = EXPECTED_GROSS - DAILY_FIXED_COSTS; // $5.80
 
-  it("COGS per lb is $0.60 for Classic Salted", () => {
-    expect(COGS_PER_LB).toBeCloseTo(0.60, 5);
+  it("COGS per unit is $0.42 for Classic Salted", () => {
+    expect(COGS_PER_LB).toBeCloseTo(0.42, 5);
   });
 
-  it("gross margin at default price is 60%", () => {
-    expect(EXPECTED_MARGIN).toBeCloseTo(0.60, 5);
+  it("gross margin at default price is 72%", () => {
+    expect(EXPECTED_MARGIN).toBeCloseTo(0.72, 5);
   });
 
-  it("net profit for 10 lbs sold at $1.50 minus $5 fixed = $4.00", () => {
-    expect(EXPECTED_NET).toBeCloseTo(4.00, 5);
+  it("net profit for 10 units sold at $1.50 minus $5 fixed = $5.80", () => {
+    expect(EXPECTED_NET).toBeCloseTo(5.80, 5);
   });
 
   it("endOfDay report reflects the worked-example numbers", () => {
@@ -138,10 +140,10 @@ describe("margin math (worked example)", () => {
 
   it("mispriced day (price below COGS) produces negative net", () => {
     const state = createState(1);
-    const misPrice = 0.50; // below $0.60 COGS
+    const misPrice = 0.40; // below $0.42 COGS
     const sellLbs = 10;
-    state.dayStats.revenue   = sellLbs * misPrice;          // $5.00
-    state.dayStats.cogsTotal = sellLbs * COGS_PER_LB;       // $6.00
+    state.dayStats.revenue   = sellLbs * misPrice;
+    state.dayStats.cogsTotal = sellLbs * COGS_PER_LB;
     state.dayStats.unitsSold = sellLbs;
 
     const report = endOfDay(state);
@@ -155,11 +157,6 @@ describe("margin math (worked example)", () => {
 // ---------------------------------------------------------------------------
 
 describe("price elasticity", () => {
-  /**
-   * Helper: sell for one in-game hour (3600 ticks of 1s each) at a given price.
-   * Returns units sold. Uses seed=1 for reproducibility.
-   * The roast is pre-loaded so stock is never the bottleneck.
-   */
   function simulateHourSales(price: number): number {
     const state = createState(1);
     // Give plenty of roasted stock directly
@@ -184,11 +181,10 @@ describe("price elasticity", () => {
     }
   });
 
-  it("profit peak is interior (p*=$1.90 earns more than PRICE_MIN or PRICE_MAX)", () => {
-    // F2: demand = BASE − SLOPE × (p − base); COGS = $0.60.
-    // dπ/dp = 0 → p* = (BASE/SLOPE + base + COGS) / 2 = (20/10 + 1.20 + 0.60) / 2 = 1.90
-    // Assert: profit at $1.90 > profit at $0.75 AND > profit at $2.50 (strict interior max).
-    // (dayStats.cogsTotal tracks COGS at sale via cost basis, so profit = revenue − cogsTotal)
+  it("profit peak is interior (p*=$1.81 earns more than PRICE_MIN or PRICE_MAX)", () => {
+    // F2: demand = BASE − SLOPE × (p − base); COGS = $0.42.
+    // dπ/dp = 0 → p* = (BASE/SLOPE + base + COGS) / 2 = (20/10 + 1.20 + 0.42) / 2 = 1.81
+    // Assert: profit at $1.81 > profit at $0.75 AND > profit at $2.50 (strict interior max).
 
     function simulateHourProfit(price: number): number {
       const state = createState(1);
@@ -198,12 +194,34 @@ describe("price elasticity", () => {
       return state.dayStats.revenue - state.dayStats.cogsTotal;
     }
 
-    const profitAtPeak  = simulateHourProfit(1.90);
+    const profitAtPeak  = simulateHourProfit(1.81);
     const profitAtFloor = simulateHourProfit(PRICE_MIN);
     const profitAtCeil  = simulateHourProfit(PRICE_MAX);
 
     expect(profitAtPeak).toBeGreaterThan(profitAtFloor);
     expect(profitAtPeak).toBeGreaterThan(profitAtCeil);
+  });
+});
+
+describe("pricingElasticityHint", () => {
+  it("returns null near the profit-maximising price", () => {
+    const opt = optimumPrice("classic_salted");
+    expect(pricingElasticityHint(opt, "classic_salted")).toBeNull();
+    expect(pricingElasticityHint(opt + 0.10, "classic_salted")).toBeNull();
+  });
+
+  it("nudges when price is well above optimum", () => {
+    const opt = optimumPrice("classic_salted");
+    const hint = pricingElasticityHint(2.20, "classic_salted");
+    expect(hint).toMatch(/Above demand sweet spot/);
+    expect(hint).toMatch(new RegExp(`\\$${opt.toFixed(2).replace(".", "\\.")}`));
+  });
+
+  it("nudges when price is well below optimum", () => {
+    const opt = optimumPrice("classic_salted");
+    const hint = pricingElasticityHint(1.00, "classic_salted");
+    expect(hint).toMatch(/Below profit sweet spot/);
+    expect(hint).toMatch(new RegExp(`\\$${opt.toFixed(2).replace(".", "\\.")}`));
   });
 });
 
@@ -263,7 +281,7 @@ describe("no-bankruptcy invariant", () => {
   it("cash never goes below 0 after a costly buy order", () => {
     const state = createState(1);
     state.cash = 1.00; // nearly broke
-    // Try to buy 1000 lbs at $0.40/lb = $400 — far more than $1
+    // Try to buy 1000 lbs at $0.32/unit = $320 — far more than $1
     const result = buyRaw(state, 1000);
     expect(result).toBeNull(); // purchase rejected — insufficient funds
     expect(state.cash).toBeGreaterThanOrEqual(0);
@@ -363,16 +381,16 @@ describe("full day cycle integration", () => {
     const before = state.cash;
     const ev = buyRaw(state, 100);
     expect(ev).not.toBeNull();
-    // 100 lbs at $0.40 × (1–0.05) = $0.38/lb → $38.00
-    expect(before - state.cash).toBeCloseTo(38.00, 5);
+    // 100 units at $0.32 × (1–0.05) = $0.304/unit → $30.40
+    expect(before - state.cash).toBeCloseTo(30.40, 5);
   });
 
   it("startRoast deducts raw stock and ingredient cost immediately", () => {
     const state = createState(1);
     state.cash = STARTING_CASH;
-    state.rawStockLbs = STARTING_RAW_STOCK_LBS; // 20 lbs
+    state.rawStockLbs = STARTING_RAW_STOCK_LBS; // 20 units
 
-    const ingredientCostFor10 = RECIPES["classic_salted"].ingredientCostPerLb * 10; // $2.00
+    const ingredientCostFor10 = RECIPES["classic_salted"].ingredientCostPerLb * 10; // $1.00
     const ev = startRoast(state, 0, "classic_salted", 10);
 
     expect(ev).not.toBeNull();
@@ -386,8 +404,3 @@ describe("full day cycle integration", () => {
 // ---------------------------------------------------------------------------
 
 // TODO (P2): Implement and test roasted-stock spoilage per GDD C2/Appendix.
-//   - Raw peanuts stored >60 days degrade; >90 days = 100% loss.
-//   - Roasted stock spoilage is a separate simpler model (shorter shelf-life).
-//   - Deferred because P1 operates within a single day slice; cross-day inventory
-//     persistence and the day-counter-based spoilage check are P2 scope.
-//   See also: UI_WIREFRAMES §3 spoilage warning tooltip.

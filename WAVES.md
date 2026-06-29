@@ -10,19 +10,7 @@ Branch prefix: `automation/wave-*`. Never merge your own PR.
 
 ## Active queue
 
-### Wave DM-W8 — Playtest volunteer docs cross-link
-**Status:** `active`  
-**Branch:** `automation/wave-dm-w8-playtest-docs`
-
-**Acceptance:**
-- [ ] `START_HERE.md` links public signup form + PLAYTEST.md
-- [ ] `OFFICE_HOURS.md` documents volunteer intake + `npm run qa:browser` gate
-- [ ] `WAVES.md` marks DM-W8 done with PR link on merge
-- [ ] Docs only — `npm run verify` green
-
----
-
-_(Phase 2 prep: `docs/PHASE2_PREP.md` — gameplay waves blocked until P1 exit.)_
+_(Queue idle — Phase 2 prep documented in `docs/PHASE2_PREP.md`; gameplay waves blocked until P1 exit. Next candidate when unblocked: **DM-P2-W2** truck movement prototype.)_
 
 ## Blocked (queue owner — do not implement)
 - Marketing campaign tiers (A4) — owner decision
@@ -39,3 +27,7 @@ _(Phase 2 prep: `docs/PHASE2_PREP.md` — gameplay waves blocked until P1 exit.)
 - **DM-W5 — SYSTEMS_BACKLOG §3 sync** — PR #32 (2026-06-13)
 - **DM-W6 — Phase 2 RPG shell prep** — `docs/PHASE2_PREP.md` on `main`
 - **DM-W7 — WAVES registry sync** — merged PR #35 (2026-06-14)
+- **DM-W8 — Playtest volunteer docs cross-link** — merged PR #38 (2026-06-14)
+- **DM-W9 — SYSTEMS_BACKLOG §2a auto-sell shipped sync** — merged PR #73 (2026-06-17)
+- **DM-W10 — Itch playtest slice (in-game feedback)** — merged PR #74 (2026-06-17)
+- **DM-W11 — Playtest waitlist + Steam wishlist prep (revenue sprint #9)** — PR #117 (2026-06-28)

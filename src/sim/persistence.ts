@@ -405,6 +405,8 @@ function sanityCheck(env: SaveEnvelope): string | null {
           return `ledger entry ${field} out of range: ${e[field]}`;
       }
       if (e.day < 1) return `ledger entry day invalid: ${e.day}`;
+      if (e.weather !== undefined && typeof e.weather !== "string")
+        return `ledger entry weather invalid: ${e.weather}`;
     }
   }
 
@@ -644,6 +646,7 @@ export function deserialize(json: string): SimState {
         net: Number(e.net),
         debtService: Number(e.debtService),
         cashAfter: Number(e.cashAfter),
+        weather: e.weather !== undefined ? String(e.weather) : undefined,
       }))
     : [];
 
@@ -708,6 +711,17 @@ export function deserialize(json: string): SimState {
       )
     : ["farmers_market"];
   if (!unlockedDistricts.includes("farmers_market")) unlockedDistricts.push("farmers_market");
+
+  const VALID_ZONES = new Set(["market"]);
+  const zonesUnlocked: string[] = Array.isArray(_ss.zonesUnlocked)
+    ? _ss.zonesUnlocked.filter((z): z is string => typeof z === "string" && VALID_ZONES.has(z))
+    : ["market"];
+  if (zonesUnlocked.length === 0) zonesUnlocked.push("market");
+  const currentZoneId =
+    typeof _ss.currentZoneId === "string" && VALID_ZONES.has(_ss.currentZoneId)
+      ? _ss.currentZoneId
+      : zonesUnlocked[0] ?? "market";
+
   const derekConsistencyCounter =
     typeof _ss.derekConsistencyCounter === "number" && Number.isFinite(_ss.derekConsistencyCounter) && _ss.derekConsistencyCounter >= 0
       ? Math.floor(_ss.derekConsistencyCounter)
@@ -725,6 +739,8 @@ export function deserialize(json: string): SimState {
 
   // RPG layer: revive NPC friendships (drop unknown ids, clamp 0–100).
   const npcRelationships = reviveRelationships(_ss.npcRelationships);
+  const martaBuffActive = !!_ss.martaBuffActive;
+  const salRivalPresent = !!_ss.salRivalPresent;
 
   const state: SimState = {
     cash: sim.cash,
@@ -767,10 +783,14 @@ export function deserialize(json: string): SimState {
     supplierLbsPurchased,
     currentDistrict,
     unlockedDistricts,
+    zonesUnlocked,
+    currentZoneId,
     derekConsistencyCounter,
     derekLastPrice,
     derekLastPurchaseDay,
     npcRelationships,
+    martaBuffActive,
+    salRivalPresent,
     rngState: sim.rngState,
   };
 

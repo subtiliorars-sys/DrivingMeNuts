@@ -44,8 +44,9 @@ Customers pedantic about legumes? That's a gameplay event. Time management beats
 perfect politeness.
 
 WHY FREE ON ITCH?
-Discovery + educator feedback. GitHub Pages demo stays in sync; itch is the
-friendly store page when you're ready.
+Discovery + educator feedback. Play in browser — use the in-game FEEDBACK button
+(no copy-paste). Sign up on the title screen or PLAYTEST.md.
+Educator pilots + future Steam wishlist: see HQ docs/WAITLIST_AND_WISHLIST.md.
 
 Also in the JimmyTheHat fleet: PixelSports hub, Yes Man, No Is a Complete Sentence.
 ```

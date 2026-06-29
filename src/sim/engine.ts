@@ -48,6 +48,8 @@ import {
   DAY_NAMES,
   WEATHER_FACTOR,
   weatherForDay,
+  seasonForDay,
+  SEASON_FACTOR,
   RESCUE_LOAN_PRINCIPAL,
   RESCUE_LOAN_FEE_RATE,
   RESCUE_LOAN_DUE_DAYS,
@@ -198,12 +200,23 @@ function demandLbsPerHour(price: number, state: SimState, demandMult = 1.0, dayF
   const basePrice = params ? params.basePrice : DEMAND_BASE_PRICE;
   const slope = params ? params.slope : DEMAND_SLOPE;
   const brandShift = state.brandCampaignActive ? DEMAND_BASE_PRICE * BRAND_CAMPAIGN_PRICE_TOLERANCE : 0;
+  
+  // P2: Boardwalk/Downtown get an extra +15% brand bonus
+  const brandAreaBonus = (state.brandCampaignActive && (district === "boardwalk" || district === "downtown")) ? 0.15 : 0.0;
+  
   const effectiveBase = basePrice + brandShift;
   const base = baseLbs - slope * (price - effectiveBase);
   // ±10% jitter (two uniform samples averaged → triangular distribution)
   const jitter = ((nextRand(state) + nextRand(state)) / 2 - 0.5) * 0.20;
   const lunchRush = lunchRushFactor(state, district);
-  return clamp(base * (1 + jitter) * demandMult * dayFactor * weatherFactor * lunchRush, 0, DEMAND_MAX_LBS_PER_HOUR);
+  const season = seasonForDay(state.dayNumber);
+  const seasonFactor = SEASON_FACTOR[season];
+  
+  // NPC Modifiers
+  const martaFactor = state.martaBuffActive ? 1.10 : 1.0;
+  const salFactor = state.salRivalPresent ? 0.85 : 1.0;
+
+  return clamp(base * (1 + jitter + brandAreaBonus) * demandMult * dayFactor * weatherFactor * lunchRush * seasonFactor * martaFactor * salFactor, 0, DEMAND_MAX_LBS_PER_HOUR);
 }
 
 /**
@@ -342,12 +355,17 @@ export function createState(seed = 1): SimState {
     // P1.5: districts
     currentDistrict: "farmers_market",
     unlockedDistricts: ["farmers_market"],
+    // Phase 2: RPG shell
+    zonesUnlocked: ["market"],
+    currentZoneId: "market",
     // P1.5: Derek consistency mechanic
     derekConsistencyCounter: 0,
     derekLastPrice: null,
     derekLastPurchaseDay: 0,
     // RPG layer: no NPCs met yet.
     npcRelationships: {},
+    martaBuffActive: false,
+    salRivalPresent: false,
     rngState: seed >>> 0,
   };
 }
@@ -979,6 +997,7 @@ export function endOfDay(state: SimState): DayReport {
     net,
     debtService,
     cashAfter,
+    weather: weatherForDay(endedDay, state.weatherSeed),
   };
   state.ledger.push(ledgerEntry);
   if (state.ledger.length > LEDGER_MAX_DAYS) {
@@ -1453,6 +1472,29 @@ export function optimumPrice(recipe: RecipeId, campaignActive = false): number {
   const cogs = RAW_PEANUT_BASE_PRICE + RECIPES[recipe].ingredientCostPerLb;
   const pStar = (DEMAND_BASE_LBS_PER_HOUR / DEMAND_SLOPE + effectiveBasePrice(campaignActive) + cogs) / 2;
   return clamp(parseFloat(pStar.toFixed(2)), PRICE_MIN, PRICE_MAX);
+}
+
+/** Dollars away from optimum before the HUD shows a pricing nudge (playtest UX). */
+export const PRICING_NUDGE_THRESHOLD = 0.12;
+
+/**
+ * One-line pricing elasticity hint for the HUD price panel.
+ * Returns null when price is near the profit-maximising sweet spot — no nagging.
+ * Voice: educational, no FOMO (DARK_PATTERN_GATE §A).
+ */
+export function pricingElasticityHint(
+  price: number,
+  recipe: RecipeId = "classic_salted",
+  campaignActive = false,
+  threshold = PRICING_NUDGE_THRESHOLD,
+): string | null {
+  const opt = optimumPrice(recipe, campaignActive);
+  const delta = price - opt;
+  if (Math.abs(delta) < threshold) return null;
+  if (delta > 0) {
+    return `Above demand sweet spot (~$${opt.toFixed(2)}/lb) — sales may slow.`;
+  }
+  return `Below profit sweet spot (~$${opt.toFixed(2)}/lb) — demand up, margin thinner.`;
 }
 
 // ---------------------------------------------------------------------------
