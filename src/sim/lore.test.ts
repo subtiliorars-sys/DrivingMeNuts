@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import { createState, tick } from "./engine.js";
-import { LORE_LINES, LORE_BY_ID } from "../data/lore.js";
+import { LORE_LINES, LORE_BY_ID, LORE_TOTAL_COUNT } from "../data/lore.js";
 import { DAY_DURATION_SECONDS, GAG_EVERY_N_LBS_SOLD } from "../data/economy.js";
 import type { SimEvent, SimState } from "./types.js";
 
@@ -101,6 +101,16 @@ describe("gag lore id validity", () => {
 
   it("LORE_LINES has at least 6 entries (early-tier set)", () => {
     expect(LORE_LINES.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("LORE_TOTAL_COUNT matches the loaded lore pool", () => {
+    expect(LORE_TOTAL_COUNT).toBe(LORE_LINES.length);
+  });
+
+  it("includes one customer-variety line for each ambient archetype", () => {
+    expect(LORE_BY_ID["LL-ARCH-LECTURER"]?.tier).toBe("mid");
+    expect(LORE_BY_ID["LL-ARCH-PARENT"]?.tier).toBe("early");
+    expect(LORE_BY_ID["LL-ARCH-WORKER"]?.tier).toBe("mid");
   });
 
   it("every LORE_LINES entry has id, customer, owner, and tone strings", () => {

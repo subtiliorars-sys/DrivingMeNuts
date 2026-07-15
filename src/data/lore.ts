@@ -376,12 +376,36 @@ export const LORE_LINES: readonly LoreLine[] = [
     tone: "Efficient",
     tier: "late",
   },
+
+  // ---- Archetype-Specific Lore (GAME-AUTO-06-dev customer variety) ----
+
+  {
+    id: "LL-ARCH-LECTURER",
+    customer: "For the record, a peanut is a seed in a pod, so the sign is taxonomically spicy.",
+    owner: "And yet the register accepts botanically incorrect dollars.",
+    tone: "Dry/Professorial",
+    tier: "mid",
+  },
+  {
+    id: "LL-ARCH-PARENT",
+    customer: "My kid said I had to tell you: peanuts are legumes. She made flash cards.",
+    owner: "Tell her she passed. Tell me if she wants cinnamon or salted.",
+    tone: "Warm/Deadpan",
+    tier: "early",
+  },
+  {
+    id: "LL-ARCH-WORKER",
+    customer: "Quick clarification before my next meeting: these are legumes, not nuts?",
+    owner: "Correct. Fastest agenda item all day. One bag to go?",
+    tone: "Efficient/Playful",
+    tier: "mid",
+  },
 ] as const;
 
 /**
  * Total canon variant count (all tiers, including future late entries).
  */
-export const LORE_TOTAL_COUNT = 45;
+export const LORE_TOTAL_COUNT = 48;
 
 /** Lookup map: id → LoreLine. */
 export const LORE_BY_ID: Readonly<Record<string, LoreLine>> = Object.fromEntries(

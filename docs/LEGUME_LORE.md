@@ -275,6 +275,31 @@ are tunable. LL-017–020 belong to the LATE narrative section and are gated at 
 
 ---
 
+## Archetype-Specific Gameplay Extensions
+
+These optional lines keep the serve -> quip -> response flow fresh by matching the
+three ambient customer silhouettes already visible around the truck.
+
+### LL-ARCH-LECTURER
+**Customer:** "For the record, a peanut is a seed in a pod, so the sign is taxonomically spicy."  
+**Owner:** "And yet the register accepts botanically incorrect dollars."  
+**Tier:** Mid | **Tone:** Dry/Professorial  
+**Angle:** Lecturer customer over-explains; owner pivots to the sale without being mean.
+
+### LL-ARCH-PARENT
+**Customer:** "My kid said I had to tell you: peanuts are legumes. She made flash cards."  
+**Owner:** "Tell her she passed. Tell me if she wants cinnamon or salted."  
+**Tier:** Early | **Tone:** Warm/Deadpan  
+**Angle:** Parent brings classroom energy; owner rewards the kid's curiosity and keeps the line moving.
+
+### LL-ARCH-WORKER
+**Customer:** "Quick clarification before my next meeting: these are legumes, not nuts?"  
+**Owner:** "Correct. Fastest agenda item all day. One bag to go?"  
+**Tier:** Mid | **Tone:** Efficient/Playful  
+**Angle:** Office worker turns the gag into a meeting item; owner closes with service speed.
+
+---
+
 ## Writing Style Notes (For Future Variants)
 
 **Proven mechanics for new variants:**
@@ -334,7 +359,8 @@ These five are held in reserve for special story moments (Act III victory, franc
 
 **LEGUME LORE COMPLETE.**
 
-Variant count: **40 hand-written entries** (LL-001 through LL-040).
+Core canon variant count: **40 hand-written entries** (LL-001 through LL-040).
+Playable data count: **48 entries** (40 core + 5 district + 3 archetype extensions).
 Hard rules verified:
 - ✓ ZERO allergy references or jokes
 - ✓ No mental-health punchlines (idiomatic "driving me nuts" title only)
