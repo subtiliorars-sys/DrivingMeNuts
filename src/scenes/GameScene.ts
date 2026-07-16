@@ -195,6 +195,7 @@ interface GagBubble {
   tail: Phaser.GameObjects.Triangle;
   customerLine: Phaser.GameObjects.Text;
   ownerLine: Phaser.GameObjects.Text;
+  revealTimerEvent: Phaser.Time.TimerEvent;
   timerEvent: Phaser.Time.TimerEvent;   // tracked per F11 rule
 }
 
@@ -3132,14 +3133,23 @@ export class GameScene extends Phaser.Scene {
     const truckY = 195;
 
     // Bubble anchor: just above the truck serving window (left side).
-    // Comeback replies run longer than stock ones — grow the bubble to fit.
-    // RT5-4: 7px monospace in a 172px wrap width fits ~40 chars/line, not 50;
-    // under-budgeting overflowed the longest tier-2/3/4 lines past the border.
-    const extraLines = Math.max(0, Math.ceil(ownerReply.length / 40) - 1);
+    // Large-text mode must scale this surface too: estimate wrapped lines from
+    // the active font size, then grow upward so the serving window stays clear.
+    const gagFontPx = Number.parseInt(scaledFont(7), 10);
+    const gagFontSize = `${gagFontPx}px`;
+    const lineHeight = Math.ceil(gagFontPx * 1.35);
+    // RT5-4: 7px monospace in a 172px wrap width fits ~40 chars/line. Large
+    // text narrows the effective character budget, so use the scaled font.
+    const charsPerLine = Math.max(24, Math.floor(40 * (7 / gagFontPx)));
+    const customerLineCount = Math.max(1, Math.ceil((line.customer.length + 2) / charsPerLine));
+    const ownerLineCount = Math.max(1, Math.ceil(ownerReply.length / charsPerLine));
+    const padTop = 3;
+    const gap = 4;
+    const padBottom = 5;
     const bX = truckX - 80;
     const bW = 180;
-    const bH = 36 + extraLines * 9;
-    const bY = truckY - 80 - extraLines * 9;
+    const bH = padTop + customerLineCount * lineHeight + gap + ownerLineCount * lineHeight + padBottom;
+    const bY = Math.max(18, truckY - 80 - Math.max(0, bH - 36));
 
     // Background rect (speech bubble)
     const bg = this.add.rectangle(bX + bW / 2, bY + bH / 2, bW, bH, P.PANEL_BG)
@@ -3157,13 +3167,14 @@ export class GameScene extends Phaser.Scene {
 
     // Customer line (shown immediately)
     const customerLine = this.add.text(bX + 4, bY + 3, `"${line.customer}"`, {
-      fontSize: "7px", color: "#2C2416", fontFamily: "VT323",
+      fontSize: gagFontSize, color: "#2C2416", fontFamily: "VT323",
       wordWrap: { width: bW - 8 },
     });
 
     // Owner reply (shown after a short pause)
-    const ownerLine = this.add.text(bX + 4, bY + 20, "", {
-      fontSize: "7px", color: "#4A7C4E", fontFamily: "VT323",
+    const ownerY = bY + padTop + customerLineCount * lineHeight + gap;
+    const ownerLine = this.add.text(bX + 4, ownerY, "", {
+      fontSize: gagFontSize, color: "#4A7C4E", fontFamily: "VT323",
       wordWrap: { width: bW - 8 },
     });
 
@@ -3172,22 +3183,20 @@ export class GameScene extends Phaser.Scene {
       if (ownerLine.active) ownerLine.setText(ownerReply);
     });
 
-    // Auto-dismiss after 4 s total
-    const dismissTimer = this.time.delayedCall(4000, () => {
+    // Auto-dismiss after the owner reply has enough read time. Short lines keep
+    // the original 4 s cadence; wrapped comeback lines get a modest extension.
+    const dismissDelayMs = Math.min(6200, 1800 + Math.max(2200, ownerLineCount * 900));
+    const dismissTimer = this.time.delayedCall(dismissDelayMs, () => {
       this.dismissGagBubble();
     });
 
-    // Store only the dismiss timer as the bubble's tracked event.
-    // beat2Timer is an independent one-shot that cleans itself up.
-    // (We hold a ref to it so dismissGagBubble can remove it cleanly too.)
-    void beat2Timer; // used above, no further reference needed
-
-    this.gagBubble = { bg, tail, customerLine, ownerLine, timerEvent: dismissTimer };
+    this.gagBubble = { bg, tail, customerLine, ownerLine, revealTimerEvent: beat2Timer, timerEvent: dismissTimer };
   }
 
   private dismissGagBubble(): void {
     if (!this.gagBubble) return;
     const b = this.gagBubble;
+    b.revealTimerEvent.destroy();
     b.timerEvent.destroy();
     if (b.bg.active)           b.bg.destroy();
     if (b.tail.active)         b.tail.destroy();
