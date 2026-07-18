@@ -3,6 +3,7 @@
  * Palette A only. Replace with sprite sheet later; callers use Container anchor.
  */
 import Phaser from "phaser";
+import { SPR } from "./sprites.js";
 
 const TRUCK_BODY = 0x8b6f47;
 const TRUCK_TRIM = 0xf5deb3;
@@ -36,9 +37,16 @@ export function drawFoodTruck(scene: Phaser.Scene, x: number, y: number): FoodTr
   c.add(scene.add.rectangle(-18, -20, 24, 18, TRUCK_WINDOW));
   c.add(scene.add.rectangle(-18, -30, 28, 4, 0x666666));
 
-  // Stylized peanut on side panel (not Mr. Peanut silhouette)
-  c.add(scene.add.ellipse(12, -18, 14, 18, PEANUT).setStrokeStyle(1, PEANUT_SHELL));
-  c.add(scene.add.ellipse(12, -22, 8, 6, PEANUT_SHELL));
+  // Stylized peanut on side panel — code-generated sprite when loaded, else
+  // the original two-ellipse programmer-art (keeps the headless test green).
+  if (scene.textures.exists(SPR.peanut)) {
+    const peanut = scene.add.image(12, -18, SPR.peanut);
+    peanut.setScale(22 / peanut.height); // ~22px tall on the panel
+    c.add(peanut);
+  } else {
+    c.add(scene.add.ellipse(12, -18, 14, 18, PEANUT).setStrokeStyle(1, PEANUT_SHELL));
+    c.add(scene.add.ellipse(12, -22, 8, 6, PEANUT_SHELL));
+  }
 
   // Roof supplies — burlap sacks
   c.add(scene.add.rectangle(-20, -44, 14, 10, PEANUT));

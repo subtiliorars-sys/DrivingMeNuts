@@ -28,6 +28,8 @@
 import Phaser from "phaser";
 import { drawLegsy } from "./legsy.js";
 import { audioInit, playButtonTick } from "./audio.js";
+import { loadMusicPref, startMusic } from "./music.js";
+import { preloadSprites, addSprite, SPR } from "./sprites.js";
 import { SAVE_KEY, safeStorage, resetSave } from "../sim/persistence.js";
 import { openExternalUrl } from "../playtest/feedback.js";
 import { PLAYTEST_SIGNUP_URL } from "../playtest/urls.js";
@@ -52,6 +54,16 @@ const VERSION = "0.1.0";
 export class BootScene extends Phaser.Scene {
   constructor() {
     super({ key: "BootScene" });
+  }
+
+  /**
+   * Load the code-generated sprite atlas once, here. The global TextureManager
+   * then serves GameScene too (see sprites.ts loading contract). Loads are
+   * best-effort: any failure leaves the texture absent and every draw site
+   * falls back to programmer-art, so a missing file never blocks the game.
+   */
+  preload(): void {
+    preloadSprites(this);
   }
 
   create(): void {
@@ -87,6 +99,10 @@ export class BootScene extends Phaser.Scene {
     // Placed centre-left on the title screen, above the ground line
     // drawLegsy origin = bottom-centre; ~32×48 at scale 1.4 → ~45×67
     drawLegsy(this, W / 2, H * 0.78, 1.4);
+
+    // Code-generated peanut mascot as a title accent (falls back to nothing
+    // if the texture didn't load — drawLegsy above still carries the screen).
+    addSprite(this, SPR.mascot, W / 2 + 86, 92, 40);
 
     // ---- Truck side-panel backdrop hint ------------------------------------
     // Minimal truck shape — Legsy "painted on" the side panel (visual context)
@@ -129,6 +145,10 @@ export class BootScene extends Phaser.Scene {
     startBtn.on("pointerdown", () => {
       // First gesture — resume AudioContext (browser auto-play policy)
       audioInit(storage);
+      // Music begins here too: gesture satisfied, context live. The soundtrack
+      // is global (not scene-bound) so it carries into GameScene seamlessly.
+      loadMusicPref(storage);
+      startMusic("day");
       playButtonTick();
       this.scene.start("GameScene");
     });

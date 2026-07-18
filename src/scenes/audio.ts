@@ -118,6 +118,28 @@ export function loadMutePref(storage?: Pick<Storage, "getItem">): void {
 }
 
 // ---------------------------------------------------------------------------
+// Shared-context accessors (for music.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the live AudioContext WITHOUT creating one. music.ts uses this so the
+ * soundtrack can only start once a user gesture has already created the context
+ * via audioInit() — never forcing context creation before the autoplay gate.
+ * Returns null in headless/locked-down environments (degrade to silence).
+ */
+export function musicContext(): AudioContext | null {
+  return _ctx;
+}
+
+/**
+ * Return the master gain node so the music bus routes through the same mute as
+ * all SFX (one Sound toggle silences everything). Null until the context exists.
+ */
+export function musicMasterGain(): GainNode | null {
+  return _masterGain;
+}
+
+// ---------------------------------------------------------------------------
 // SFX: coin pop blip
 // ---------------------------------------------------------------------------
 

@@ -362,6 +362,8 @@ export function createState(seed = 1): SimState {
     derekConsistencyCounter: 0,
     derekLastPrice: null,
     derekLastPurchaseDay: 0,
+    // RPG layer: no NPCs met yet.
+    npcRelationships: {},
     martaBuffActive: false,
     salRivalPresent: false,
     rngState: seed >>> 0,
@@ -486,6 +488,12 @@ export function tick(state: SimState, dtSeconds: number): SimEvent[] {
     state.dayElapsedSeconds + dtSeconds,
     DAY_DURATION_SECONDS,
   );
+
+  // Defense-in-depth: with valid (clamped) prices revenue is always positive,
+  // so this is a no-op in normal play. It guarantees the never-negative-cash
+  // invariant holds even if a corrupt/hand-edited save slipped a bad price
+  // past load-time validation. (Audit hardening, P-prod.)
+  applyCashFloor(state);
 
   return events;
 }
