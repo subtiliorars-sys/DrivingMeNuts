@@ -38,6 +38,7 @@ import { describe, it, expect } from "vitest";
 import * as PhaserAll from "phaser";
 import { BootScene } from "./scenes/BootScene.js";
 import { GameScene } from "./scenes/GameScene.js";
+import { LARGE_TEXT_KEY } from "./scenes/prefs.js";
 
 // phaser.esm.js has named exports only; the __phaser-shim adds `default = namespace`.
 // Phaser's .d.ts uses `export = Phaser` (CJS style), so `typeof import("phaser").default`
@@ -170,6 +171,24 @@ describe("Phaser 3 headless boot smoke", () => {
       const scene = game.scene.getScene("GameScene") as GameScene;
       scene.qaClickBuyRaw();
       expect(scene.qaFlags().supplyModalOpen).toBe(true);
+    }, done as unknown as () => void, { startGameScene: true });
+  });
+
+  it("large-text mode scales Legume Lore gag bubbles and read time", (done) => {
+    localStorage.setItem(LARGE_TEXT_KEY, "1");
+    withHeadlessGame((game) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const scene = game.scene.getScene("GameScene") as any;
+      scene.showGagBubble("LL-ARCH-WORKER", "CB-304");
+      const bubble = scene.gagBubble;
+
+      expect(bubble.customerLine.style.fontSize).toBe("9px");
+      expect(bubble.ownerLine.style.fontSize).toBe("9px");
+      expect(bubble.bg.height).toBeGreaterThan(36);
+      expect(bubble.timerEvent.delay).toBeGreaterThan(4000);
+
+      scene.dismissGagBubble();
+      localStorage.removeItem(LARGE_TEXT_KEY);
     }, done as unknown as () => void, { startGameScene: true });
   });
 });

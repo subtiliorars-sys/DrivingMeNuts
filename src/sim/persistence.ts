@@ -17,8 +17,7 @@
 
 import type { SimState, RescueDebt, PreorderObligation, LedgerEntry } from "./types.js";
 import { createState, applyOffline, checkAchievements } from "./engine.js";
-import { reviveRelationships } from "./relationships.js";
-import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS, RAW_PEANUT_BASE_PRICE, WEATHER_DEFAULT_SEED, PRICE_MIN, PRICE_MAX } from "../data/economy.js";
+import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS, RAW_PEANUT_BASE_PRICE, WEATHER_DEFAULT_SEED } from "../data/economy.js";
 import type { RecipeId, RoasterTier } from "../data/economy.js";
 import { RECIPES, ROASTER_EFFICIENCY } from "../data/economy.js";
 import { comebackTierFor, COMEBACK_TIERS } from "../data/comebacks.js";
@@ -144,6 +143,10 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   currentDistrict?: string;
   /** P1.5: unlocked districts. Additive-optional: absent → ["farmers_market"]. */
   unlockedDistricts?: string[];
+  /** Phase 2 shell: unlocked world-map zones. Additive-optional: absent → ["market"]. */
+  zonesUnlocked?: string[];
+  /** Phase 2 shell: current world-map zone. Additive-optional: absent → "market". */
+  currentZoneId?: string;
   /** P1.5: Derek consistency counter. Additive-optional: absent → 0. */
   derekConsistencyCounter?: number;
   /** P1.5: Derek last purchase price. Additive-optional: absent → null. */
@@ -300,23 +303,6 @@ function sanityCheck(env: SaveEnvelope): string | null {
     return `gagsSeen must be an array (not a serialized Set {})`;
   if (typeof s.unitsSoldLifetime !== "number" || s.unitsSoldLifetime < 0)
     return `unitsSoldLifetime invalid: ${s.unitsSoldLifetime}`;
-
-  // P-prod audit (HIGH): these core economy fields previously flowed through
-  // unvalidated, so a corrupt or hand-edited save could inject NaN / negative /
-  // out-of-range values that poison cost-basis math, demand, and the
-  // never-negative-cash invariant. Validate them like every other field.
-  // sellPrice is always clamped to [PRICE_MIN, PRICE_MAX] by setPrice(); a tiny
-  // epsilon absorbs float round-trip noise.
-  if (!Number.isFinite(s.sellPrice) || s.sellPrice < PRICE_MIN - 1e-6 || s.sellPrice > PRICE_MAX + 1e-6)
-    return `sellPrice invalid: ${s.sellPrice}`;
-  if (!Number.isFinite(s.rawStockLbs) || s.rawStockLbs < 0 || s.rawStockLbs > 1e9)
-    return `rawStockLbs invalid: ${s.rawStockLbs}`;
-  if (!Number.isFinite(s.roastedStockLbs) || s.roastedStockLbs < 0 || s.roastedStockLbs > 1e9)
-    return `roastedStockLbs invalid: ${s.roastedStockLbs}`;
-  if (!Number.isFinite(s.roastedCostBasisPerLb) || s.roastedCostBasisPerLb < 0 || s.roastedCostBasisPerLb > 1e6)
-    return `roastedCostBasisPerLb invalid: ${s.roastedCostBasisPerLb}`;
-  if (!Number.isFinite(s.dayElapsedSeconds) || s.dayElapsedSeconds < 0)
-    return `dayElapsedSeconds invalid: ${s.dayElapsedSeconds}`;
   if (typeof s.lifetimeEarned !== "number" || s.lifetimeEarned < 0)
     return `lifetimeEarned invalid: ${s.lifetimeEarned}`;
   if (!Array.isArray(s.recipesUnlocked))
@@ -405,8 +391,6 @@ function sanityCheck(env: SaveEnvelope): string | null {
           return `ledger entry ${field} out of range: ${e[field]}`;
       }
       if (e.day < 1) return `ledger entry day invalid: ${e.day}`;
-      if (e.weather !== undefined && typeof e.weather !== "string")
-        return `ledger entry weather invalid: ${e.weather}`;
     }
   }
 
@@ -471,15 +455,6 @@ function sanityCheck(env: SaveEnvelope): string | null {
   if (ss.weatherSeed !== undefined) {
     if (!Number.isFinite(ss.weatherSeed) || ss.weatherSeed < 0)
       return `weatherSeed invalid: ${ss.weatherSeed}`;
-  }
-
-  // RPG layer: npcRelationships, when present, must be a plain object. Per-entry
-  // validity (known id, finite 0–100) is enforced leniently by
-  // reviveRelationships on load, mirroring how gagsSeen/achievements drop
-  // unknown entries rather than rejecting the whole save.
-  if (ss.npcRelationships !== undefined) {
-    if (ss.npcRelationships === null || typeof ss.npcRelationships !== "object" || Array.isArray(ss.npcRelationships))
-      return `npcRelationships invalid: ${String(ss.npcRelationships)}`;
   }
 
   return null;
@@ -646,7 +621,6 @@ export function deserialize(json: string): SimState {
         net: Number(e.net),
         debtService: Number(e.debtService),
         cashAfter: Number(e.cashAfter),
-        weather: e.weather !== undefined ? String(e.weather) : undefined,
       }))
     : [];
 
@@ -712,15 +686,15 @@ export function deserialize(json: string): SimState {
     : ["farmers_market"];
   if (!unlockedDistricts.includes("farmers_market")) unlockedDistricts.push("farmers_market");
 
-  const VALID_ZONES = new Set(["market"]);
-  const zonesUnlocked: string[] = Array.isArray(_ss.zonesUnlocked)
-    ? _ss.zonesUnlocked.filter((z): z is string => typeof z === "string" && VALID_ZONES.has(z))
+  // Phase 2 shell: revive world-map zones (additive-optional, absent = market).
+  const zonesUnlocked = Array.isArray(_ss.zonesUnlocked)
+    ? [...new Set(_ss.zonesUnlocked.filter((z): z is string => typeof z === "string" && z.length > 0))]
     : ["market"];
-  if (zonesUnlocked.length === 0) zonesUnlocked.push("market");
+  if (!zonesUnlocked.includes("market")) zonesUnlocked.unshift("market");
   const currentZoneId =
-    typeof _ss.currentZoneId === "string" && VALID_ZONES.has(_ss.currentZoneId)
+    typeof _ss.currentZoneId === "string" && zonesUnlocked.includes(_ss.currentZoneId)
       ? _ss.currentZoneId
-      : zonesUnlocked[0] ?? "market";
+      : "market";
 
   const derekConsistencyCounter =
     typeof _ss.derekConsistencyCounter === "number" && Number.isFinite(_ss.derekConsistencyCounter) && _ss.derekConsistencyCounter >= 0
@@ -737,8 +711,6 @@ export function deserialize(json: string): SimState {
       ? Math.floor(_ss.derekLastPurchaseDay)
       : 0;
 
-  // RPG layer: revive NPC friendships (drop unknown ids, clamp 0–100).
-  const npcRelationships = reviveRelationships(_ss.npcRelationships);
   const martaBuffActive = !!_ss.martaBuffActive;
   const salRivalPresent = !!_ss.salRivalPresent;
 
@@ -788,7 +760,6 @@ export function deserialize(json: string): SimState {
     derekConsistencyCounter,
     derekLastPrice,
     derekLastPurchaseDay,
-    npcRelationships,
     martaBuffActive,
     salRivalPresent,
     rngState: sim.rngState,
