@@ -22,6 +22,7 @@ import type { RecipeId, RoasterTier } from "../data/economy.js";
 import { RECIPES, ROASTER_EFFICIENCY } from "../data/economy.js";
 import { comebackTierFor, COMEBACK_TIERS } from "../data/comebacks.js";
 import { ACHIEVEMENT_BY_ID } from "../data/achievements.js";
+import { reviveRelationships } from "./relationships.js";
 
 // ---------------------------------------------------------------------------
 // Public constants
@@ -355,6 +356,12 @@ function sanityCheck(env: SaveEnvelope): string | null {
       if (!Number.isFinite(d.dueDayNumber) || d.dueDayNumber < 1)
         return `rescueDebt dueDayNumber invalid: ${d.dueDayNumber}`;
     }
+  }
+
+  // npcRelationships must be a plain object (map) when present, not an array
+  if (ss.npcRelationships !== undefined) {
+    if (typeof ss.npcRelationships !== "object" || ss.npcRelationships === null || Array.isArray(ss.npcRelationships))
+      return `npcRelationships invalid: ${JSON.stringify(ss.npcRelationships)}`;
   }
 
   // Wave 5: validate preorderObligation when present (non-null)
@@ -714,8 +721,11 @@ export function deserialize(json: string): SimState {
   const martaBuffActive = !!_ss.martaBuffActive;
   const salRivalPresent = !!_ss.salRivalPresent;
 
+  const npcRelationships = reviveRelationships(_ss.npcRelationships);
+
   const state: SimState = {
     cash: sim.cash,
+    npcRelationships,
     rawStockLbs: sim.rawStockLbs,
     rawCostBasisPerLb,
     roastedStockLbs: sim.roastedStockLbs,
