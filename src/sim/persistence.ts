@@ -22,6 +22,7 @@ import type { RecipeId, RoasterTier } from "../data/economy.js";
 import { RECIPES, ROASTER_EFFICIENCY } from "../data/economy.js";
 import { comebackTierFor, COMEBACK_TIERS } from "../data/comebacks.js";
 import { ACHIEVEMENT_BY_ID } from "../data/achievements.js";
+import { reviveRelationships } from "./relationships.js";
 
 // ---------------------------------------------------------------------------
 // Public constants
@@ -143,6 +144,10 @@ type SerializedSimState = Omit<SimState, "gagsSeen" | "recipesUnlocked"> & {
   currentDistrict?: string;
   /** P1.5: unlocked districts. Additive-optional: absent → ["farmers_market"]. */
   unlockedDistricts?: string[];
+  /** Phase 2 shell: unlocked world-map zones. Additive-optional: absent → ["market"]. */
+  zonesUnlocked?: string[];
+  /** Phase 2 shell: current world-map zone. Additive-optional: absent → "market". */
+  currentZoneId?: string;
   /** P1.5: Derek consistency counter. Additive-optional: absent → 0. */
   derekConsistencyCounter?: number;
   /** P1.5: Derek last purchase price. Additive-optional: absent → null. */
@@ -351,6 +356,12 @@ function sanityCheck(env: SaveEnvelope): string | null {
       if (!Number.isFinite(d.dueDayNumber) || d.dueDayNumber < 1)
         return `rescueDebt dueDayNumber invalid: ${d.dueDayNumber}`;
     }
+  }
+
+  // npcRelationships must be a plain object (map) when present, not an array
+  if (ss.npcRelationships !== undefined) {
+    if (typeof ss.npcRelationships !== "object" || ss.npcRelationships === null || Array.isArray(ss.npcRelationships))
+      return `npcRelationships invalid: ${JSON.stringify(ss.npcRelationships)}`;
   }
 
   // Wave 5: validate preorderObligation when present (non-null)
@@ -684,6 +695,17 @@ export function deserialize(json: string): SimState {
       )
     : ["farmers_market"];
   if (!unlockedDistricts.includes("farmers_market")) unlockedDistricts.push("farmers_market");
+
+  // Phase 2 shell: revive world-map zones (additive-optional, absent = market).
+  const zonesUnlocked = Array.isArray(_ss.zonesUnlocked)
+    ? [...new Set(_ss.zonesUnlocked.filter((z): z is string => typeof z === "string" && z.length > 0))]
+    : ["market"];
+  if (!zonesUnlocked.includes("market")) zonesUnlocked.unshift("market");
+  const currentZoneId =
+    typeof _ss.currentZoneId === "string" && zonesUnlocked.includes(_ss.currentZoneId)
+      ? _ss.currentZoneId
+      : "market";
+
   const derekConsistencyCounter =
     typeof _ss.derekConsistencyCounter === "number" && Number.isFinite(_ss.derekConsistencyCounter) && _ss.derekConsistencyCounter >= 0
       ? Math.floor(_ss.derekConsistencyCounter)
@@ -699,8 +721,14 @@ export function deserialize(json: string): SimState {
       ? Math.floor(_ss.derekLastPurchaseDay)
       : 0;
 
+  const martaBuffActive = !!_ss.martaBuffActive;
+  const salRivalPresent = !!_ss.salRivalPresent;
+
+  const npcRelationships = reviveRelationships(_ss.npcRelationships);
+
   const state: SimState = {
     cash: sim.cash,
+    npcRelationships,
     rawStockLbs: sim.rawStockLbs,
     rawCostBasisPerLb,
     roastedStockLbs: sim.roastedStockLbs,
@@ -740,9 +768,13 @@ export function deserialize(json: string): SimState {
     supplierLbsPurchased,
     currentDistrict,
     unlockedDistricts,
+    zonesUnlocked,
+    currentZoneId,
     derekConsistencyCounter,
     derekLastPrice,
     derekLastPurchaseDay,
+    martaBuffActive,
+    salRivalPresent,
     rngState: sim.rngState,
   };
 

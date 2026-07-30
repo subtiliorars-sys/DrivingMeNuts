@@ -127,7 +127,7 @@ export function openFeedbackOverlay(options: FeedbackOverlayOptions): void {
     "align-items:center",
     "justify-content:center",
     "background:rgba(44,36,22,0.65)",
-    "font-family:monospace",
+    "font-family:VT323, monospace",
   ].join(";");
 
   const panel = document.createElement("div");

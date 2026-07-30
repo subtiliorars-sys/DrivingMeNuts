@@ -46,6 +46,7 @@ perfect politeness.
 WHY FREE ON ITCH?
 Discovery + educator feedback. Play in browser — use the in-game FEEDBACK button
 (no copy-paste). Sign up on the title screen or PLAYTEST.md.
+Educator pilots + future Steam wishlist: see HQ docs/WAITLIST_AND_WISHLIST.md.
 
 Also in the JimmyTheHat fleet: PixelSports hub, Yes Man, No Is a Complete Sentence.
 ```

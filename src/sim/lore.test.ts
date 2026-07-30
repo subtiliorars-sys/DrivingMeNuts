@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import { createState, tick } from "./engine.js";
-import { LORE_LINES, LORE_BY_ID } from "../data/lore.js";
+import { LORE_LINES, LORE_BY_ID, LORE_TOTAL_COUNT } from "../data/lore.js";
 import { DAY_DURATION_SECONDS, GAG_EVERY_N_LBS_SOLD } from "../data/economy.js";
 import type { SimEvent, SimState } from "./types.js";
 
@@ -113,6 +113,18 @@ describe("gag lore id validity", () => {
       expect(line.customer.length).toBeGreaterThan(0);
       expect(line.owner.length).toBeGreaterThan(0);
     }
+  });
+
+  it("keeps lore ids unique and total count in sync", () => {
+    const ids = LORE_LINES.map((line) => line.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(LORE_TOTAL_COUNT).toBe(LORE_LINES.length);
+  });
+
+  it("includes one GAME-AUTO-06 quip for each ambient customer archetype", () => {
+    expect(LORE_BY_ID["LL-ARCH-LECTURER"]?.customer).toContain("placards");
+    expect(LORE_BY_ID["LL-ARCH-PARENT"]?.customer).toContain("kid");
+    expect(LORE_BY_ID["LL-ARCH-WORKER"]?.customer).toContain("meeting");
   });
 });
 

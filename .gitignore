@@ -26,3 +26,9 @@ scratch/
 
 # Local AI-tool drops (fleet ruling 2026-06-07)
 .cursor/
+
+# Dev-only contact sheet — reproducible from tools/art/build-assets.cjs.
+# (The game sprites in public/generated/ ARE committed so every build path has
+#  art with zero build-ordering fragility; they're tiny and reproducible.)
+assets/generated/*.png
+

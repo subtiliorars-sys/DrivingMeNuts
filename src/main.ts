@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { BootScene } from "./scenes/BootScene.js";
 import { GameScene } from "./scenes/GameScene.js";
+import { WorldScene } from "./scenes/WorldScene.js";
 
 /**
  * Canvas resolution: 480×270 (16:9).
@@ -24,11 +25,13 @@ const config: Phaser.Types.Core.GameConfig = {
   height: 270,
   backgroundColor: "#1a1008",
   pixelArt: true,
+  antialias: false,
+  roundPixels: true,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [BootScene, GameScene],
+  scene: [BootScene, GameScene, WorldScene],
 };
 
 const game = new Phaser.Game(config);

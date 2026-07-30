@@ -36,6 +36,7 @@ import {
   endOfDay,
   projectedDemand,
   optimumPrice,
+  pricingElasticityHint,
   buyRoasterUpgrade,
   buyQueueSlot,
   chooseRescuePath,
@@ -63,6 +64,7 @@ import {
   isReducedMotion,
   isColorblindCues,
   isLargeText,
+  isCoarsePointer,
   toggleReducedMotion,
   toggleColorblindCues,
   toggleLargeText,
@@ -90,6 +92,10 @@ import {
   playButtonTick,
   loadMutePref,
 } from "./audio.js";
+import { isMusicOn, toggleMusic, loadMusicPref, startMusic, setMusicMode } from "./music.js";
+import { addSprite, SPR, npcPortraitKey } from "./sprites.js";
+import { NPC_ORDER, NPCS, FRIENDSHIP_MAX, tierForFriendship, type NpcId } from "../data/npcs.js";
+import { friendshipFor, tierFor, greet, hasMet, meet, addFriendship, applyDailyFriendship } from "../sim/relationships.js";
 import { closeFeedbackOverlay, openFeedbackOverlay } from "../playtest/feedback.js";
 
 // LORE_LOADED_COUNT removed — denominator is now computed dynamically in updateHUD()
@@ -181,7 +187,9 @@ const P_OFFICE = {
 // ---------------------------------------------------------------------------
 
 interface CoinPop {
-  circle: Phaser.GameObjects.Arc;
+  // Arc fallback or the code-generated coin sprite — both support
+  // setAlpha / .y / .destroy, which is all tickCoinPops touches.
+  circle: Phaser.GameObjects.Arc | Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
   life: number; // seconds remaining
 }
@@ -195,6 +203,7 @@ interface GagBubble {
   tail: Phaser.GameObjects.Triangle;
   customerLine: Phaser.GameObjects.Text;
   ownerLine: Phaser.GameObjects.Text;
+  revealTimerEvent: Phaser.Time.TimerEvent;
   timerEvent: Phaser.Time.TimerEvent;   // tracked per F11 rule
 }
 
@@ -234,6 +243,8 @@ export class GameScene extends Phaser.Scene {
   private txtRoastedStock!: Phaser.GameObjects.Text;
   private txtPrice!: Phaser.GameObjects.Text;
   private txtDemandHint!: Phaser.GameObjects.Text;
+  private txtElasticityNudge!: Phaser.GameObjects.Text;
+  private mobileDockGroup?: Phaser.GameObjects.Group;
   private txtDayProgress!: Phaser.GameObjects.Text;
 
   // ---- Roast slot UI (P1 has STARTING_QUEUE_SLOTS = 1) -------------------
@@ -301,6 +312,15 @@ export class GameScene extends Phaser.Scene {
   // Goals panel (achievements + lore/comeback collection — wave 6)
   private goalsModalGroup?: Phaser.GameObjects.Group;
   private goalsModalOpen = false;
+
+  // Regulars panel (RPG layer — NPC relationships + dialogue, M3)
+  private regularsModalGroup?: Phaser.GameObjects.Group;
+  private regularsModalOpen = false;
+  /** Day on which each NPC was last chatted-to, so a chat nudges friendship at
+   *  most once per game day (charm, not a clicker). */
+  private npcChattedDay: Record<string, number> = {};
+  /** Which regular is selected in the Regulars panel (master-detail). */
+  private regularsSelected: NpcId = "old_joe";
 
   // Settings + Glossary panels (Polish & Pedagogy wave)
   private settingsModalGroup?: Phaser.GameObjects.Group;
@@ -505,11 +525,11 @@ export class GameScene extends Phaser.Scene {
     // ---- Rescue arc HUD chip (Wave 5) — neutral framing, visible while debt/obligation active --
     // Positioned below the lore counter; hidden when no active debt.
     this.rescueHudChip = this.add.text(W - 6, 28, "", {
-      fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+      fontSize: "6px", color: "#8B6F47", fontFamily: "VT323",
     }).setOrigin(1, 0).setVisible(false);
 
     this.derekHudChip = this.add.text(W - 6, 38, "", {
-      fontSize: "6px", color: "#1C3A47", fontFamily: "monospace",
+      fontSize: "6px", color: "#1C3A47", fontFamily: "VT323",
     }).setOrigin(1, 0).setVisible(false);
 
     // ---- Roast Queue Panel (P1_SPRITE_SPEC #13) ----------------------------
@@ -582,7 +602,7 @@ export class GameScene extends Phaser.Scene {
     const btnMinus = this.add.rectangle(pX + 16, pY + 35, 22, 16, P.AWNING)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
-    this.add.text(pX + 16, pY + 35, "–", { fontSize: "10px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+    this.add.text(pX + 16, pY + 35, "–", { fontSize: "10px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
     btnMinus.on("pointerdown", () => { if (!this.reportOpen) { playButtonTick(); this.adjustPrice(-this.PRICE_STEP); } });
     btnMinus.on("pointerover", () => btnMinus.setAlpha(0.8));
     btnMinus.on("pointerout",  () => btnMinus.setAlpha(1.0));
@@ -591,7 +611,7 @@ export class GameScene extends Phaser.Scene {
     const btnPlus = this.add.rectangle(pX + 46, pY + 35, 22, 16, P.AWNING)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
-    this.add.text(pX + 46, pY + 35, "+", { fontSize: "10px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+    this.add.text(pX + 46, pY + 35, "+", { fontSize: "10px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
     btnPlus.on("pointerdown", () => { if (!this.reportOpen) { playButtonTick(); this.adjustPrice(+this.PRICE_STEP); } });
     btnPlus.on("pointerover", () => btnPlus.setAlpha(0.8));
     btnPlus.on("pointerout",  () => btnPlus.setAlpha(1.0));
@@ -601,6 +621,11 @@ export class GameScene extends Phaser.Scene {
 
     // Demand hint (updates with price)
     this.txtDemandHint = this.add.text(pX + 4, pY + 50, "", textStyleLabel());
+
+    // Pricing elasticity nudge (playtest UX — gentle, no FOMO)
+    this.txtElasticityNudge = this.add.text(pX + 4, pY + 62, "", {
+      ...textStyleLabel(), fontSize: scaledFont(5), color: "#8B6F47",
+    }).setVisible(false);
 
     // Margin hint
     this.add.text(pX + 4, pY + 74, "HEALTHY >60%", { ...textStyleLabel(), color: "#4A7C4E" });
@@ -612,7 +637,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.buyBtnRef = buyBtn; // held for tutorial pointer targeting
     this.add.text(buyBtnX + 68, buyBtnY + 10, "BUY RAW PEANUTS", {
-      fontSize: "8px", color: "#2C2416", fontFamily: "monospace",
+      fontSize: "8px", color: "#2C2416", fontFamily: "VT323",
     }).setOrigin(0.5);
     buyBtn.on("pointerdown", () => {
       if (!this.reportOpen && !this.rescueModalOpen && !this.districtModalOpen) {
@@ -629,7 +654,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(buyBtnX + 68, upgBtnY + 10, "UPGRADES", {
-      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323",
     }).setOrigin(0.5);
     upgradesBtn.on("pointerdown", () => {
       if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.districtModalOpen && !this.rescueModalOpen) {
@@ -645,7 +670,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(buyBtnX + 68, booksBtnY + 10, "BOOKS", {
-      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323",
     }).setOrigin(0.5);
     booksBtn.on("pointerdown", () => {
       if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen && !this.goalsModalOpen) {
@@ -661,7 +686,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(buyBtnX + 68, goalsBtnY + 10, "GOALS", {
-      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323",
     }).setOrigin(0.5);
     goalsBtn.on("pointerdown", () => {
       if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.aftermathModalOpen && !this.booksModalOpen) {
@@ -670,6 +695,20 @@ export class GameScene extends Phaser.Scene {
     });
     goalsBtn.on("pointerover", () => goalsBtn.setAlpha(0.85));
     goalsBtn.on("pointerout",  () => goalsBtn.setAlpha(1.0));
+
+    // ---- REGULARS button (RPG layer — NPC relationships + dialogue, M3) ------
+    const regBtnY = goalsBtnY + 24;
+    const regularsBtn = this.add.rectangle(buyBtnX + 68, regBtnY + 10, 137, 20, 0x6E5A8A)
+      .setStrokeStyle(1, P.PANEL_BORDER)
+      .setInteractive({ cursor: "pointer" });
+    this.add.text(buyBtnX + 68, regBtnY + 10, "REGULARS", {
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+    }).setOrigin(0.5);
+    regularsBtn.on("pointerdown", () => {
+      if (!this.isUIBlocked()) this.openRegularsModal();
+    });
+    regularsBtn.on("pointerover", () => regularsBtn.setAlpha(0.85));
+    regularsBtn.on("pointerout",  () => regularsBtn.setAlpha(1.0));
 
     // ---- Day progress bar --------------------------------------------------
     const dpY = H - 18;
@@ -681,7 +720,7 @@ export class GameScene extends Phaser.Scene {
     const endBtn = this.add.rectangle(W - 50, dpY + 5, 88, 14, 0x556644)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
-    this.add.text(W - 50, dpY + 5, "END DAY", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
+    this.add.text(W - 50, dpY + 5, "END DAY", { fontSize: "7px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5);
     endBtn.on("pointerdown", () => { if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen) this.triggerEndOfDay(); });
 
     // ---- Reset Save button (spec req; tucked in bottom-left corner) --------
@@ -689,7 +728,7 @@ export class GameScene extends Phaser.Scene {
     const resetBtn = this.add.rectangle(28, dpY + 5, 48, 14, 0x664444)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
-    this.add.text(28, dpY + 5, "RESET", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5);
+    this.add.text(28, dpY + 5, "RESET", { fontSize: "7px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5);
     resetBtn.on("pointerdown", () => {
       if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen) return;
       this.showResetConfirm();
@@ -701,6 +740,11 @@ export class GameScene extends Phaser.Scene {
     // RT F1: sync the saved mute pref so the Settings Sound toggle reflects it
     // (no AudioContext yet — that waits for the first gesture).
     loadMutePref(this.storage);
+    // Same for the music pref so the Settings Music toggle reflects the save.
+    // If the player arrived here without passing the title (e.g. scene.restart
+    // from the Large-text toggle), re-assert playback to match their pref.
+    loadMusicPref(this.storage);
+    if (isMusicOn()) startMusic("day");
 
     // Initial HUD render
     this.updateHUD();
@@ -714,7 +758,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(setX, dpY2 + 5, "⚙ MENU",
-      { fontSize: "6px", color: "#F5DEB3", fontFamily: "monospace" }
+      { fontSize: "6px", color: "#F5DEB3", fontFamily: "VT323" }
     ).setOrigin(0.5);
     settingsBtn.on("pointerdown", () => {
       if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) {
@@ -729,7 +773,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(feedbackX, dpY2 + 5, "FEEDBACK",
-      { fontSize: "5px", color: "#F5DEB3", fontFamily: "monospace" }
+      { fontSize: "5px", color: "#F5DEB3", fontFamily: "VT323" }
     ).setOrigin(0.5);
     feedbackBtn.on("pointerdown", () => {
       if (this.canOpenFeedback()) this.openPlaytestFeedback();
@@ -755,37 +799,87 @@ export class GameScene extends Phaser.Scene {
       this.time.delayedCall(600, () => this.afterReportFlow());
     }
 
-    // ---- Keyboard Shortcuts (Task 4 UI/UX enhancement) --------------------
-    if (this.input && this.input.keyboard) {
-      this.input.keyboard.on("keydown", (event: KeyboardEvent) => {
-        const key = event.key.toLowerCase();
-        // Prevent key inputs when some other overlay is active (e.g. feedback)
-        if (this.feedbackOverlayOpen) return;
-
-        if (key === "b") {
-          if (this.booksModalOpen) this.closeBooksModal();
-          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openBooksModal();
-        } else if (key === "u") {
-          if (this.upgradesModalOpen) this.closeUpgradesModal();
-          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openUpgradesModal();
-        } else if (key === "s") {
-          if (this.supplyModalOpen) this.closeSupplyModal();
-          else if (!this.reportOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openSupplyModal();
-        } else if (key === "g") {
-          if (this.glossaryModalOpen) this.closeGlossaryModal();
-          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openGlossaryModal();
-        } else if (key === "o") {
-          if (this.goalsModalOpen) this.closeGoalsModal();
-          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openGoalsModal();
-        } else if (key === "d") {
-          if (this.districtModalOpen) this.closeDistrictModal();
-          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.settingsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openDistrictModal();
-        } else if (key === "p") {
-          if (this.settingsModalOpen) this.closeSettingsModal();
-          else if (!this.reportOpen && !this.supplyModalOpen && !this.roastModalOpen && !this.upgradesModalOpen && !this.districtModalOpen && !this.rescueModalOpen && !this.booksModalOpen && !this.goalsModalOpen && !this.glossaryModalOpen && !this.aftermathModalOpen && !this.inPostReportChain) this.openSettingsModal();
-        }
-      });
+    // ---- Desktop keyboard controls + playtest dock/hint -------------------
+    this.setupKeyboard();
+    if (isCoarsePointer()) {
+      this.buildMobileDock(W, H);
+    } else {
+      this.add.text(W / 2, H - 42, "B books · S supply · U upgrades · G glossary · O goals · D routes · C regulars · P settings", {
+        fontSize: scaledFont(5), color: "#8B6F47", fontFamily: "monospace",
+      }).setOrigin(0.5, 0).setAlpha(0.75);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Keyboard controls
+  //
+  // Desktop players expect to drive the whole game from the keyboard. Every
+  // shortcut routes through the SAME guards as the on-screen buttons so a key
+  // press can never open a modal on top of a forced-choice flow (day report,
+  // rescue arc, tutorial, aftermath). ESC is universal back/cancel for the
+  // optional info modals; it deliberately does NOT dismiss the day report or
+  // rescue arc (those require a decision). Headless/no-keyboard environments
+  // (boot smoke test) are handled by the `?.` guard.
+  // ---------------------------------------------------------------------------
+
+  /** True when a blocking modal or scripted flow owns the screen. */
+  private isUIBlocked(): boolean {
+    return (
+      this.reportOpen || this.supplyModalOpen || this.roastModalOpen ||
+      this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen ||
+      this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen ||
+      this.glossaryModalOpen || this.aftermathModalOpen || this.inPostReportChain ||
+      this.regularsModalOpen || this.feedbackOverlayOpen || this.tutorialStep >= 0
+    );
+  }
+
+  /** Close the topmost dismissible info modal. Returns true if one was closed. */
+  private closeTopModal(): boolean {
+    if (this.glossaryModalOpen) { this.closeGlossaryModal(); return true; }
+    if (this.settingsModalOpen) { this.closeSettingsModal(); return true; }
+    if (this.supplyModalOpen) { this.closeSupplyModal(); return true; }
+    if (this.roastModalOpen) { this.closeRoastModal(); return true; }
+    if (this.upgradesModalOpen) { this.closeUpgradesModal(); return true; }
+    if (this.districtModalOpen) { this.closeDistrictModal(); return true; }
+    if (this.booksModalOpen) { this.closeBooksModal(); return true; }
+    if (this.goalsModalOpen) { this.closeGoalsModal(); return true; }
+    if (this.regularsModalOpen) { this.closeRegularsModal(); return true; }
+    return false;
+  }
+
+  private setupKeyboard(): void {
+    const kb = this.input?.keyboard;
+    if (!kb) return; // headless renderer / no keyboard — silently skip
+
+    // ESC: back/cancel. Closes an open info modal, or opens the menu when idle.
+    kb.on("keydown-ESC", () => {
+      if (this.closeTopModal()) return;
+      if (!this.isUIBlocked()) { playButtonTick(); this.openSettingsModal(); }
+    });
+
+    // Single-key shortcuts for each action, gated so they never stack.
+    const open = (fn: () => void) => () => {
+      if (this.isUIBlocked()) return;
+      playButtonTick();
+      fn();
+    };
+    // Key letters align with the on-screen hint + the prior wave's bindings.
+    kb.on("keydown-S", open(() => this.openSupplyModal()));
+    kb.on("keydown-R", open(() => this.handleSlotClick(0)));
+    kb.on("keydown-U", open(() => this.openUpgradesModal()));
+    kb.on("keydown-B", open(() => this.openBooksModal()));
+    kb.on("keydown-G", open(() => this.openGlossaryModal()));
+    kb.on("keydown-O", open(() => this.openGoalsModal()));
+    kb.on("keydown-C", open(() => this.openRegularsModal()));
+    kb.on("keydown-D", open(() => this.openDistrictModal()));
+    kb.on("keydown-P", open(() => this.openSettingsModal()));
+
+    // Mute / music quick toggles work even with a modal open (volume is global).
+    kb.on("keydown-N", () => { audioInit(this.storage); toggleMute(this.storage); this.updateHUD(); });
+    kb.on("keydown-J", () => { audioInit(this.storage); toggleMusic(this.storage); });
+
+    // ENTER ends the trading day early — same guard as the END DAY button.
+    kb.on("keydown-ENTER", () => { if (!this.isUIBlocked()) this.qaClickEndDay(); });
   }
 
   // ---------------------------------------------------------------------------
@@ -796,7 +890,7 @@ export class GameScene extends Phaser.Scene {
     // Track wall-clock playtime (excludes offline time; used by trySave meta)
     this.playtimeSeconds += delta / 1_000;
 
-    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen || this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen || this.glossaryModalOpen || this.aftermathModalOpen || this.inPostReportChain || this.feedbackOverlayOpen) return;
+    if (this.reportOpen || this.supplyModalOpen || this.roastModalOpen || this.upgradesModalOpen || this.districtModalOpen || this.rescueModalOpen || this.booksModalOpen || this.goalsModalOpen || this.settingsModalOpen || this.glossaryModalOpen || this.aftermathModalOpen || this.regularsModalOpen || this.inPostReportChain || this.feedbackOverlayOpen) return;
 
     // Convert Phaser ms delta to simulated seconds.
     // SIM_TIME_SCALE = 60: 1 real second = 60 sim seconds → 1 sim hour = 60 real seconds.
@@ -840,6 +934,13 @@ export class GameScene extends Phaser.Scene {
     ) {
       this.triggerEndOfDay();
     }
+
+    // Cross-fade the soundtrack into the warmer Evening arrangement during the
+    // back third of the trading day (SOUND_DESIGN.md §C "Day → Evening"). The
+    // setMusicMode call is a cheap no-op once the mode already matches.
+    setMusicMode(
+      this.state.dayElapsedSeconds >= DAY_DURATION_SECONDS * 0.62 ? "evening" : "day",
+    );
 
     // Animate NPCs
     this.animateNpcs(dtSeconds);
@@ -908,6 +1009,17 @@ export class GameScene extends Phaser.Scene {
     this.txtDemandHint.setText(
       `~${demandLbsHr.toFixed(0)} lbs/hr  margin ${marginPct.toFixed(0)}%${cue}`
     ).setStyle({ ...textStyleLabel(), color: marginColor });
+
+    const elasticityHint = pricingElasticityHint(
+      this.state.sellPrice,
+      "classic_salted",
+      this.state.brandCampaignActive,
+    );
+    if (elasticityHint) {
+      this.txtElasticityNudge.setText(elasticityHint).setVisible(true);
+    } else {
+      this.txtElasticityNudge.setVisible(false);
+    }
 
     // Day progress
     const pct = Math.min(100, (this.state.dayElapsedSeconds / DAY_DURATION_SECONDS) * 100);
@@ -1067,7 +1179,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.roastModalGroup.add(closeBtn);
     this.roastModalGroup.add(
-      this.add.text(mX + mW - 12, mY + 10, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW - 12, mY + 10, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     closeBtn.on("pointerdown", () => this.closeRoastModal());
 
@@ -1203,7 +1315,7 @@ export class GameScene extends Phaser.Scene {
         .setInteractive({ cursor: "pointer" });
       this.roastModalGroup.add(btn);
       const t = this.add.text(bx + 16, batchBtnY + 6, `${qty}lb`, {
-        fontSize: "7px", color: "#2C2416", fontFamily: "monospace",
+        fontSize: "7px", color: "#2C2416", fontFamily: "VT323",
       }).setOrigin(0.5);
       this.roastModalGroup.add(t);
       btn.on("pointerdown", () => {
@@ -1226,7 +1338,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.roastModalGroup.add(stepDown);
     this.roastModalGroup.add(
-      this.add.text(bx + 50, batchBtnY + 14, "▼", { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(bx + 50, batchBtnY + 14, "▼", { fontSize: "7px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     stepDown.on("pointerdown", () => {
       this.roastModalBatchLbs = Math.max(BATCH_MIN_LBS, this.roastModalBatchLbs - 5);
@@ -1238,7 +1350,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.roastModalGroup.add(stepUp);
     this.roastModalGroup.add(
-      this.add.text(bx + 76, batchBtnY + 14, "▲", { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(bx + 76, batchBtnY + 14, "▲", { fontSize: "7px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     stepUp.on("pointerdown", () => {
       this.roastModalBatchLbs = Math.min(maxBatch, this.roastModalBatchLbs + 5);
@@ -1272,7 +1384,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.roastModalGroup.add(cancelBtn);
     this.roastModalGroup.add(
-      this.add.text(mX + 60, btnY, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + 60, btnY, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     cancelBtn.on("pointerdown", () => this.closeRoastModal());
 
@@ -1281,7 +1393,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.roastModalGroup.add(startBtn);
     this.roastModalGroup.add(
-      this.add.text(mX + 220, btnY, "START ROAST", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + 220, btnY, "START ROAST", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     startBtn.on("pointerdown", () => {
       const ev = startRoast(this.state, this.roastModalSlotIndex, this.roastModalRecipe, this.roastModalBatchLbs);
@@ -1347,7 +1459,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.upgradesModalGroup.add(closeBtn);
     this.upgradesModalGroup.add(
-      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     closeBtn.on("pointerdown", () => this.closeUpgradesModal());
 
@@ -1405,7 +1517,7 @@ export class GameScene extends Phaser.Scene {
           this.add.text(mX + mW - 46, rowY + 4, btnLabel, {
             fontSize: "7px",
             color: canAfford ? "#2C2416" : "#666644",
-            fontFamily: "monospace",
+            fontFamily: "VT323",
           }).setOrigin(0.5)
         );
 
@@ -1468,7 +1580,7 @@ export class GameScene extends Phaser.Scene {
           this.add.text(mX + mW - 46, rowY + 4, btnLabel, {
             fontSize: "7px",
             color: canAfford ? "#2C2416" : "#666644",
-            fontFamily: "monospace",
+            fontFamily: "VT323",
           }).setOrigin(0.5)
         );
 
@@ -1521,7 +1633,7 @@ export class GameScene extends Phaser.Scene {
         this.add.text(mX + mW - 46, rowY + 4, btnLabel, {
           fontSize: "7px",
           color: canAfford ? "#2C2416" : "#666644",
-          fontFamily: "monospace",
+          fontFamily: "VT323",
         }).setOrigin(0.5)
       );
       if (canAfford) {
@@ -1564,7 +1676,7 @@ export class GameScene extends Phaser.Scene {
       const asLabel = canAfford ? `BUY $${AUTO_SELL_COST}` : `earn $${(AUTO_SELL_COST - this.state.cash).toFixed(0)} more`;
       this.upgradesModalGroup.add(
         this.add.text(mX + mW - 46, rowY + 4, asLabel, {
-          fontSize: "7px", color: canAfford ? "#2C2416" : "#666644", fontFamily: "monospace",
+          fontSize: "7px", color: canAfford ? "#2C2416" : "#666644", fontFamily: "VT323",
         }).setOrigin(0.5)
       );
       if (canAfford) {
@@ -1588,14 +1700,14 @@ export class GameScene extends Phaser.Scene {
     rowY += 6;
     this.upgradesModalGroup.add(
       this.add.text(mX + 6, rowY, "THIS WEEK  Mon 0.85 · Tue 0.90 · Wed 0.95 · Thu 1.00 · Fri 1.10 · Sat 1.25 · Sun 1.10", {
-        fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+        fontSize: "6px", color: "#8B6F47", fontFamily: "VT323",
       })
     );
 
     // (Save Export/Import relocated to the Settings panel — declutters this modal.)
     this.upgradesModalGroup.add(this.add.text(mX + 6, rowY + 4,
       "Save export/import is now in ⚙ MENU › Settings.",
-      { fontSize: "7px", color: "#8B6F47", fontFamily: "monospace" }));
+      { fontSize: "7px", color: "#8B6F47", fontFamily: "VT323" }));
 
     // Close button at bottom
     const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
@@ -1603,7 +1715,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.upgradesModalGroup.add(doneBtn);
     this.upgradesModalGroup.add(
-      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     doneBtn.on("pointerdown", () => this.closeUpgradesModal());
     doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
@@ -1662,11 +1774,14 @@ export class GameScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
-    const mW = 300;
-    const mH = 172;
+    const mW = 420;
+    const mH = 220;
     const mX = (W - mW) / 2;
     const mY = (H - mH) / 2;
-    const districtOrder: DistrictId[] = ["farmers_market", "office_quarter"];
+    const districtOrder: DistrictId[] = [
+      "farmers_market", "office_quarter", "residential", 
+      "university", "park", "boardwalk", "downtown"
+    ];
 
     this.districtModalGroup = this.add.group();
 
@@ -1687,7 +1802,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.districtModalGroup.add(closeBtn);
     this.districtModalGroup.add(
-      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     closeBtn.on("pointerdown", () => this.closeDistrictModal());
 
@@ -1727,7 +1842,7 @@ export class GameScene extends Phaser.Scene {
           .setInteractive({ cursor: "pointer" });
         this.districtModalGroup.add(switchBtn);
         this.districtModalGroup.add(
-          this.add.text(mX + mW - 52, rowY + 6, "SWITCH", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+          this.add.text(mX + mW - 52, rowY + 6, "SWITCH", { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
         );
         const targetId = id;
         switchBtn.on("pointerdown", () => {
@@ -1748,7 +1863,7 @@ export class GameScene extends Phaser.Scene {
           .setInteractive({ cursor: canAfford ? "pointer" : "default" });
         this.districtModalGroup.add(permitBtn);
         this.districtModalGroup.add(
-          this.add.text(mX + mW - 58, rowY + 6, `PERMIT $${cfg.permitCost}`, { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+          this.add.text(mX + mW - 58, rowY + 6, `PERMIT $${cfg.permitCost}`, { fontSize: "7px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
         );
         if (canAfford) {
           const targetId = id;
@@ -1778,7 +1893,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.districtModalGroup.add(doneBtn);
     this.districtModalGroup.add(
-      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     doneBtn.on("pointerdown", () => this.closeDistrictModal());
     doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
@@ -1832,7 +1947,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.booksModalGroup.add(closeBtn);
     this.booksModalGroup.add(
-      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     closeBtn.on("pointerdown", () => this.closeBooksModal());
 
@@ -1899,7 +2014,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.booksModalGroup.add(doneBtn);
     this.booksModalGroup.add(
-      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     doneBtn.on("pointerdown", () => this.closeBooksModal());
     doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
@@ -1951,7 +2066,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.goalsModalGroup.add(closeBtn);
     this.goalsModalGroup.add(
-      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW - 12, mY + 11, "×", { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     closeBtn.on("pointerdown", () => this.closeGoalsModal());
     this.goalsModalGroup.add(this.add.rectangle(mX + mW / 2, mY + 21, mW - 8, 1, P.PANEL_BORDER));
@@ -2024,7 +2139,7 @@ export class GameScene extends Phaser.Scene {
     // Footnote — goals are markers, not power-ups
     this.goalsModalGroup.add(this.add.text(colRX, mY + mH - 26,
       "Goals track your progress —\nthey grant no in-game boost.",
-      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace" }));
+      { fontSize: "6px", color: "#8B6F47", fontFamily: "VT323" }));
 
     // Close button
     const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 16, 0x556677)
@@ -2032,7 +2147,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.goalsModalGroup.add(doneBtn);
     this.goalsModalGroup.add(
-      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE", { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5)
     );
     doneBtn.on("pointerdown", () => this.closeGoalsModal());
     doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
@@ -2045,6 +2160,173 @@ export class GameScene extends Phaser.Scene {
       this.goalsModalGroup = undefined;
     }
     this.goalsModalOpen = false;
+    this.updateHUD();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Regulars panel (RPG layer — GDD B3). Master-detail: the six named NPCs on
+  // the left, the selected one's dialogue + friendship on the right. Chatting
+  // nudges friendship once per game day (warm, not a clicker — no decay, no
+  // FOMO). Friendship + tier persist in SimState.npcRelationships.
+  // ---------------------------------------------------------------------------
+
+  private readonly TIER_COLOR: Record<string, number> = {
+    stranger: 0x999977,
+    acquaintance: 0xc0a060,
+    regular: 0x4a9c5e,
+    friend: 0xe8a33d,
+  };
+
+  private openRegularsModal(): void {
+    if (this.regularsModalOpen || this.isUIBlocked()) return;
+    this.regularsModalOpen = true;
+    playButtonTick();
+
+    const W = this.scale.width, H = this.scale.height;
+    const mW = 440, mH = 250;
+    const mX = (W - mW) / 2, mY = (H - mH) / 2;
+
+    const g = this.add.group();
+    this.regularsModalGroup = g;
+    g.add(this.add.rectangle(W / 2, H / 2, W, H, P.MODAL_SHADOW, 0.55).setInteractive());
+    g.add(this.add.rectangle(mX + mW / 2, mY + mH / 2, mW, mH, P.PANEL_BG).setStrokeStyle(2, P.PANEL_BORDER));
+    g.add(this.add.text(mX + 8, mY + 6, "REGULARS — the people who make the route", textStyleHeader()));
+    g.add(this.add.rectangle(mX + mW / 2, mY + 20, mW - 8, 1, P.PANEL_BORDER));
+
+    // ---- Left: the cast list (selectable) ---------------------------------
+    const listX = mX + 8;
+    const listW = 150;
+    let ly = mY + 28;
+    for (const id of NPC_ORDER) {
+      const npc = NPCS[id];
+      const selected = id === this.regularsSelected;
+      const met = hasMet(this.state, id);
+      const row = this.add.rectangle(listX + listW / 2, ly + 9, listW, 18,
+        selected ? 0x6E5A8A : 0x4a4458).setStrokeStyle(1, P.PANEL_BORDER)
+        .setInteractive({ cursor: "pointer" });
+      g.add(row);
+      const tier = tierFor(this.state, id);
+      // Tiny portrait at the left of the row.
+      const pic = addSprite(this, npcPortraitKey(id), listX + 12, ly + 9, 16);
+      if (pic) g.add(pic);
+      g.add(this.add.text(listX + 24, ly + 3, npc.name, {
+        fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+        fontStyle: selected ? "bold" : "normal",
+      }));
+      // tiny tier pip on the right of the row
+      g.add(this.add.rectangle(listX + listW - 8, ly + 9, 6, 6,
+        met ? this.TIER_COLOR[tier] : 0x333333).setStrokeStyle(1, P.PANEL_BORDER));
+      row.on("pointerdown", () => {
+        this.regularsSelected = id;
+        playButtonTick();
+        this.closeRegularsModal();
+        this.openRegularsModal();
+      });
+      ly += 22;
+    }
+
+    // ---- Right: the selected regular's detail ------------------------------
+    const id = this.regularsSelected;
+    const npc = NPCS[id];
+    const dx = mX + 168;
+    const dW = mW - 176;
+    let dy = mY + 28;
+
+    // Large portrait, top-right of the detail panel (text layout unchanged).
+    // Backdrop first so the portrait draws on top of it.
+    g.add(this.add.rectangle(dx + dW - 22, dy + 18, 48, 48, 0xcdbb95).setStrokeStyle(1, P.PANEL_BORDER));
+    const portrait = addSprite(this, npcPortraitKey(id), dx + dW - 22, dy + 18, 44);
+    if (portrait) g.add(portrait);
+
+    g.add(this.add.text(dx, dy, npc.name, { fontSize: scaledFont(11), color: "#2C2416", fontFamily: "monospace", fontStyle: "bold" }));
+    dy += 14;
+    g.add(this.add.text(dx, dy, npc.role, { ...textStyleLabel(), color: "#8B6F47" }));
+    dy += 13;
+
+    // Friendship bar + tier label.
+    const pts = friendshipFor(this.state, id);
+    const tier = tierFor(this.state, id);
+    g.add(this.add.text(dx, dy, `Friendship: ${tier.toUpperCase()} (${pts}/${FRIENDSHIP_MAX})`,
+      { ...textStyleLabel(), color: "#2C2416" }));
+    dy += 11;
+    // Leave room on the right for the portrait box.
+    const barW = dW - 54;
+    g.add(this.add.rectangle(dx + barW / 2, dy + 3, barW, 6, 0xcdbb95).setStrokeStyle(1, P.PANEL_BORDER));
+    if (pts > 0) {
+      const fillW = Math.max(1, Math.round((barW - 2) * (pts / FRIENDSHIP_MAX)));
+      g.add(this.add.rectangle(dx + 1 + fillW / 2, dy + 3, fillW, 4, this.TIER_COLOR[tier]));
+    }
+    dy += 14;
+
+    // Greeting (tier-appropriate) + their flavour of the legume gag.
+    g.add(this.add.text(dx, dy, `"${greet(this.state, id)}"`,
+      { ...textStyleLabel(), color: "#2C2416", wordWrap: { width: dW } }));
+    dy += 40;
+    g.add(this.add.text(dx, dy, `On the gag: "${npc.gag}"`,
+      { ...monoTextStyle(7, "#5A3A1A"), wordWrap: { width: dW } }));
+    dy += 44;
+
+    // Friend-tier reward beat (only once you've truly bonded).
+    if (tier === "friend") {
+      g.add(this.add.text(dx, dy, `★ ${npc.friendBeat}`,
+        { ...monoTextStyle(7, "#4A7C4E"), wordWrap: { width: dW } }));
+      dy += 24;
+    } else {
+      g.add(this.add.text(dx, dy, `Hook: ${npc.hook}`,
+        { ...monoTextStyle(6, "#8B6F47"), wordWrap: { width: dW } }));
+      dy += 24;
+    }
+
+    // CHAT button — once per game day.
+    const chattedToday = this.npcChattedDay[id] === this.state.dayNumber;
+    const maxed = pts >= FRIENDSHIP_MAX;
+    const chatLabel = maxed ? "BEST FRIENDS ✓" : chattedToday ? "caught up today" : "CHAT (+ friendship)";
+    const chatBtn = this.add.rectangle(dx + dW / 2, mY + mH - 32, dW, 16,
+      (chattedToday || maxed) ? 0x888888 : P.AWNING).setStrokeStyle(1, P.PANEL_BORDER);
+    g.add(chatBtn);
+    g.add(this.add.text(dx + dW / 2, mY + mH - 32, chatLabel,
+      { fontSize: "8px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5));
+    if (!chattedToday && !maxed) {
+      chatBtn.setInteractive({ cursor: "pointer" });
+      chatBtn.on("pointerover", () => chatBtn.setAlpha(0.85));
+      chatBtn.on("pointerout", () => chatBtn.setAlpha(1.0));
+      chatBtn.on("pointerdown", () => this.chatWithNpc(id));
+    }
+
+    // Close.
+    const doneBtn = this.add.rectangle(mX + mW / 2, mY + mH - 12, 80, 14, 0x556677)
+      .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
+    g.add(doneBtn);
+    g.add(this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE",
+      { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    doneBtn.on("pointerdown", () => this.closeRegularsModal());
+    doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
+    doneBtn.on("pointerout",  () => doneBtn.setAlpha(1.0));
+  }
+
+  /** Chat with an NPC: meet + nudge friendship once/day, celebrate tier-ups. */
+  private chatWithNpc(id: NpcId): void {
+    if (this.npcChattedDay[id] === this.state.dayNumber) return;
+    playButtonTick();
+    meet(this.state, id);
+    const change = addFriendship(this.state, id, 8);
+    this.npcChattedDay[id] = this.state.dayNumber;
+    trySave(this.storage, this.state, this.playtimeSeconds);
+    // Refresh the panel to show the new line/bar.
+    this.closeRegularsModal();
+    this.openRegularsModal();
+    if (change.tierUp) {
+      this.showCelebration(`${NPCS[id].name}: now a ${change.tierAfter}!`,
+        tierForFriendship(change.points) === "friend" ? NPCS[id].friendBeat : "");
+    }
+  }
+
+  private closeRegularsModal(): void {
+    if (this.regularsModalGroup) {
+      this.regularsModalGroup.destroy(true);
+      this.regularsModalGroup = undefined;
+    }
+    this.regularsModalOpen = false;
     this.updateHUD();
   }
 
@@ -2077,7 +2359,7 @@ export class GameScene extends Phaser.Scene {
       const pill = this.add.rectangle(mX + mW - 40, y + 4, 56, 14, isOn() ? P.CASH_GREEN : 0x999977)
         .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
       const lbl = this.add.text(mX + mW - 40, y + 4, isOn() ? "ON" : "OFF",
-        { fontSize: "7px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+        { fontSize: "7px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
       this.settingsModalGroup!.add(pill);
       this.settingsModalGroup!.add(lbl);
       pill.on("pointerdown", () => {
@@ -2092,6 +2374,10 @@ export class GameScene extends Phaser.Scene {
     let y = mY + 28;
     // Sound: the pill reads "ON" when sound is ENABLED (i.e. not muted).
     addToggle(y, "Sound", () => !isMuted(), () => { audioInit(this.storage); toggleMute(this.storage); });
+    y += 22;
+    // Music: independent of the SFX/Sound mute. When turned on mid-session we
+    // ensure the AudioContext exists (gesture already satisfied) before playing.
+    addToggle(y, "Music", isMusicOn, () => { audioInit(this.storage); toggleMusic(this.storage); });
     y += 22;
     addToggle(y, "Reduced motion", isReducedMotion, () => { toggleReducedMotion(this.storage); });
     y += 22;
@@ -2151,7 +2437,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
     this.settingsModalGroup.add(doneBtn);
     this.settingsModalGroup.add(this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE",
-      { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+      { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     doneBtn.on("pointerdown", () => this.closeSettingsModal());
     doneBtn.on("pointerover", () => doneBtn.setAlpha(0.85));
     doneBtn.on("pointerout",  () => doneBtn.setAlpha(1.0));
@@ -2197,13 +2483,13 @@ export class GameScene extends Phaser.Scene {
   private addSaveIORow(group: Phaser.GameObjects.Group, mX: number, mW: number, rowY: number, onClose: () => void): void {
     group.add(this.add.rectangle(mX + mW / 2, rowY, mW - 8, 1, P.PANEL_BORDER));
     group.add(this.add.text(mX + 8, rowY + 4, "SAVE FILE (local, no server)",
-      { fontSize: "7px", color: "#8B6F47", fontFamily: "monospace" }));
+      { fontSize: "7px", color: "#8B6F47", fontFamily: "VT323" }));
     const by = rowY + 18;
 
     const exportBtn = this.add.rectangle(mX + 72, by, 116, 14, 0x445566)
       .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
     group.add(exportBtn);
-    group.add(this.add.text(mX + 72, by, "EXPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    group.add(this.add.text(mX + 72, by, "EXPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     exportBtn.on("pointerdown", () => {
       const json = serialize(this.state, this.playtimeSeconds);
       const blob = new Blob([json], { type: "application/json" });
@@ -2218,7 +2504,7 @@ export class GameScene extends Phaser.Scene {
     const importBtn = this.add.rectangle(mX + mW - 72, by, 116, 14, 0x445566)
       .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
     group.add(importBtn);
-    group.add(this.add.text(mX + mW - 72, by, "IMPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    group.add(this.add.text(mX + mW - 72, by, "IMPORT SAVE", { fontSize: "7px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     importBtn.on("pointerdown", () => {
       const fileInput = document.createElement("input");
       fileInput.type = "file"; fileInput.accept = ".json,application/json";
@@ -2279,12 +2565,12 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.glossaryModalGroup.add(closeBtn);
     this.glossaryModalGroup.add(this.add.text(mX + mW - 12, mY + 11, "×",
-      { fontSize: "10px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+      { fontSize: "10px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     closeBtn.on("pointerdown", () => this.closeGlossaryModal());
 
     // A2 disclaimer banner (always visible).
     this.glossaryModalGroup.add(this.add.text(mX + 8, mY + 20, GLOSSARY_DISCLAIMER,
-      { fontSize: "6px", color: "#8B6F47", fontFamily: "monospace", wordWrap: { width: mW - 16 } }));
+      { fontSize: "6px", color: "#8B6F47", fontFamily: "VT323", wordWrap: { width: mW - 16 } }));
 
     const listX = mX + 8, listTop = mY + 44;
     const detailX = mX + 156, detailW = mW - 156 - 10;
@@ -2294,7 +2580,7 @@ export class GameScene extends Phaser.Scene {
     const detailBody = this.add.text(detailX, listTop + 14, "",
       { ...textStyleLabel(), wordWrap: { width: detailW } });
     const detailInGame = this.add.text(detailX, listTop + 14, "",
-      { fontSize: "7px", color: "#4A7C4E", fontFamily: "monospace", wordWrap: { width: detailW } });
+      { fontSize: "7px", color: "#4A7C4E", fontFamily: "VT323", wordWrap: { width: detailW } });
     this.glossaryModalGroup.add(detailTitle);
     this.glossaryModalGroup.add(detailBody);
     this.glossaryModalGroup.add(detailInGame);
@@ -2313,7 +2599,7 @@ export class GameScene extends Phaser.Scene {
     for (let i = 0; i < GLOSSARY.length; i++) {
       const e = GLOSSARY[i];
       const t = this.add.text(listX, ly, `• ${e.term}`,
-        { fontSize: "7px", color: "#2C2416", fontFamily: "monospace", wordWrap: { width: 140 } });
+        { fontSize: "7px", color: "#2C2416", fontFamily: "VT323", wordWrap: { width: 140 } });
       t.setInteractive({ cursor: "pointer" });
       t.on("pointerdown", () => { playButtonTick(); showEntry(i); });
       t.on("pointerover", () => t.setColor("#C0392B"));
@@ -2329,7 +2615,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER).setInteractive({ cursor: "pointer" });
     this.glossaryModalGroup.add(backBtn);
     this.glossaryModalGroup.add(this.add.text(mX + mW / 2, mY + mH - 12, "CLOSE",
-      { fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+      { fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     backBtn.on("pointerdown", () => this.closeGlossaryModal());
     backBtn.on("pointerover", () => backBtn.setAlpha(0.85));
     backBtn.on("pointerout",  () => backBtn.setAlpha(1.0));
@@ -2486,7 +2772,7 @@ export class GameScene extends Phaser.Scene {
         .setStrokeStyle(1, P.PANEL_BORDER)
         .setInteractive({ cursor: "pointer" });
       this.modalGroup!.add(btn);
-      const t = this.add.text(x, ty + 12, label, { fontSize: "8px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+      const t = this.add.text(x, ty + 12, label, { fontSize: "8px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
       this.modalGroup!.add(t);
       btn.on("pointerdown", () => {
         this.supplyQty = Math.max(10, Math.min(1000, this.supplyQty + delta));
@@ -2527,7 +2813,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.modalGroup.add(cancelBtn);
-    const cancelTxt = this.add.text(mX + 60, mY + mH - 14, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+    const cancelTxt = this.add.text(mX + 60, mY + mH - 14, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
     this.modalGroup.add(cancelTxt);
     cancelBtn.on("pointerdown", () => this.closeSupplyModal());
 
@@ -2535,7 +2821,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.modalGroup.add(confirmBtn);
-    const confirmTxt = this.add.text(mX + 200, mY + mH - 14, "CONFIRM ORDER", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5);
+    const confirmTxt = this.add.text(mX + 200, mY + mH - 14, "CONFIRM ORDER", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5);
     this.modalGroup.add(confirmTxt);
     confirmBtn.on("pointerdown", () => {
       const ev = buyRaw(this.state, this.supplyQty);
@@ -2607,6 +2893,22 @@ export class GameScene extends Phaser.Scene {
 
     // Pause the sim — reportOpen flag stops tick() calls
     const report = endOfDay(this.state);
+
+    // RPG layer (M3.2): a day's trade warms the regulars of the current
+    // district. Friendship accrues mainly through showing up and doing good
+    // business — the Chat button is just a nudge. Surface tier-ups as gentle
+    // toasts (after the report) so they never strobe with achievement banners.
+    const friendChanges = applyDailyFriendship(this.state, this.state.currentDistrict, report.unitsSold);
+    let friendToastDelay = 900;
+    for (const fc of friendChanges) {
+      if (fc.change.tierUp) {
+        const npcName = NPCS[fc.id].name;
+        const tierLabel = fc.change.tierAfter;
+        this.time.delayedCall(friendToastDelay, () =>
+          this.showToast(`${npcName} is now a ${tierLabel}.`));
+        friendToastDelay += 1400;
+      }
+    }
 
     // Wave 5: surface rescue arc events as toasts (factual, never shaming)
     for (const ev of report.rescueEvents) {
@@ -2807,7 +3109,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.reportGroup.add(nextBtn);
     this.reportGroup.add(
-      this.add.text(rX + rW / 2, rY + rH - 14, "START NEXT DAY", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(rX + rW / 2, rY + rH - 14, "START NEXT DAY", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     nextBtn.on("pointerdown", () => this.closeDayReport());
     nextBtn.on("pointerover", () => nextBtn.setAlpha(0.85));
@@ -2926,7 +3228,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     this.aftermathModalGroup.add(contBtn);
     this.aftermathModalGroup.add(
-      this.add.text(mX + mW / 2, mY + mH - 11, "CONTINUE", { fontSize: "8px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5)
+      this.add.text(mX + mW / 2, mY + mH - 11, "CONTINUE", { fontSize: "8px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5)
     );
     contBtn.on("pointerdown", () => this.closeAftermathBeat());
     contBtn.on("pointerover", () => contBtn.setAlpha(0.85));
@@ -2970,9 +3272,11 @@ export class GameScene extends Phaser.Scene {
     const x = truckX - 18 + Phaser.Math.Between(-8, 8);
     const y = truckY - 30;
 
-    const circle = this.add.circle(x, y, 5, P.COIN_GOLD);
+    // Code-generated coin sprite when loaded; otherwise the original gold dot.
+    const circle: Phaser.GameObjects.Arc | Phaser.GameObjects.Image =
+      addSprite(this, SPR.coin, x, y, 11) ?? this.add.circle(x, y, 5, P.COIN_GOLD);
     const label  = this.add.text(x + 8, y - 4, `+$${revenue.toFixed(2)}`, {
-      fontSize: "7px", color: "#FFD700", fontFamily: "monospace",
+      fontSize: "7px", color: "#FFD700", fontFamily: "VT323",
     });
 
     this.coinPops.push({ circle, label, life: 1.0 });
@@ -3023,14 +3327,19 @@ export class GameScene extends Phaser.Scene {
     this.celebrationGroup = g;
 
     const panel = this.add.rectangle(cx, cy, bw, bh, P.PANEL_BG, 0.96).setStrokeStyle(2, P.AWNING);
+    // Code-generated star sprites flanking the banner (earned-moment flair).
+    const starL = addSprite(this, SPR.star, cx - bw / 2 + 10, cy, 16);
+    const starR = addSprite(this, SPR.star, cx + bw / 2 - 10, cy, 16);
+    if (starL) g.add(starL);
+    if (starR) g.add(starR);
     const t1 = this.add.text(cx, subtitle ? cy - 7 : cy, title,
-      { fontSize: scaledFont(11), color: "#2C2416", fontFamily: "monospace", fontStyle: "bold", align: "center", wordWrap: { width: bw - 12 } }
+      { fontSize: scaledFont(11), color: "#2C2416", fontFamily: "VT323", fontStyle: "bold", align: "center", wordWrap: { width: bw - 12 } }
     ).setOrigin(0.5);
     g.add(panel);
     g.add(t1);
     if (subtitle) {
       g.add(this.add.text(cx, cy + 9, subtitle,
-        { fontSize: "7px", color: "#5A3A1A", fontFamily: "monospace", align: "center", wordWrap: { width: bw - 12 } }
+        { fontSize: "7px", color: "#5A3A1A", fontFamily: "VT323", align: "center", wordWrap: { width: bw - 12 } }
       ).setOrigin(0.5));
     }
 
@@ -3141,7 +3450,7 @@ export class GameScene extends Phaser.Scene {
   private showToast(msg: string): void {
     const W = this.scale.width;
     const toast = this.add.text(W / 2, 30, msg, {
-      fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+      fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323",
       backgroundColor: "#2C2416", padding: { x: 4, y: 2 },
     }).setOrigin(0.5);
 
@@ -3173,14 +3482,23 @@ export class GameScene extends Phaser.Scene {
     const truckY = 195;
 
     // Bubble anchor: just above the truck serving window (left side).
-    // Comeback replies run longer than stock ones — grow the bubble to fit.
-    // RT5-4: 7px monospace in a 172px wrap width fits ~40 chars/line, not 50;
-    // under-budgeting overflowed the longest tier-2/3/4 lines past the border.
-    const extraLines = Math.max(0, Math.ceil(ownerReply.length / 40) - 1);
+    // Large-text mode must scale this surface too: estimate wrapped lines from
+    // the active font size, then grow upward so the serving window stays clear.
+    const gagFontPx = Number.parseInt(scaledFont(7), 10);
+    const gagFontSize = `${gagFontPx}px`;
+    const lineHeight = Math.ceil(gagFontPx * 1.35);
+    // RT5-4: 7px monospace in a 172px wrap width fits ~40 chars/line. Large
+    // text narrows the effective character budget, so use the scaled font.
+    const charsPerLine = Math.max(24, Math.floor(40 * (7 / gagFontPx)));
+    const customerLineCount = Math.max(1, Math.ceil((line.customer.length + 2) / charsPerLine));
+    const ownerLineCount = Math.max(1, Math.ceil(ownerReply.length / charsPerLine));
+    const padTop = 3;
+    const gap = 4;
+    const padBottom = 5;
     const bX = truckX - 80;
     const bW = 180;
-    const bH = 36 + extraLines * 9;
-    const bY = truckY - 80 - extraLines * 9;
+    const bH = padTop + customerLineCount * lineHeight + gap + ownerLineCount * lineHeight + padBottom;
+    const bY = Math.max(18, truckY - 80 - Math.max(0, bH - 36));
 
     // Background rect (speech bubble)
     const bg = this.add.rectangle(bX + bW / 2, bY + bH / 2, bW, bH, P.PANEL_BG)
@@ -3198,13 +3516,14 @@ export class GameScene extends Phaser.Scene {
 
     // Customer line (shown immediately)
     const customerLine = this.add.text(bX + 4, bY + 3, `"${line.customer}"`, {
-      fontSize: "7px", color: "#2C2416", fontFamily: "monospace",
+      fontSize: gagFontSize, color: "#2C2416", fontFamily: "VT323",
       wordWrap: { width: bW - 8 },
     });
 
     // Owner reply (shown after a short pause)
-    const ownerLine = this.add.text(bX + 4, bY + 20, "", {
-      fontSize: "7px", color: "#4A7C4E", fontFamily: "monospace",
+    const ownerY = bY + padTop + customerLineCount * lineHeight + gap;
+    const ownerLine = this.add.text(bX + 4, ownerY, "", {
+      fontSize: gagFontSize, color: "#4A7C4E", fontFamily: "VT323",
       wordWrap: { width: bW - 8 },
     });
 
@@ -3213,22 +3532,20 @@ export class GameScene extends Phaser.Scene {
       if (ownerLine.active) ownerLine.setText(ownerReply);
     });
 
-    // Auto-dismiss after 4 s total
-    const dismissTimer = this.time.delayedCall(4000, () => {
+    // Auto-dismiss after the owner reply has enough read time. Short lines keep
+    // the original 4 s cadence; wrapped comeback lines get a modest extension.
+    const dismissDelayMs = Math.min(6200, 1800 + Math.max(2200, ownerLineCount * 900));
+    const dismissTimer = this.time.delayedCall(dismissDelayMs, () => {
       this.dismissGagBubble();
     });
 
-    // Store only the dismiss timer as the bubble's tracked event.
-    // beat2Timer is an independent one-shot that cleans itself up.
-    // (We hold a ref to it so dismissGagBubble can remove it cleanly too.)
-    void beat2Timer; // used above, no further reference needed
-
-    this.gagBubble = { bg, tail, customerLine, ownerLine, timerEvent: dismissTimer };
+    this.gagBubble = { bg, tail, customerLine, ownerLine, revealTimerEvent: beat2Timer, timerEvent: dismissTimer };
   }
 
   private dismissGagBubble(): void {
     if (!this.gagBubble) return;
     const b = this.gagBubble;
+    b.revealTimerEvent.destroy();
     b.timerEvent.destroy();
     if (b.bg.active)           b.bg.destroy();
     if (b.tail.active)         b.tail.destroy();
@@ -3429,7 +3746,7 @@ export class GameScene extends Phaser.Scene {
       const headerColor = isQuickNut ? "#CC4400" : "#2C2416";
       this.rescueModalGroup.add(
         this.add.text(cx + cardW / 2, cardY + 5, card.label, {
-          fontSize: "6px", color: headerColor, fontFamily: "monospace", fontStyle: "bold",
+          fontSize: "6px", color: headerColor, fontFamily: "VT323", fontStyle: "bold",
           wordWrap: { width: cardW - 4 }, align: "center",
         }).setOrigin(0.5, 0)
       );
@@ -3441,7 +3758,7 @@ export class GameScene extends Phaser.Scene {
           const lineColor = isQuickNut && (line.includes("391") || line.includes("Roll")) ? "#CC2200" : "#2C2416";
           this.rescueModalGroup.add(
             this.add.text(cx + 2, lineY, line, {
-              fontSize: "5px", color: lineColor, fontFamily: "monospace",
+              fontSize: "5px", color: lineColor, fontFamily: "VT323",
               wordWrap: { width: cardW - 4 },
             })
           );
@@ -3460,7 +3777,7 @@ export class GameScene extends Phaser.Scene {
       this.rescueModalGroup.add(chooseBtn);
       this.rescueModalGroup.add(
         this.add.text(cx + cardW / 2, cardY + cardH - 8, btnLabel, {
-          fontSize: "5px", color: "#2C2416", fontFamily: "monospace",
+          fontSize: "5px", color: "#2C2416", fontFamily: "VT323",
         }).setOrigin(0.5)
       );
 
@@ -3499,7 +3816,7 @@ export class GameScene extends Phaser.Scene {
     this.rescueModalGroup.add(
       this.add.text(mX + 52, warnY,
         "QuickNut APR math: $7.50 fee on $50 for 14 days = 15%/period × 26 periods/yr = ~391% APR. Old Joe: \"It's designed to keep people in debt.\"",
-        { fontSize: "5px", color: "#994400", fontFamily: "monospace", wordWrap: { width: mW - 60 } }
+        { fontSize: "5px", color: "#994400", fontFamily: "VT323", wordWrap: { width: mW - 60 } }
       )
     );
 
@@ -3507,7 +3824,7 @@ export class GameScene extends Phaser.Scene {
     this.rescueModalGroup.add(
       this.add.text(mX + 52, warnY + 10,
         "\"Whatever you choose — keep an eye on the till. Cash flow is predictable if you're watching.\"",
-        { fontSize: "5px", color: "#5A3A1A", fontFamily: "monospace", fontStyle: "italic", wordWrap: { width: mW - 60 } }
+        { fontSize: "5px", color: "#5A3A1A", fontFamily: "VT323", fontStyle: "italic", wordWrap: { width: mW - 60 } }
       )
     );
   }
@@ -3562,7 +3879,7 @@ export class GameScene extends Phaser.Scene {
     g.add(this.add.rectangle(x + 18 * s, y - 34 * s, 10 * s, 8 * s, 0xFF6600)
       .setStrokeStyle(1, 0xDD4400));
     g.add(this.add.text(x + 18 * s, y - 34 * s, "QN", {
-      fontSize: "4px", color: "#FFEE00", fontFamily: "monospace",
+      fontSize: "4px", color: "#FFEE00", fontFamily: "VT323",
     }).setOrigin(0.5));
   }
 
@@ -3596,14 +3913,14 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     group.add(cancelBtn);
-    group.add(this.add.text(mX + 70, mY + mH - 14, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "monospace" }).setOrigin(0.5));
+    group.add(this.add.text(mX + 70, mY + mH - 14, "CANCEL", { fontSize: "9px", color: "#2C2416", fontFamily: "VT323" }).setOrigin(0.5));
     cancelBtn.on("pointerdown", () => { group.destroy(true); });
 
     const confirmBtn = this.add.rectangle(mX + 184, mY + mH - 14, 96, 18, P.WARNING_RED)
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     group.add(confirmBtn);
-    group.add(this.add.text(mX + 184, mY + mH - 14, "YES, RESET", { fontSize: "9px", color: "#F5DEB3", fontFamily: "monospace" }).setOrigin(0.5));
+    group.add(this.add.text(mX + 184, mY + mH - 14, "YES, RESET", { fontSize: "9px", color: "#F5DEB3", fontFamily: "VT323" }).setOrigin(0.5));
     confirmBtn.on("pointerdown", () => {
       group.destroy(true);
       resetSave(this.storage);
@@ -3699,20 +4016,20 @@ export class GameScene extends Phaser.Scene {
     // Step counter label
     this.tutorialGroup.add(
       this.add.text(bX + 30, bY + 4, `(${step + 1}/3)`, {
-        fontSize: "7px", color: "#8B6F47", fontFamily: "monospace",
+        fontSize: "7px", color: "#8B6F47", fontFamily: "VT323",
       })
     );
 
     // Message text
     const txt = this.add.text(bX + 30, bY + 14, def.msg, {
-      fontSize: "7px", color: "#2C2416", fontFamily: "monospace",
+      fontSize: "7px", color: "#2C2416", fontFamily: "VT323",
       wordWrap: { width: bubbleW - 36 },
     });
     this.tutorialGroup.add(txt);
 
     // Tap-to-skip label
     const skipTxt = this.add.text(bX + bubbleW - 4, bY + bubbleH - 8, "[tap to skip]", {
-      fontSize: "5px", color: "#8B6F47", fontFamily: "monospace",
+      fontSize: "5px", color: "#8B6F47", fontFamily: "VT323",
     }).setOrigin(1, 0);
     this.tutorialGroup.add(skipTxt);
 
@@ -3761,6 +4078,95 @@ export class GameScene extends Phaser.Scene {
     if (this.tutorialGroup) {
       this.tutorialGroup.destroy(true);
       this.tutorialGroup = undefined;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Playtest UX — mobile dock + panel guards (P1 sprint)
+  // ---------------------------------------------------------------------------
+
+  /** True when gameplay panels should not open (modals, report chain, feedback). */
+  private panelsBlocked(): boolean {
+    return (
+      this.reportOpen ||
+      this.supplyModalOpen ||
+      this.roastModalOpen ||
+      this.upgradesModalOpen ||
+      this.districtModalOpen ||
+      this.rescueModalOpen ||
+      this.booksModalOpen ||
+      this.goalsModalOpen ||
+      this.settingsModalOpen ||
+      this.glossaryModalOpen ||
+      this.aftermathModalOpen ||
+      this.inPostReportChain ||
+      this.feedbackOverlayOpen
+    );
+  }
+
+  /**
+   * Coarse-pointer dock: BOOKS / SUPPLY / UPGRADES / GLOSSARY / GOALS / ROUTES / SETTINGS.
+   * Native 22px height → ≥44 CSS px at 2× FIT scale (BootScene WCAG guidance).
+   */
+  private buildMobileDock(W: number, H: number): void {
+    const dockY = H - 40;
+    const dockH = 22;
+    const labels = ["BOOKS", "SUPPLY", "UPGR", "GLOSS", "GOALS", "ROUTE", "SET"] as const;
+    const actions: Array<() => void> = [
+      () => {
+        if (this.booksModalOpen) this.closeBooksModal();
+        else if (!this.panelsBlocked()) this.openBooksModal();
+      },
+      () => {
+        if (this.supplyModalOpen) this.closeSupplyModal();
+        else if (!this.panelsBlocked()) this.openSupplyModal();
+      },
+      () => {
+        if (this.upgradesModalOpen) this.closeUpgradesModal();
+        else if (!this.panelsBlocked()) this.openUpgradesModal();
+      },
+      () => {
+        if (this.glossaryModalOpen) this.closeGlossaryModal();
+        else if (!this.panelsBlocked()) this.openGlossaryModal();
+      },
+      () => {
+        if (this.goalsModalOpen) this.closeGoalsModal();
+        else if (!this.panelsBlocked()) this.openGoalsModal();
+      },
+      () => {
+        if (this.districtModalOpen) this.closeDistrictModal();
+        else if (!this.panelsBlocked()) this.openDistrictModal();
+      },
+      () => {
+        if (this.settingsModalOpen) this.closeSettingsModal();
+        else if (!this.panelsBlocked()) this.openSettingsModal();
+      },
+    ];
+
+    this.mobileDockGroup = this.add.group();
+    const btnW = W / labels.length;
+    this.mobileDockGroup.add(
+      this.add.rectangle(W / 2, dockY + dockH / 2, W, dockH, P.PANEL_BORDER),
+    );
+
+    for (let i = 0; i < labels.length; i++) {
+      const cx = btnW * i + btnW / 2;
+      const btn = this.add.rectangle(cx, dockY + dockH / 2, btnW - 2, dockH - 2, 0x556677)
+        .setStrokeStyle(1, P.PANEL_BORDER)
+        .setInteractive({ useHandCursor: true });
+      const label = this.add.text(cx, dockY + dockH / 2, labels[i], {
+        fontSize: scaledFont(5), color: "#F5DEB3", fontFamily: "monospace",
+      }).setOrigin(0.5);
+      const action = actions[i];
+      btn.on("pointerdown", () => {
+        if (this.feedbackOverlayOpen) return;
+        playButtonTick();
+        action();
+      });
+      btn.on("pointerover", () => btn.setAlpha(0.85));
+      btn.on("pointerout", () => btn.setAlpha(1.0));
+      this.mobileDockGroup.add(btn);
+      this.mobileDockGroup.add(label);
     }
   }
 

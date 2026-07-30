@@ -24,3 +24,9 @@ The sanitized public face lives at `DrivingMeNuts---Preview`.
 
 ## Status
 Bootstrap (2026-06-06): design docs only — no engine/code yet.
+
+
+## Shared asset libraries
+
+**Agents:** do not invent colored-box placeholders when free art exists.
+See [docs/ASSETS.md](docs/ASSETS.md) → `game-visual-assets`, `game-audio-assets`, `game-3d-assets`.

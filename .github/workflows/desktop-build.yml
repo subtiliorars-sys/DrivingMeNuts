@@ -1,0 +1,57 @@
+# Desktop build — produces the Windows installer + portable .exe on a real
+# Windows runner. This is how the project ships a Windows binary WITHOUT a local
+# Windows machine: GitHub-hosted windows-latest runners do the electron-builder
+# pack. Lifts the "can't make Windows builds from Linux" limitation.
+#
+# Manual (workflow_dispatch) and tag-triggered only, so it never spams every
+# push — release builds are intentional. Artifacts are uploaded for download;
+# add a Steam ContentBuilder / signing step here once credentials exist
+# (see docs/STEAM_RELEASE.md).
+name: desktop-build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 1. Build the web game (the renderer).
+      - name: Install root deps
+        run: npm ci
+      - name: Build web bundle
+        run: npm run build
+
+      # 2. Pack the Electron desktop app (NSIS installer + portable exe).
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm install
+      - name: Generate icon
+        working-directory: desktop
+        run: npm run make-icon
+      - name: Package Windows build
+        working-directory: desktop
+        run: npm run package:win
+        env:
+          # Skip code-signing unless a cert is configured (unsigned is fine for
+          # Steam, which wraps its own; direct distribution should sign — wire
+          # CSC_LINK / CSC_KEY_PASSWORD secrets here when available).
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: driving-me-nuts-windows
+          path: |
+            desktop/release/*.exe
+          if-no-files-found: error
+          retention-days: 14

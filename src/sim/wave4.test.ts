@@ -292,9 +292,9 @@ describe("payback math sanity", () => {
     // Even one extra 10-lb batch per day = +$9 gross profit.
     // Payback = cost / daily_benefit = $500 / $9 ≈ 55 days worst-case (1 extra batch).
     // But with multiple batches chained, payback is realistically ~8–12 days (per spec).
-    const cogsPerLb = 0.60;
+    const cogsPerLb = 0.42;
     const sellPrice = 1.50;
-    const grossMarginPerLb = sellPrice - cogsPerLb;
+    const grossMarginPerLb = sellPrice - cogsPerLb; // 1.08
     expect(grossMarginPerLb).toBeGreaterThan(0);
 
     // Verify the upgrade cost is tuned so payback is a real decision (not trivial, not huge).

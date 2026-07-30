@@ -160,6 +160,44 @@ describe("corruption handling", () => {
     expect(() => deserialize(JSON.stringify(envelope))).toThrow(/unitsSoldLifetime invalid/);
   });
 
+  // P-prod audit (HIGH): core economy fields are now validated so a corrupt or
+  // hand-edited save can't poison cost-basis / demand / cash math.
+  it("deserialize throws when sellPrice is NaN", () => {
+    const env = JSON.parse(serialize(createState(1)));
+    env.sim.sellPrice = NaN;
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/sellPrice invalid/);
+  });
+
+  it("deserialize throws when sellPrice is out of [PRICE_MIN, PRICE_MAX]", () => {
+    const env = JSON.parse(serialize(createState(1)));
+    env.sim.sellPrice = 9999;
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/sellPrice invalid/);
+  });
+
+  it("deserialize throws when roastedStockLbs is negative", () => {
+    const env = JSON.parse(serialize(createState(1)));
+    env.sim.roastedStockLbs = -1;
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/roastedStockLbs invalid/);
+  });
+
+  it("deserialize throws when rawStockLbs is absurdly large", () => {
+    const env = JSON.parse(serialize(createState(1)));
+    env.sim.rawStockLbs = 1e15;
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/rawStockLbs invalid/);
+  });
+
+  it("deserialize throws when roastedCostBasisPerLb is NaN", () => {
+    const env = JSON.parse(serialize(createState(1)));
+    env.sim.roastedCostBasisPerLb = NaN;
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/roastedCostBasisPerLb invalid/);
+  });
+
+  it("deserialize throws when dayElapsedSeconds is negative", () => {
+    const env = JSON.parse(serialize(createState(1)));
+    env.sim.dayElapsedSeconds = -10;
+    expect(() => deserialize(JSON.stringify(env))).toThrow(/dayElapsedSeconds invalid/);
+  });
+
   it("tryLoad on corrupt JSON returns fresh state + errorMessage + stashes blob", () => {
     const storage = makeStorage();
     storage.setItem(SAVE_KEY, "{{bad json}}");

@@ -28,6 +28,8 @@
 import Phaser from "phaser";
 import { drawLegsy } from "./legsy.js";
 import { audioInit, playButtonTick } from "./audio.js";
+import { loadMusicPref, startMusic } from "./music.js";
+import { preloadSprites, addSprite, SPR } from "./sprites.js";
 import { SAVE_KEY, safeStorage, resetSave } from "../sim/persistence.js";
 import { openExternalUrl } from "../playtest/feedback.js";
 import { PLAYTEST_SIGNUP_URL } from "../playtest/urls.js";
@@ -54,6 +56,16 @@ export class BootScene extends Phaser.Scene {
     super({ key: "BootScene" });
   }
 
+  /**
+   * Load the code-generated sprite atlas once, here. The global TextureManager
+   * then serves GameScene too (see sprites.ts loading contract). Loads are
+   * best-effort: any failure leaves the texture absent and every draw site
+   * falls back to programmer-art, so a missing file never blocks the game.
+   */
+  preload(): void {
+    preloadSprites(this);
+  }
+
   create(): void {
     const W = this.scale.width;   // 480
     const H = this.scale.height;  // 270
@@ -70,23 +82,27 @@ export class BootScene extends Phaser.Scene {
     // ---- Title text --------------------------------------------------------
     // Game name in Palette A panel-border brown (#8B6F47), bold monospace
     this.add.text(W / 2, 36, "DRIVING ME NUTS", {
-      fontSize: "22px",
+      fontSize: "28px",
       color: "#8B6F47",
-      fontFamily: "monospace",
+      fontFamily: "VT323",
       fontStyle: "bold",
     }).setOrigin(0.5);
 
     // Sub-tagline in warm awning orange (#FF9800)
     this.add.text(W / 2, 62, "roasted peanuts — fresh daily", {
-      fontSize: "9px",
+      fontSize: "14px",
       color: "#FF9800",
-      fontFamily: "monospace",
+      fontFamily: "VT323",
     }).setOrigin(0.5);
 
     // ---- Legsy mascot (programmer-art, code-drawn) -------------------------
     // Placed centre-left on the title screen, above the ground line
     // drawLegsy origin = bottom-centre; ~32×48 at scale 1.4 → ~45×67
     drawLegsy(this, W / 2, H * 0.78, 1.4);
+
+    // Code-generated peanut mascot as a title accent (falls back to nothing
+    // if the texture didn't load — drawLegsy above still carries the screen).
+    addSprite(this, SPR.mascot, W / 2 + 86, 92, 40);
 
     // ---- Truck side-panel backdrop hint ------------------------------------
     // Minimal truck shape — Legsy "painted on" the side panel (visual context)
@@ -103,7 +119,7 @@ export class BootScene extends Phaser.Scene {
     this.add.rectangle(truckX - 14, truckY - 2, 20, 14, 0x2C2416);
     // "Legumes ≠ Nuts" sticker (tiny label, per ART_BIBLE bumper sticker gag)
     this.add.text(truckX + 12, truckY + 8, "Legumes≠Nuts", {
-      fontSize: "4px", color: "#F5DEB3", fontFamily: "monospace",
+      fontSize: "4px", color: "#F5DEB3", fontFamily: "VT323",
     }).setOrigin(0.5);
 
     // Legsy redrawn at smaller scale ON the truck side panel
@@ -121,7 +137,7 @@ export class BootScene extends Phaser.Scene {
       .setStrokeStyle(2, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(W / 2, btnY, "START", {
-      fontSize: "12px", color: "#2C2416", fontFamily: "monospace", fontStyle: "bold",
+      fontSize: "12px", color: "#2C2416", fontFamily: "VT323", fontStyle: "bold",
     }).setOrigin(0.5);
 
     startBtn.on("pointerover", () => startBtn.setAlpha(0.85));
@@ -129,6 +145,10 @@ export class BootScene extends Phaser.Scene {
     startBtn.on("pointerdown", () => {
       // First gesture — resume AudioContext (browser auto-play policy)
       audioInit(storage);
+      // Music begins here too: gesture satisfied, context live. The soundtrack
+      // is global (not scene-bound) so it carries into GameScene seamlessly.
+      loadMusicPref(storage);
+      startMusic("day");
       playButtonTick();
       this.scene.start("GameScene");
     });
@@ -138,7 +158,7 @@ export class BootScene extends Phaser.Scene {
       .setStrokeStyle(1, P.PANEL_BORDER)
       .setInteractive({ cursor: "pointer" });
     this.add.text(W / 2, signupY, "Become a playtester", {
-      fontSize: "7px", color: "#F5DEB3", fontFamily: "monospace",
+      fontSize: "7px", color: "#F5DEB3", fontFamily: "VT323",
     }).setOrigin(0.5);
     signupBtn.on("pointerover", () => signupBtn.setAlpha(0.85));
     signupBtn.on("pointerout",  () => signupBtn.setAlpha(1.0));
@@ -155,7 +175,7 @@ export class BootScene extends Phaser.Scene {
         .setStrokeStyle(1, P.PANEL_BORDER)
         .setInteractive({ cursor: "pointer" });
       this.add.text(W / 2, resetBtnY, "Reset save", {
-        fontSize: "8px", color: "#F5DEB3", fontFamily: "monospace",
+        fontSize: "8px", color: "#F5DEB3", fontFamily: "VT323",
       }).setOrigin(0.5);
 
       resetBtn.on("pointerover", () => resetBtn.setAlpha(0.85));
@@ -169,7 +189,7 @@ export class BootScene extends Phaser.Scene {
 
     // ---- Version string ----------------------------------------------------
     this.add.text(W - 4, H - 6, `v${VERSION}`, {
-      fontSize: "6px", color: "#8B6F47", fontFamily: "monospace",
+      fontSize: "6px", color: "#8B6F47", fontFamily: "VT323",
     }).setOrigin(1, 1);
   }
 
@@ -197,11 +217,11 @@ export class BootScene extends Phaser.Scene {
     group.add(panel);
 
     group.add(this.add.text(mX + mW / 2, mY + 10, "Reset save?", {
-      fontSize: "10px", color: "#2C2416", fontFamily: "monospace", fontStyle: "bold",
+      fontSize: "10px", color: "#2C2416", fontFamily: "VT323", fontStyle: "bold",
     }).setOrigin(0.5, 0));
 
     group.add(this.add.text(mX + mW / 2, mY + 28, "This wipes all progress and starts fresh.", {
-      fontSize: "8px", color: "#2C2416", fontFamily: "monospace",
+      fontSize: "8px", color: "#2C2416", fontFamily: "VT323",
       wordWrap: { width: mW - 16 },
     }).setOrigin(0.5, 0));
 
@@ -210,7 +230,7 @@ export class BootScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     group.add(cancelBtn);
     group.add(this.add.text(mX + 70, mY + mH - 14, "CANCEL", {
-      fontSize: "9px", color: "#2C2416", fontFamily: "monospace",
+      fontSize: "9px", color: "#2C2416", fontFamily: "VT323",
     }).setOrigin(0.5));
     cancelBtn.on("pointerdown", () => group.destroy(true));
 
@@ -219,7 +239,7 @@ export class BootScene extends Phaser.Scene {
       .setInteractive({ cursor: "pointer" });
     group.add(confirmBtn);
     group.add(this.add.text(mX + 184, mY + mH - 14, "YES, RESET", {
-      fontSize: "9px", color: "#F5DEB3", fontFamily: "monospace",
+      fontSize: "9px", color: "#F5DEB3", fontFamily: "VT323",
     }).setOrigin(0.5));
     confirmBtn.on("pointerdown", () => {
       group.destroy(true);
@@ -228,7 +248,7 @@ export class BootScene extends Phaser.Scene {
       storage.removeItem("dmn_tutorial_seen"); // also clear tutorial so fresh start re-tutorials
       // Show brief confirmation, then allow player to start fresh
       const toast = this.add.text(W / 2, H / 2, "Save reset.", {
-        fontSize: "9px", color: "#F5DEB3", fontFamily: "monospace",
+        fontSize: "9px", color: "#F5DEB3", fontFamily: "VT323",
         backgroundColor: "#2C2416", padding: { x: 6, y: 3 },
       }).setOrigin(0.5);
       this.time.delayedCall(1200, () => { if (toast.active) toast.destroy(); });

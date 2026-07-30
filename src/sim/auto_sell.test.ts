@@ -107,7 +107,7 @@ describe("auto-sell at endOfDay", () => {
     s.autoSellEnabled = true;
     const lifeBefore = s.lifetimeEarned;
     const r = endOfDay(s);
-    // 1.35 sell vs 0.60 cost → positive gross.
+    // 1.35 sell vs 0.42 cost → positive gross.
     expect(r.grossProfit).toBeGreaterThan(0);
     expect(s.lifetimeEarned).toBeGreaterThan(lifeBefore);
     // Ledger row includes the auto-sell revenue.

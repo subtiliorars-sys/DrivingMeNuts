@@ -15,6 +15,8 @@ import {
   scaledFont,
   fontScale,
   marginCue,
+  isCoarsePointer,
+  setCoarsePointerOverride,
   REDUCED_MOTION_KEY,
   COLORBLIND_KEY,
   LARGE_TEXT_KEY,
@@ -99,6 +101,16 @@ describe("accessibility prefs", () => {
     expect(marginCue(45)).toBe("tight");
     expect(marginCue(44.9)).toBe("low");
     expect(marginCue(0)).toBe("low");
+  });
+
+  it("isCoarsePointer respects test override", () => {
+    setCoarsePointerOverride(null);
+    expect(typeof isCoarsePointer()).toBe("boolean");
+    setCoarsePointerOverride(true);
+    expect(isCoarsePointer()).toBe(true);
+    setCoarsePointerOverride(false);
+    expect(isCoarsePointer()).toBe(false);
+    setCoarsePointerOverride(null);
   });
 });
 
