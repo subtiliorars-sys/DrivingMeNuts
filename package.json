@@ -17,7 +17,8 @@
     "desktop:setup": "npm --prefix desktop install",
     "desktop:run": "npm run build && npm --prefix desktop start",
     "package:win": "npm run build && npm --prefix desktop run package:win",
-    "package:desktop": "npm run build && npm --prefix desktop run package:dir"
+    "package:desktop": "npm run build && npm --prefix desktop run package:dir",
+    "validate-assets": "node scripts/validate-assets.js"
   },
   "dependencies": {
     "phaser": "^3.87.0"
