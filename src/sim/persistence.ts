@@ -17,7 +17,7 @@
 
 import type { SimState, RescueDebt, PreorderObligation, LedgerEntry } from "./types.js";
 import { createState, applyOffline, checkAchievements } from "./engine.js";
-import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS, RAW_PEANUT_BASE_PRICE, WEATHER_DEFAULT_SEED } from "../data/economy.js";
+import { OFFLINE_CAP_HOURS, MAX_QUEUE_SLOTS, LEDGER_MAX_DAYS, RAW_PEANUT_BASE_PRICE, WEATHER_DEFAULT_SEED, PRICE_MIN, PRICE_MAX } from "../data/economy.js";
 import type { RecipeId, RoasterTier } from "../data/economy.js";
 import { RECIPES, ROASTER_EFFICIENCY } from "../data/economy.js";
 import { comebackTierFor, COMEBACK_TIERS } from "../data/comebacks.js";
@@ -297,6 +297,16 @@ function sanityCheck(env: SaveEnvelope): string | null {
     return `cash invalid: ${s.cash}`;
   if (typeof s.dayNumber !== "number" || s.dayNumber < 1)
     return `dayNumber invalid: ${s.dayNumber}`;
+  if (typeof s.sellPrice !== "number" || !Number.isFinite(s.sellPrice) || s.sellPrice < PRICE_MIN || s.sellPrice > PRICE_MAX)
+    return `sellPrice invalid: ${s.sellPrice}`;
+  if (typeof s.roastedStockLbs !== "number" || !Number.isFinite(s.roastedStockLbs) || s.roastedStockLbs < 0 || s.roastedStockLbs > 1e12)
+    return `roastedStockLbs invalid: ${s.roastedStockLbs}`;
+  if (typeof s.rawStockLbs !== "number" || !Number.isFinite(s.rawStockLbs) || s.rawStockLbs < 0 || s.rawStockLbs > 1e12)
+    return `rawStockLbs invalid: ${s.rawStockLbs}`;
+  if (typeof s.roastedCostBasisPerLb !== "number" || !Number.isFinite(s.roastedCostBasisPerLb) || s.roastedCostBasisPerLb < 0)
+    return `roastedCostBasisPerLb invalid: ${s.roastedCostBasisPerLb}`;
+  if (typeof s.dayElapsedSeconds !== "number" || !Number.isFinite(s.dayElapsedSeconds) || s.dayElapsedSeconds < 0)
+    return `dayElapsedSeconds invalid: ${s.dayElapsedSeconds}`;
   // W4: slots array must have between 1 and MAX_QUEUE_SLOTS entries
   if (!Array.isArray(s.roastSlots) || s.roastSlots.length < 1 || s.roastSlots.length > MAX_QUEUE_SLOTS)
     return `roastSlots invalid: length ${(s.roastSlots as unknown[])?.length}`;
@@ -398,6 +408,8 @@ function sanityCheck(env: SaveEnvelope): string | null {
           return `ledger entry ${field} out of range: ${e[field]}`;
       }
       if (e.day < 1) return `ledger entry day invalid: ${e.day}`;
+      if (e.weather !== undefined && typeof e.weather !== "string")
+        return `ledger entry weather invalid: ${e.weather}`;
     }
   }
 
@@ -628,6 +640,7 @@ export function deserialize(json: string): SimState {
         net: Number(e.net),
         debtService: Number(e.debtService),
         cashAfter: Number(e.cashAfter),
+        weather: e.weather !== undefined ? String(e.weather) : undefined,
       }))
     : [];
 
