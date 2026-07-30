@@ -1,25 +1,20 @@
-# Asset Provenance — Driving Me Nuts
+# Sprite Provenance
 
-Every file committed to `assets/` gets a row in the table below.
-
-**Columns:**
-- **filename** — path relative to `assets/` (e.g. `sprites/truck_bounce.png`)
-- **author/source** — artist name, tool name, or reference URL
-- **method** — one of:
-  - `human-drawn` — created entirely by a human artist
-  - `AI-gen+human-edited` — AI-generated base (Midjourney, DALL-E, etc.) refined by a human at the pixel level
-  - `AI-gen` — generated directly with no human pixel edits (rare; approved per-asset)
-- **license/permission** — SPDX identifier, CC variant, or brief permission note (e.g. "owner work-for-hire")
-- **date** — ISO 8601 (YYYY-MM-DD) of initial commit
-
-**Note — programmer-art rects drawn in code:** colored-rectangle stand-ins that exist only in TypeScript/Phaser draw calls need no entry here. Only committed image/audio files are tracked.
-
-**Platform AI-disclosure stance:** **OWNER-RATIFIED 2026-06-07: DISCLOSE OPENLY.** This PROVENANCE.md ships with the game; store pages and in-game credits state AI-assisted where applicable. Mark method honestly on every entry.
-
----
-
-| filename | author/source | method | license/permission | date |
-|----------|--------------|--------|--------------------|------|
-| `dogs/pixelcave/*.png` | Pixelcave (itch.io) | purchased pixel art | Commercial use per Pixelcave license; credit appreciated | 2026-06-13 |
-| `dogs/luizmelo-pet-dogs/**` | LuizMelo Pet Dogs Pack | purchased/free CC0 | CC0 | 2026-06-13 |
-| `dogs/pixelcave-dog.js` | Fleet | human-written loader | internal | 2026-06-13 |
+| ID | Name | Target size | Source | Status |
+|---|---|---|---|---|
+| 1 | Truck – Idle Bounce | 96×64 px | TBD | Placeholder |
+| 2 | Roasting Hood Smoke Wisps | 48×48 px | TBD | Placeholder |
+| 3 | Raw Peanut Sack | 24×28 px | TBD | Placeholder |
+| 4 | Roasted Peanut Bag | 24×32 px | TBD | Placeholder |
+| 5 | Coin/Cash Pop | 16×16 px | TBD | Placeholder |
+| 6 | Customer NPC – Legume Lecturer | 28×40 px | TBD | Placeholder |
+| 7 | Customer NPC – Concerned Parent | 32×36 px | TBD | Placeholder |
+| 8 | Customer NPC – Office Worker | 26×38 px | TBD | Placeholder |
+| 9 | Owner/Player Portrait | 32×40 px | TBD | Placeholder |
+| 10 | District Backdrop | 480×270 px | TBD | Placeholder |
+| 11 | UI 9-Slice Panel | 72×72 px | TBD | Placeholder |
+| 12 | Icon – Cash/Currency | 16×16 px | TBD | Placeholder |
+| 13 | Icon – Queue Slot | 20×20 px | TBD | Placeholder |
+| 14 | Icon – Timer | 16×16 px | TBD | Placeholder |
+| 15 | Icon – Warning | 16×16 px | TBD | Placeholder |
+| 16 | Roaster Machine | 48×48 px | TBD | Placeholder |
